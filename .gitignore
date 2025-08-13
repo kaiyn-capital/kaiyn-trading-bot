@@ -1,0 +1,95 @@
+# 環境變數文件
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# 虛擬環境
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系統
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 日誌文件
+*.log
+logs/*.log
+app.log
+
+# 數據庫文件
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+
+# 備份文件
+backups/
+*.backup
+
+# 臨時文件
+tmp/
+temp/
+.tmp/
+
+# SDK包 (忽略第三方SDK)
+bitget-api-master/
+v3-bitget-api-sdk-master/
+
+# 測試覆蓋率
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# 其他
+data/
+.cache/
+.claude/

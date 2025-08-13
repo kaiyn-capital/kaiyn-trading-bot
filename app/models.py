@@ -1,0 +1,215 @@
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    DateTime,
+    Float,
+    Boolean,
+    Text,
+    ForeignKey,
+)
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from datetime import datetime
+import json
+
+Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(Integer, unique=True, index=True)
+    username = Column(String, nullable=True)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+
+    # API 配置（加密存儲）
+    encrypted_api_key = Column(Text, nullable=True)
+    encrypted_secret_key = Column(Text, nullable=True)
+    encrypted_passphrase = Column(Text, nullable=True)
+
+    # 狀態
+    is_active = Column(Boolean, default=True)
+    is_api_connected = Column(Boolean, default=False)
+
+    # 設定
+    daily_trade_limit = Column(Integer, default=10)
+    max_position_size = Column(Float, default=1000.0)
+    enable_notifications = Column(Boolean, default=True)
+
+    # 交易設定
+    default_stop_loss_percent = Column(Float, default=2.0)  # 預設止損百分比
+    default_trade_amount = Column(Float, default=100.0)  # 預設交易金額
+    auto_stop_loss = Column(Boolean, default=True)  # 是否自動設置止損
+    fixed_risk_amount = Column(Float, nullable=True)  # 固定風險金額(1R)
+    
+    # 發單員權限
+    is_trader = Column(Boolean, default=False)  # 是否為發單員
+
+    # 時間戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
+
+    # 關聯
+    trades = relationship("Trade", back_populates="user")
+    notifications = relationship("NotificationLog", back_populates="user")
+
+
+class Trade(Base):
+    __tablename__ = "trades"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+    # 交易信息
+    symbol = Column(String, nullable=False)  # 例如: BTCUSDT
+    side = Column(String, nullable=False)  # buy/sell
+    order_type = Column(String, nullable=False)  # market/limit
+    quantity = Column(Float, nullable=False)
+    price = Column(Float, nullable=True)  # limit 單才有價格
+
+    # Bitget 訂單信息
+    bitget_order_id = Column(String, unique=True, nullable=True)
+    client_order_id = Column(String, unique=True)
+
+    # 執行結果
+    status = Column(String, default="pending")  # pending/filled/cancelled/failed
+    filled_quantity = Column(Float, default=0.0)
+    avg_price = Column(Float, nullable=True)
+    total_amount = Column(Float, nullable=True)
+    fee = Column(Float, default=0.0)
+
+    # 錯誤信息
+    error_message = Column(Text, nullable=True)
+
+    # 時間戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    executed_at = Column(DateTime, nullable=True)
+
+    # 關聯
+    user = relationship("User", back_populates="trades")
+
+
+class NotificationLog(Base):
+    __tablename__ = "notification_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+    # 通知內容
+    message_type = Column(String, nullable=False)  # trade/error/info
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+
+    # 發送狀態
+    is_sent = Column(Boolean, default=False)
+    telegram_message_id = Column(Integer, nullable=True)
+
+    # 額外數據
+    extra_data = Column(Text, nullable=True)  # JSON 格式
+
+    # 時間戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+    sent_at = Column(DateTime, nullable=True)
+
+    # 關聯
+    user = relationship("User", back_populates="notifications")
+
+    def set_extra_data(self, data: dict):
+        """設置額外數據"""
+        self.extra_data = json.dumps(data, ensure_ascii=False)
+
+    def get_extra_data(self) -> dict:
+        """獲取額外數據"""
+        if self.extra_data:
+            return json.loads(self.extra_data)
+        return {}
+
+
+class TradingPair(Base):
+    __tablename__ = "trading_pairs"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # 交易對信息
+    symbol = Column(String, unique=True, nullable=False)
+    base_currency = Column(String, nullable=False)
+    quote_currency = Column(String, nullable=False)
+
+    # 交易限制
+    min_order_size = Column(Float, nullable=False)
+    max_order_size = Column(Float, nullable=False)
+    min_price = Column(Float, nullable=False)
+    max_price = Column(Float, nullable=False)
+    price_precision = Column(Integer, nullable=False)
+    quantity_precision = Column(Integer, nullable=False)
+
+    # 狀態
+    is_active = Column(Boolean, default=True)
+    is_trading_enabled = Column(Boolean, default=True)
+
+    # 時間戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ChannelGroup(Base):
+    __tablename__ = "channel_groups"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # 頻道/群組信息
+    chat_id = Column(String, unique=True, nullable=False)  # Telegram Chat ID
+    chat_type = Column(String, nullable=False)  # channel/group/supergroup
+    title = Column(String, nullable=True)
+    username = Column(String, nullable=True)  # @username
+
+    # 功能設置
+    is_active = Column(Boolean, default=True)
+    auto_forward_signals = Column(Boolean, default=True)  # 自動轉發交易信號
+    forward_with_buttons = Column(Boolean, default=True)  # 轉發時包含交易按鈕
+
+    # 管理信息
+    added_by_user_id = Column(Integer, nullable=False)  # 添加此頻道的管理員 ID
+    description = Column(String, nullable=True)  # 頻道描述
+
+    # 時間戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SystemLog(Base):
+    __tablename__ = "system_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # 日誌信息
+    level = Column(String, nullable=False)  # INFO/WARNING/ERROR/CRITICAL
+    message = Column(Text, nullable=False)
+    module = Column(String, nullable=False)
+    function = Column(String, nullable=True)
+
+    # 用戶相關
+    user_id = Column(Integer, nullable=True)
+    telegram_id = Column(Integer, nullable=True)
+
+    # 額外信息
+    extra_data = Column(Text, nullable=True)
+    stack_trace = Column(Text, nullable=True)
+
+    # 時間戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def set_extra_data(self, data: dict):
+        """設置額外數據"""
+        self.extra_data = json.dumps(data, ensure_ascii=False)
+
+    def get_extra_data(self) -> dict:
+        """獲取額外數據"""
+        if self.extra_data:
+            return json.loads(self.extra_data)
+        return {}

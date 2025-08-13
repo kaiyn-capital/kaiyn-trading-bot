@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""
+Bitget Telegram Trading Bot
+主程序入口文件
+"""
+
+import asyncio
+import logging
+import sys
+import os
+from pathlib import Path
+
+# 添加項目根目錄到 Python 路徑
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from app.config import Config
+from app.database import init_database, health_check
+from app.bot import run_bot
+from app.encryption import KeyGenerator
+
+# 設置日誌
+def setup_logging():
+    """配置日誌系統"""
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    log_level = getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO)
+    
+    # 基本配置
+    logging.basicConfig(
+        level=log_level,
+        format=log_format,
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler('app.log', encoding='utf-8')
+        ]
+    )
+    
+    # 設置第三方庫日誌級別
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('telegram').setLevel(logging.WARNING)
+    logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+
+def check_requirements():
+    """檢查必要的依賴和配置"""
+    try:
+        # 檢查配置
+        Config.validate()
+        
+        # 檢查必要目錄
+        log_dir = Path('logs')
+        log_dir.mkdir(exist_ok=True)
+        
+        # 檢查資料庫
+        if not health_check():
+            logging.error("Database health check failed")
+            return False
+        
+        return True
+    
+    except Exception as e:
+        logging.error(f"Requirements check failed: {e}")
+        return False
+
+async def main():
+    """主函數"""
+    print("�� 啟動 Bitget Telegram 交易機器人...")
+    
+    # 設置日誌
+    setup_logging()
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # 檢查運行要求
+        if not check_requirements():
+            logger.error("❌ 系統檢查失敗，無法啟動")
+            return 1
+        
+        # 初始化資料庫
+        logger.info("初始化資料庫...")
+        init_database()
+        
+        # 啟動機器人
+        logger.info("啟動 Telegram 機器人...")
+        await run_bot()
+        
+        return 0
+        
+    except KeyboardInterrupt:
+        logger.info("👋 收到中斷信號，正在關閉...")
+        return 0
+    
+    except Exception as e:
+        logger.error(f"❌ 啟動失敗: {e}")
+        return 1
+
+def generate_encryption_key():
+    """生成加密金鑰的工具函數"""
+    key = KeyGenerator.generate_key()
+    print(f"Generated encryption key: {key}")
+    print(f"Add this to your .env file: ENCRYPTION_KEY={key}")
+    return key
+
+def create_env_template():
+    """創建環境變數模板"""
+    template = """# Telegram Bot Configuration
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+TELEGRAM_ADMIN_IDS=your_telegram_user_id,another_admin_id
+
+# Database Configuration
+DATABASE_URL=sqlite:///./bitget_bot.db
+
+# Encryption Key (32 bytes base64 encoded)
+ENCRYPTION_KEY={encryption_key}
+
+# Bitget API Configuration
+BITGET_API_URL=https://api.bitget.com
+
+# Application Settings
+DEBUG=True
+LOG_LEVEL=INFO
+MAX_DAILY_TRADES=10
+MAX_POSITION_SIZE=1000
+"""
+    
+    key = KeyGenerator.generate_key()
+    template = template.format(encryption_key=key)
+    
+    with open('.env.template', 'w', encoding='utf-8') as f:
+        f.write(template)
+    
+    print("✅ .env.template 文件已創建")
+    print("請將其複製為 .env 並填入正確的配置值")
+
+def init_project():
+    """初始化項目"""
+    print("🔧 初始化項目...")
+    
+    # 創建必要目錄
+    dirs = ['logs', 'data', 'backups']
+    for dir_name in dirs:
+        Path(dir_name).mkdir(exist_ok=True)
+        print(f"✅ 創建目錄: {dir_name}")
+    
+    # 創建環境變數模板
+    if not Path('.env').exists():
+        create_env_template()
+    
+    # 初始化資料庫
+    try:
+        init_database()
+        print("✅ 資料庫初始化完成")
+    except Exception as e:
+        print(f"❌ 資料庫初始化失敗: {e}")
+    
+    print("🎉 項目初始化完成！")
+    print("\n下一步：")
+    print("1. 編輯 .env 文件，填入正確的配置")
+    print("2. 運行 'python app/main.py' 啟動機器人")
+
+def show_help():
+    """顯示幫助信息"""
+    help_text = """
+🤖 Bitget Telegram 交易機器人
+
+使用方法:
+  python app/main.py                    啟動機器人
+  python app/main.py --init            初始化項目
+  python app/main.py --generate-key    生成加密金鑰
+  python app/main.py --help            顯示此幫助
+
+配置文件:
+  .env                                 環境變數配置
+
+日誌文件:
+  app.log                             應用日誌
+  logs/                               日誌目錄
+
+資料庫:
+  bitget_bot.db                       SQLite 資料庫文件 (開發環境)
+  
+安全提醒:
+  - 請妥善保管您的 API 金鑰
+  - 建議只授予交易權限，不要授予提幣權限
+  - 定期備份資料庫文件
+  - 使用強密碼保護服務器
+    """
+    print(help_text)
+
+if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Bitget Telegram Trading Bot')
+    parser.add_argument('--init', action='store_true', help='初始化項目')
+    parser.add_argument('--generate-key', action='store_true', help='生成加密金鑰')
+    parser.add_argument('--check-db', action='store_true', help='檢查資料庫連接')
+    parser.add_argument('--create-tables', action='store_true', help='創建資料庫表')
+    
+    args = parser.parse_args()
+    
+    if args.init:
+        init_project()
+    elif args.generate_key:
+        generate_encryption_key()
+    elif args.check_db:
+        setup_logging()
+        if health_check():
+            print("✅ 資料庫連接正常")
+        else:
+            print("❌ 資料庫連接失敗")
+    elif args.create_tables:
+        setup_logging()
+        try:
+            init_database()
+            print("✅ 資料庫表創建成功")
+        except Exception as e:
+            print(f"❌ 創建表失敗: {e}")
+    elif len(sys.argv) > 1 and sys.argv[1] in ['--help', '-h']:
+        show_help()
+    else:
+        # 運行主程序
+        exit_code = asyncio.run(main())
+        sys.exit(exit_code)
