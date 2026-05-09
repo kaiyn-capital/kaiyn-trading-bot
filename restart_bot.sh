@@ -1,15 +1,8 @@
 #!/bin/bash
+set -euo pipefail
 
-echo "🔍 尋找相關進程..."
-all_related_pids=$(ps aux | grep -E "(main\.py|telegram|bitget)" | grep -v grep | awk '{print $2}')
+echo "🔄 使用 Docker Compose 重啟 Kaiyn Trading Bot..."
+echo "ℹ️ 如尚未套用 migration，請先執行：docker compose run --rm bot alembic upgrade head"
 
-if [ -n "$all_related_pids" ]; then
-    echo "💀 殺死進程: $all_related_pids"
-    echo $all_related_pids | xargs kill -9
-    sleep 1
-else
-    echo "✅ 沒有找到殘餘進程"
-fi
-
-echo "🚀 啟動 Bitget Telegram Bot..."
-python app/main.py
+docker compose up -d postgres
+docker compose restart bot || docker compose up -d bot

@@ -56,6 +56,7 @@ class User(Base):
     # 關聯
     trades = relationship("Trade", back_populates="user")
     notifications = relationship("NotificationLog", back_populates="user")
+    pending_orders = relationship("PendingOrder", back_populates="user")
 
 
 class Trade(Base):
@@ -92,6 +93,38 @@ class Trade(Base):
 
     # 關聯
     user = relationship("User", back_populates="trades")
+    pending_orders = relationship("PendingOrder", back_populates="trade")
+
+
+class PendingOrder(Base):
+    __tablename__ = "pending_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    telegram_id = Column(Integer, nullable=False, index=True)
+
+    # Signal and computed order data
+    symbol = Column(String, nullable=False)
+    direction = Column(String, nullable=False)  # long/short
+    quantity = Column(Float, nullable=False)
+    stop_loss = Column(Float, nullable=False)
+    position_value = Column(Float, nullable=False)
+    current_price = Column(Float, nullable=False)
+
+    # Lifecycle
+    status = Column(String, default="pending", nullable=False, index=True)
+    trade_id = Column(Integer, ForeignKey("trades.id"), nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    # 時間戳
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False, index=True)
+
+    # 關聯
+    user = relationship("User", back_populates="pending_orders")
+    trade = relationship("Trade", back_populates="pending_orders")
 
 
 class NotificationLog(Base):

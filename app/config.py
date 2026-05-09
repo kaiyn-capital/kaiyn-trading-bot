@@ -22,7 +22,7 @@ class Config:
         return user_id in cls.get_admin_ids()
     
     # Database
-    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./bitget_bot.db")
+    DATABASE_URL = os.getenv("DATABASE_URL")
     
     # Encryption
     ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
@@ -50,10 +50,25 @@ class Config:
             
         if not os.getenv("TELEGRAM_ADMIN_IDS"):
             raise ValueError("Missing TELEGRAM_ADMIN_IDS")
+
+        cls.validate_database_url()
         
         # 驗證管理員ID格式
         admin_ids = cls.get_admin_ids()
         if not admin_ids:
             raise ValueError("TELEGRAM_ADMIN_IDS contains no valid IDs")
         
+        return True
+
+    @classmethod
+    def validate_database_url(cls):
+        """驗證資料庫連線設定"""
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            raise ValueError("Missing DATABASE_URL")
+
+        if not database_url.startswith("postgresql+asyncpg://"):
+            raise ValueError("DATABASE_URL must use postgresql+asyncpg://")
+
+        cls.DATABASE_URL = database_url
         return True

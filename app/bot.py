@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import uuid
 import re
@@ -21,8 +21,10 @@ from .config import Config
 from .database import (
     get_user_repo,
     get_trade_repo,
+    get_pending_order_repo,
     get_notification_repo,
     get_system_log_repo,
+    get_channel_repo,
 )
 from .bitget_api import (
     BitgetTradeManager,
@@ -51,8 +53,10 @@ class TelegramBot:
         # 初始化服務
         self.user_repo = get_user_repo()
         self.trade_repo = get_trade_repo()
+        self.pending_order_repo = get_pending_order_repo()
         self.notification_repo = get_notification_repo()
         self.system_log_repo = get_system_log_repo()
+        self.channel_repo = get_channel_repo()
 
         # 加密管理器
         self.encryption_manager = create_encryption_manager(Config.ENCRYPTION_KEY)
@@ -167,13 +171,13 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Failed to set bot commands: {e}")
 
-    def _get_or_create_user(self, update: Update) -> User:
+    async def _get_or_create_user(self, update: Update) -> User:
         """獲取或創建用戶"""
         telegram_user = update.effective_user
-        user = self.user_repo.get_user_by_telegram_id(telegram_user.id)
+        user = await self.user_repo.get_user_by_telegram_id(telegram_user.id)
 
         if not user:
-            user = self.user_repo.create_user(
+            user = await self.user_repo.create_user(
                 telegram_id=telegram_user.id,
                 username=telegram_user.username,
                 first_name=telegram_user.first_name,
@@ -213,27 +217,13 @@ class TelegramBot:
             text = text.replace(char, f"\\{char}")
         return text
 
-    def _is_trader_or_admin(self, telegram_id: int) -> bool:
+    async def _is_trader_or_admin(self, telegram_id: int) -> bool:
         """檢查是否為管理員或發單員"""
         if Config.is_admin(telegram_id):
             return True
 
-        # 檢查是否為發單員
         try:
-            from app.database import get_db_manager
-            from app.models import User
-
-            with get_db_manager().get_session() as session:
-                user = (
-                    session.query(User)
-                    .filter(
-                        User.telegram_id == telegram_id,
-                        User.is_trader == True,
-                        User.is_active == True,
-                    )
-                    .first()
-                )
-                return user is not None
+            return await self.user_repo.is_active_trader(telegram_id)
         except Exception as e:
             logger.error(f"Check trader status error: {e}")
             return False
@@ -246,10 +236,12 @@ class TelegramBot:
             return update.effective_user.first_name or "Unknown"
         return "Unknown"
 
-    def _log_user_action(self, user: User, action: str, details: Optional[Dict] = None):
+    async def _log_user_action(
+        self, user: User, action: str, details: Optional[Dict] = None
+    ):
         """記錄用戶操作"""
         try:
-            self.system_log_repo.log(
+            await self.system_log_repo.log(
                 level="INFO",
                 message=f"User action: {action}",
                 module="telegram_bot",
@@ -260,7 +252,7 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Failed to log user action: {e}")
             # 使用基本信息記錄
-            self.system_log_repo.log(
+            await self.system_log_repo.log(
                 level="INFO",
                 message=f"User action: {action}",
                 module="telegram_bot",
@@ -270,8 +262,8 @@ class TelegramBot:
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """開始命令處理器"""
-        user = self._get_or_create_user(update)
-        self._log_user_action(user, "start_command")
+        user = await self._get_or_create_user(update)
+        await self._log_user_action(user, "start_command")
 
         welcome_message = """
 🚀 **歡迎使用 Kaiyn Trading Bot！**
@@ -286,7 +278,7 @@ class TelegramBot:
 📚 Resources:
 
 • 👁️‍🗨️ [Kaiyn Capital 公開討論群](https://t.me/kaiyncapital)
-• 🌏 [Kaiyn Capital 官方網站](https://kaiyn.app)
+• 🌏 [Kaiyn Capital 官方網站](https://kaiyn.org)
 
 輸入 `/help` 查看完整命令列表。
         """
@@ -336,8 +328,8 @@ class TelegramBot:
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """狀態命令處理器"""
-        user = self._get_or_create_user(update)
-        self._log_user_action(user, "status_command")
+        user = await self._get_or_create_user(update)
+        await self._log_user_action(user, "status_command")
 
         if not user.is_api_connected or not all(
             [
@@ -398,8 +390,8 @@ class TelegramBot:
 
     async def balance_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """餘額命令處理器"""
-        user = self._get_or_create_user(update)
-        self._log_user_action(user, "balance_command")
+        user = await self._get_or_create_user(update)
+        await self._log_user_action(user, "balance_command")
 
         if not user.is_api_connected:
             await update.message.reply_text(
@@ -523,7 +515,7 @@ class TelegramBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """管理員添加發單員"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
             await update.message.reply_text("❌ 您沒有管理員權限")
@@ -545,7 +537,7 @@ class TelegramBot:
             telegram_id = int(context.args[0])
 
             # 設置發單員狀態
-            success = self.user_repo.set_trader_status(telegram_id, True)
+            success = await self.user_repo.set_trader_status(telegram_id, True)
 
             if success:
                 await update.message.reply_text(
@@ -566,8 +558,8 @@ class TelegramBot:
     # API 設置相關方法
     async def set_api_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """開始 API 設置"""
-        user = self._get_or_create_user(update)
-        self._log_user_action(user, "set_api_start")
+        user = await self._get_or_create_user(update)
+        await self._log_user_action(user, "set_api_start")
 
         # 檢查是否已設置 API
         if user.is_api_connected and user.encrypted_api_key:
@@ -609,7 +601,7 @@ class TelegramBot:
 
     async def set_api_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """設置 API Key"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
         api_key = update.message.text.strip()
 
         # 立即刪除用戶輸入的 API Key 消息
@@ -638,7 +630,7 @@ class TelegramBot:
 
     async def set_secret_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """設置 Secret Key"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
         secret_key = update.message.text.strip()
 
         # 立即刪除用戶輸入的 Secret Key 消息
@@ -667,7 +659,7 @@ class TelegramBot:
 
     async def set_passphrase(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """設置 Passphrase 並完成 API 設置"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
         passphrase = update.message.text.strip()
 
         # 立即刪除用戶輸入的 Passphrase 消息
@@ -709,11 +701,11 @@ class TelegramBot:
 
             if is_connected:
                 # 保存加密的 API 憑證
-                self.user_repo.update_user_api_credentials(
+                await self.user_repo.update_user_api_credentials(
                     user.id, credentials[0], credentials[1], credentials[2]
                 )
 
-                self._log_user_action(user, "api_setup_success")
+                await self._log_user_action(user, "api_setup_success")
 
                 await test_msg.edit_text(
                     "✅ **API 設置成功！**\n\n"
@@ -748,8 +740,8 @@ class TelegramBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """交易設置命令處理器"""
-        user = self._get_or_create_user(update)
-        self._log_user_action(user, "settings_command")
+        user = await self._get_or_create_user(update)
+        await self._log_user_action(user, "settings_command")
 
         # 獲取用戶的 1R 設置
         risk_amount = getattr(user, "fixed_risk_amount", None)
@@ -783,7 +775,7 @@ class TelegramBot:
         query = update.callback_query
         await query.answer()
 
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
         current_risk = getattr(user, "fixed_risk_amount", None)
 
         if current_risk is None:
@@ -818,7 +810,7 @@ class TelegramBot:
 
     async def set_risk_amount(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """設置風險金額"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
         amount_text = update.message.text.strip()
 
         try:
@@ -828,7 +820,7 @@ class TelegramBot:
                 raise ValueError("金額必須大於 0")
 
             # 更新用戶設置
-            success = self.user_repo.update_user_risk_amount(user.id, amount)
+            success = await self.user_repo.update_user_risk_amount(user.id, amount)
 
             if success:
                 await update.message.reply_text(
@@ -854,7 +846,7 @@ class TelegramBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """處理全局消息（主要用於 API 設置）"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
 
         # 檢查是否在 API 設置流程中
         if user.telegram_id in self.user_sessions:
@@ -883,7 +875,7 @@ class TelegramBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """根據編號刪除頻道"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
             await update.message.reply_text("❌ 您沒有管理員權限")
@@ -907,29 +899,18 @@ class TelegramBot:
             # 獲取要刪除的頻道
             channel_to_delete = channels_data[channel_number - 1]
 
-            # 從資料庫刪除
-            from app.database import get_db_manager
-            from app.models import ChannelGroup
-
-            with get_db_manager().get_session() as session:
-                channel = (
-                    session.query(ChannelGroup)
-                    .filter(ChannelGroup.chat_id == channel_to_delete["chat_id"])
-                    .first()
+            deleted = await self.channel_repo.deactivate_channel(
+                channel_to_delete["chat_id"]
+            )
+            if deleted:
+                await update.message.reply_text(
+                    f"✅ **頻道已刪除**\n\n"
+                    f"頻道名稱：{channel_to_delete['title']}\n"
+                    f"已從管理列表中移除。",
+                    parse_mode="Markdown",
                 )
-
-                if channel:
-                    channel.is_active = False
-                    session.commit()
-
-                    await update.message.reply_text(
-                        f"✅ **頻道已刪除**\n\n"
-                        f"頻道名稱：{channel_to_delete['title']}\n"
-                        f"已從管理列表中移除。",
-                        parse_mode="Markdown",
-                    )
-                else:
-                    await update.message.reply_text("❌ 找不到指定的頻道")
+            else:
+                await update.message.reply_text("❌ 找不到指定的頻道")
 
             # 清除 session
             if user.telegram_id in self.user_sessions:
@@ -945,14 +926,14 @@ class TelegramBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """管理員查看用戶列表"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
             await update.message.reply_text("❌ 您沒有管理員權限")
             return
 
         try:
-            users_data = self.user_repo.get_active_users()
+            users_data = await self.user_repo.get_active_users()
 
             users_text = "👥 **用戶列表**\n\n"
             for u in users_data[:20]:  # 限制顯示數量
@@ -982,7 +963,7 @@ class TelegramBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """管理員廣播消息"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
             await update.message.reply_text("❌ 您沒有管理員權限")
@@ -1000,40 +981,29 @@ class TelegramBot:
             return
 
         try:
-            # 發送到頻道/群組
-            from app.database import get_db_manager
-            from app.models import ChannelGroup
-
+            channels = await self.channel_repo.get_active_channels()
             sent_to_channels = 0
             failed_channels = 0
+            status_msg = await update.message.reply_text(
+                f"📤 開始廣播給 {len(channels)} 個頻道/群組..."
+            )
 
-            with get_db_manager().get_session() as session:
-                channels = (
-                    session.query(ChannelGroup)
-                    .filter(ChannelGroup.is_active == True)
-                    .all()
-                )
+            # 獲取發送者的 username
+            sender_username = self._get_sender_username(update)
 
-                status_msg = await update.message.reply_text(
-                    f"📤 開始廣播給 {len(channels)} 個頻道/群組..."
-                )
-
-                # 獲取發送者的 username
-                sender_username = self._get_sender_username(update)
-
-                for channel in channels:
-                    try:
-                        await context.bot.send_message(
-                            chat_id=channel.chat_id,
-                            text=f"📢 **管理員廣播** by @{sender_username}\n\n{message_text}",
-                            parse_mode="Markdown",
-                        )
-                        sent_to_channels += 1
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to send broadcast to channel {channel.chat_id}: {e}"
-                        )
-                        failed_channels += 1
+            for channel in channels:
+                try:
+                    await context.bot.send_message(
+                        chat_id=channel["chat_id"],
+                        text=f"📢 **管理員廣播** by @{sender_username}\n\n{message_text}",
+                        parse_mode="Markdown",
+                    )
+                    sent_to_channels += 1
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to send broadcast to channel {channel['chat_id']}: {e}"
+                    )
+                    failed_channels += 1
 
             await status_msg.edit_text(
                 f"✅ **廣播完成**\n\n"
@@ -1050,78 +1020,62 @@ class TelegramBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """管理員查看頻道/群組列表"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
             await update.message.reply_text("❌ 您沒有管理員權限")
             return
 
         try:
-            from app.database import get_db_manager
-            from app.models import ChannelGroup
+            channels = await self.channel_repo.get_active_channels()
 
-            with get_db_manager().get_session() as session:
-                channels = (
-                    session.query(ChannelGroup)
-                    .filter(ChannelGroup.is_active == True)
-                    .all()
-                )
-
-                if not channels:
-                    await update.message.reply_text(
-                        "📺 **頻道/群組管理**\n\n"
-                        "目前沒有管理的頻道或群組。\n\n"
-                        "使用 `/add_channel` 添加頻道或群組。",
-                        parse_mode="Markdown",
-                    )
-                    return
-
-                channels_text = "📺 **已管理的頻道/群組**\n\n"
-                for channel in channels:
-                    status = "✅" if channel.auto_forward_signals else "❌"
-
-                    title = channel.title or "Unknown"
-                    chat_type = channel.chat_type
-                    username = channel.username
-
-                    channels_text += f"{status} **{title}**\n"
-                    channels_text += f"   類型: {chat_type}\n"
-                    channels_text += f"   ID: `{channel.chat_id}`\n"
-                    if username:
-                        channels_text += f"   用戶名: @{username}\n"
-                    channels_text += f"   自動轉發: {'開啟' if channel.auto_forward_signals else '關閉'}\n\n"
-
-                keyboard = [
-                    [
-                        InlineKeyboardButton(
-                            "➕ 添加頻道", callback_data="add_new_channel"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "⚙️ 管理設置", callback_data="manage_channels"
-                        )
-                    ],
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
-                # 使用 HTML 模式避免 Markdown 解析錯誤
-                channels_text_html = channels_text.replace(
-                    "**已管理的頻道/群組**", "<b>已管理的頻道/群組</b>"
-                )
-                # 處理其他 ** 標記
-                import re
-
-                channels_text_html = re.sub(
-                    r"\*\*(.*?)\*\*", r"<b>\1</b>", channels_text_html
-                )
-                channels_text_html = re.sub(
-                    r"`(.*?)`", r"<code>\1</code>", channels_text_html
-                )
-
+            if not channels:
                 await update.message.reply_text(
-                    channels_text_html, reply_markup=reply_markup, parse_mode="HTML"
+                    "📺 **頻道/群組管理**\n\n"
+                    "目前沒有管理的頻道或群組。\n\n"
+                    "使用 `/add_channel` 添加頻道或群組。",
+                    parse_mode="Markdown",
                 )
+                return
+
+            channels_text = "📺 **已管理的頻道/群組**\n\n"
+            for channel in channels:
+                status = "✅" if channel["auto_forward_signals"] else "❌"
+
+                title = channel["title"] or "Unknown"
+                chat_type = channel["chat_type"]
+                username = channel["username"]
+
+                channels_text += f"{status} **{title}**\n"
+                channels_text += f"   類型: {chat_type}\n"
+                channels_text += f"   ID: `{channel['chat_id']}`\n"
+                if username:
+                    channels_text += f"   用戶名: @{username}\n"
+                channels_text += f"   自動轉發: {'開啟' if channel['auto_forward_signals'] else '關閉'}\n\n"
+
+            keyboard = [
+                [InlineKeyboardButton("➕ 添加頻道", callback_data="add_new_channel")],
+                [InlineKeyboardButton("⚙️ 管理設置", callback_data="manage_channels")],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            # 使用 HTML 模式避免 Markdown 解析錯誤
+            channels_text_html = channels_text.replace(
+                "**已管理的頻道/群組**", "<b>已管理的頻道/群組</b>"
+            )
+            # 處理其他 ** 標記
+            import re
+
+            channels_text_html = re.sub(
+                r"\*\*(.*?)\*\*", r"<b>\1</b>", channels_text_html
+            )
+            channels_text_html = re.sub(
+                r"`(.*?)`", r"<code>\1</code>", channels_text_html
+            )
+
+            await update.message.reply_text(
+                channels_text_html, reply_markup=reply_markup, parse_mode="HTML"
+            )
 
         except Exception as e:
             logger.error(f"Admin channels command error: {e}")
@@ -1134,7 +1088,7 @@ class TelegramBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """管理員添加頻道/群組"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
             await update.message.reply_text("❌ 您沒有管理員權限")
@@ -1173,37 +1127,21 @@ class TelegramBot:
                 )
                 return
 
-            # 保存到資料庫
-            from app.database import get_db_manager
-
-            with get_db_manager().get_session() as session:
-                from app.models import ChannelGroup
-
-                # 檢查是否已存在
-                existing = (
-                    session.query(ChannelGroup)
-                    .filter(ChannelGroup.chat_id == str(chat_info.id))
-                    .first()
+            existing = await self.channel_repo.get_channel_by_chat_id(str(chat_info.id))
+            if existing:
+                await update.message.reply_text(
+                    f"⚠️ 頻道/群組 **{chat_info.title}** 已經在管理列表中"
                 )
+                return
 
-                if existing:
-                    await update.message.reply_text(
-                        f"⚠️ 頻道/群組 **{chat_info.title}** 已經在管理列表中"
-                    )
-                    return
-
-                # 添加新頻道
-                new_channel = ChannelGroup(
-                    chat_id=str(chat_info.id),
-                    chat_type=chat_info.type.value,
-                    title=chat_info.title,
-                    username=chat_info.username,
-                    added_by_user_id=user.telegram_id,
-                    description=description,
-                )
-
-                session.add(new_channel)
-                session.commit()
+            await self.channel_repo.create_channel(
+                chat_id=str(chat_info.id),
+                chat_type=chat_info.type.value,
+                title=chat_info.title,
+                username=chat_info.username,
+                added_by_user_id=user.telegram_id,
+                description=description,
+            )
 
             await update.message.reply_text(
                 f"✅ **頻道/群組添加成功**\n\n"
@@ -1230,7 +1168,7 @@ class TelegramBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """管理員向指定頻道發送消息"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
             await update.message.reply_text("❌ 您沒有管理員權限")
@@ -1273,10 +1211,10 @@ class TelegramBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """管理員或發單員發送交易信號 - JSON 格式"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
 
         # 檢查是否為管理員或發單員
-        if not self._is_trader_or_admin(user.telegram_id):
+        if not await self._is_trader_or_admin(user.telegram_id):
             await update.message.reply_text("❌ 您沒有發送交易信號的權限")
             return
 
@@ -1369,29 +1307,7 @@ class TelegramBot:
             # 發送到頻道/群組
             sent_to_channels = 0
             try:
-                from app.database import get_db_manager
-
-                with get_db_manager().get_session() as session:
-                    from app.models import ChannelGroup
-
-                    channels = (
-                        session.query(ChannelGroup)
-                        .filter(
-                            ChannelGroup.is_active == True,
-                            ChannelGroup.auto_forward_signals == True,
-                        )
-                        .all()
-                    )
-
-                    # 預先載入所有數據以避免 Session 問題
-                    channels_data = []
-                    for channel in channels:
-                        channels_data.append(
-                            {
-                                "chat_id": channel.chat_id,
-                                "forward_with_buttons": channel.forward_with_buttons,
-                            }
-                        )
+                channels_data = await self.channel_repo.get_signal_channels()
 
                 # 在 Session 外部發送消息
                 for channel_data in channels_data:
@@ -1440,7 +1356,7 @@ class TelegramBot:
         query = update.callback_query
         await query.answer()
 
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
         data = query.data
 
         try:
@@ -1471,8 +1387,10 @@ class TelegramBot:
                 await query.edit_message_text("✅ 已取消更改風險設置")
             elif data == "return_start":
                 await self._handle_return_start_callback(query, user)
-            elif data == "confirm_pending_order":
-                await self._handle_confirm_pending_order_callback(query, user)
+            elif data.startswith("confirm_order_"):
+                await self._handle_confirm_pending_order_callback(query, user, data)
+            elif data.startswith("cancel_order_"):
+                await self._handle_cancel_pending_order_callback(query, user, data)
             elif data.startswith("trade_side_"):
                 await self._handle_trade_side_callback(query, user, data)
             elif data.startswith("trade_type_"):
@@ -1498,36 +1416,26 @@ class TelegramBot:
             elif data == "manage_channels":
                 # 查詢所有頻道以供選擇刪除
                 try:
-                    from app.database import get_db_manager
-                    from app.models import ChannelGroup
+                    channels = await self.channel_repo.get_active_channels()
 
-                    with get_db_manager().get_session() as session:
-                        channels = (
-                            session.query(ChannelGroup)
-                            .filter(ChannelGroup.is_active == True)
-                            .all()
+                    if not channels:
+                        await query.edit_message_text(
+                            "📺 **管理頻道**\n\n"
+                            "目前沒有任何頻道。\n\n"
+                            "使用 `/add_channel` 添加頻道。",
+                            parse_mode="Markdown",
                         )
+                        return
 
-                        if not channels:
-                            await query.edit_message_text(
-                                "📺 **管理頻道**\n\n"
-                                "目前沒有任何頻道。\n\n"
-                                "使用 `/add_channel` 添加頻道。",
-                                parse_mode="Markdown",
-                            )
-                            return
-
-                        # 預先載入所有數據
-                        channels_data = []
-                        for i, channel in enumerate(channels, 1):
-                            channels_data.append(
-                                {
-                                    "id": i,
-                                    "chat_id": channel.chat_id,
-                                    "title": channel.title or "Unknown",
-                                    "username": channel.username,
-                                }
-                            )
+                    channels_data = [
+                        {
+                            "id": i,
+                            "chat_id": channel["chat_id"],
+                            "title": channel["title"] or "Unknown",
+                            "username": channel["username"],
+                        }
+                        for i, channel in enumerate(channels, 1)
+                    ]
 
                     # 顯示頻道列表 - 使用HTML模式避免Markdown解析問題
                     manage_text = "📺 <b>管理頻道</b>\n\n"
@@ -1587,69 +1495,61 @@ class TelegramBot:
             elif data == "return_admin_channels":
                 # 直接重新顯示頻道列表
                 try:
-                    from app.database import get_db_manager
-                    from app.models import ChannelGroup
+                    channels = await self.channel_repo.get_active_channels()
 
-                    with get_db_manager().get_session() as session:
-                        channels = (
-                            session.query(ChannelGroup)
-                            .filter(ChannelGroup.is_active == True)
-                            .all()
-                        )
-
-                        if not channels:
-                            await query.edit_message_text(
-                                "📺 **頻道/群組管理**\n\n"
-                                "目前沒有管理的頻道或群組。\n\n"
-                                "使用 `/add_channel` 添加頻道或群組。",
-                                parse_mode="Markdown",
-                            )
-                            return
-
-                        channels_text = "📺 **已管理的頻道/群組**\n\n"
-                        for channel in channels:
-                            status = "✅" if channel.auto_forward_signals else "❌"
-
-                            title = channel.title or "Unknown"
-                            chat_type = channel.chat_type
-                            username = channel.username
-
-                            channels_text += f"{status} **{title}**\n"
-                            channels_text += f"   類型: {chat_type}\n"
-                            channels_text += f"   ID: `{channel.chat_id}`\n"
-                            if username:
-                                channels_text += f"   用戶名: @{username}\n"
-                            channels_text += f"   自動轉發: {'開啟' if channel.auto_forward_signals else '關閉'}\n\n"
-
-                        keyboard = [
-                            [
-                                InlineKeyboardButton(
-                                    "➕ 添加頻道", callback_data="add_new_channel"
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "⚙️ 管理設置", callback_data="manage_channels"
-                                )
-                            ],
-                        ]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
-
-                        # 使用 HTML 模式避免 Markdown 解析錯誤
-                        import re
-
-                        channels_text_html = re.sub(
-                            r"\*\*(.*?)\*\*", r"<b>\1</b>", channels_text
-                        )
-                        channels_text_html = re.sub(
-                            r"`(.*?)`", r"<code>\1</code>", channels_text_html
-                        )
-
+                    if not channels:
                         await query.edit_message_text(
-                            channels_text_html,
-                            reply_markup=reply_markup,
-                            parse_mode="HTML",
+                            "📺 **頻道/群組管理**\n\n"
+                            "目前沒有管理的頻道或群組。\n\n"
+                            "使用 `/add_channel` 添加頻道或群組。",
+                            parse_mode="Markdown",
                         )
+                        return
+
+                    channels_text = "📺 **已管理的頻道/群組**\n\n"
+                    for channel in channels:
+                        status = "✅" if channel["auto_forward_signals"] else "❌"
+
+                        title = channel["title"] or "Unknown"
+                        chat_type = channel["chat_type"]
+                        username = channel["username"]
+
+                        channels_text += f"{status} **{title}**\n"
+                        channels_text += f"   類型: {chat_type}\n"
+                        channels_text += f"   ID: `{channel['chat_id']}`\n"
+                        if username:
+                            channels_text += f"   用戶名: @{username}\n"
+                        channels_text += f"   自動轉發: {'開啟' if channel['auto_forward_signals'] else '關閉'}\n\n"
+
+                    keyboard = [
+                        [
+                            InlineKeyboardButton(
+                                "➕ 添加頻道", callback_data="add_new_channel"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "⚙️ 管理設置", callback_data="manage_channels"
+                            )
+                        ],
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+
+                    # 使用 HTML 模式避免 Markdown 解析錯誤
+                    import re
+
+                    channels_text_html = re.sub(
+                        r"\*\*(.*?)\*\*", r"<b>\1</b>", channels_text
+                    )
+                    channels_text_html = re.sub(
+                        r"`(.*?)`", r"<code>\1</code>", channels_text_html
+                    )
+
+                    await query.edit_message_text(
+                        channels_text_html,
+                        reply_markup=reply_markup,
+                        parse_mode="HTML",
+                    )
                 except Exception as e:
                     logger.error(f"Return admin channels error: {e}")
                     await query.edit_message_text("❌ 獲取頻道列表失敗")
@@ -1855,7 +1755,7 @@ class TelegramBot:
 📚 Resources:
 
 • 👁️‍🗨️ [Kaiyn Capital 公開討論群](https://t.me/kaiyncapital)
-• 🌏 [Kaiyn Capital 官方網站](https://kaiyn.app)
+• 🌏 [Kaiyn Capital 官方網站](https://kaiyn.org)
 
 輸入 `/help` 查看完整命令列表。
         """
@@ -1924,7 +1824,7 @@ class TelegramBot:
             return
 
         # 檢查用戶設置
-        user_data = self.user_repo.get_user_by_telegram_id(user.telegram_id)
+        user_data = await self.user_repo.get_user_by_telegram_id(user.telegram_id)
 
         # 檢查 1：API 連接
         if not user_data or not user_data.is_api_connected:
@@ -1987,36 +1887,34 @@ class TelegramBot:
             confirm_text += f"**止損距離：** {stop_distance_pct*100:.2f}%\n\n"
             confirm_text += "⚠️ 將使用市價單進場"
 
-            # 存儲訂單數據到用戶會話中
-            order_data = {
-                "symbol": symbol,
-                "direction": direction,
-                "quantity": quantity,
-                "stop_loss": stop_loss,
-                "position_value": position_value,
-                "current_price": current_price,
-            }
-
-            # 確保用戶會話存在
-            if user.telegram_id not in self.user_sessions:
-                self.user_sessions[user.telegram_id] = {}
-                logger.info(f"Created new session for user {user.telegram_id}")
-
-            # 存儲待確認的訂單數據
-            self.user_sessions[user.telegram_id]["pending_order"] = order_data
-            logger.info(
-                f"Stored pending order for user {user.telegram_id}: {order_data}"
+            pending_order = await self.pending_order_repo.create_pending_order(
+                user_id=user_data.id,
+                telegram_id=user.telegram_id,
+                symbol=symbol,
+                direction=direction,
+                quantity=quantity,
+                stop_loss=stop_loss,
+                position_value=position_value,
+                current_price=current_price,
+                expires_at=datetime.utcnow() + timedelta(minutes=10),
             )
-            logger.info(f"Current user sessions: {list(self.user_sessions.keys())}")
+            logger.info(
+                f"Stored pending order {pending_order.token} for user {user.telegram_id}"
+            )
 
             keyboard = [
                 [
                     InlineKeyboardButton(
                         "✅ 確認下單",
-                        callback_data="confirm_pending_order",
+                        callback_data=f"confirm_order_{pending_order.token}",
                     )
                 ],
-                [InlineKeyboardButton("❌ 取消", callback_data="cancel_order")],
+                [
+                    InlineKeyboardButton(
+                        "❌ 取消",
+                        callback_data=f"cancel_order_{pending_order.token}",
+                    )
+                ],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -2045,55 +1943,64 @@ class TelegramBot:
             except:
                 pass
 
-    async def _handle_confirm_pending_order_callback(self, query, user):
+    async def _handle_confirm_pending_order_callback(self, query, user, data):
         """處理確認待處理訂單"""
         try:
-            # 記錄用戶會話狀態用於調試
-            logger.info(f"Checking pending order for user {user.telegram_id}")
-            logger.info(f"User sessions keys: {list(self.user_sessions.keys())}")
-            if user.telegram_id in self.user_sessions:
-                logger.info(
-                    f"User {user.telegram_id} session keys: {list(self.user_sessions[user.telegram_id].keys())}"
-                )
+            token = data.removeprefix("confirm_order_")
+            pending_order, status = await self.pending_order_repo.claim_pending_order(
+                token, user.telegram_id
+            )
 
-            # 檢查用戶會話中是否有待處理的訂單
-            if (
-                user.telegram_id not in self.user_sessions
-                or "pending_order" not in self.user_sessions[user.telegram_id]
-            ):
-                logger.warning(
-                    f"No pending order found for user {user.telegram_id}, this is normal after bot restart or order expiration"
+            if not pending_order:
+                await self._send_private_message(
+                    query, user, "❌ 找不到這筆待確認訂單，請重新點擊最新信號下單。"
                 )
                 return
 
-            order_data = self.user_sessions[user.telegram_id]["pending_order"]
+            if status == "expired":
+                await self._send_private_message(
+                    query, user, "❌ 這筆待確認訂單已過期，請重新點擊信號下單。"
+                )
+                return
 
-            # 從會話數據中提取訂單信息
-            symbol = order_data["symbol"]
-            direction = order_data["direction"]
-            quantity = order_data["quantity"]
-            stop_loss = order_data["stop_loss"]
-            position_value = order_data["position_value"]
-            current_price = order_data["current_price"]
+            if status != "processing":
+                await self._send_private_message(
+                    query, user, f"⚠️ 這筆待確認訂單目前狀態為 {status}，無法重複執行。"
+                )
+                return
 
-            # 繼續執行原來的確認下單邏輯
             await self._execute_order(
                 query,
                 user,
-                symbol,
-                direction,
-                quantity,
-                stop_loss,
-                position_value,
-                current_price,
+                pending_order.symbol,
+                pending_order.direction,
+                pending_order.quantity,
+                pending_order.stop_loss,
+                pending_order.position_value,
+                pending_order.current_price,
+                pending_order_token=token,
             )
-
-            # 清除會話中的待處理訂單
-            del self.user_sessions[user.telegram_id]["pending_order"]
 
         except Exception as e:
             logger.error(f"Confirm pending order error: {e}")
             await self._send_private_message(query, user, "❌ 確認下單時發生錯誤")
+
+    async def _handle_cancel_pending_order_callback(self, query, user, data):
+        """處理取消待確認訂單"""
+        token = data.removeprefix("cancel_order_")
+        status = await self.pending_order_repo.cancel_pending_order(
+            token, user.telegram_id
+        )
+
+        if status == "cancelled":
+            await query.answer("已取消下單")
+            await self._send_private_message(query, user, "✅ 已取消下單")
+        elif status == "missing":
+            await self._send_private_message(query, user, "❌ 找不到這筆待確認訂單")
+        else:
+            await self._send_private_message(
+                query, user, f"⚠️ 這筆待確認訂單目前狀態為 {status}，無法取消。"
+            )
 
     async def _execute_order(
         self,
@@ -2105,48 +2012,62 @@ class TelegramBot:
         stop_loss,
         position_value,
         current_price,
+        pending_order_token=None,
     ):
         """執行訂單的核心邏輯"""
         await query.answer("正在執行下單...")
         await self._send_private_message(query, user, "🔄 **正在執行下單...**")
-
-        # 獲取用戶數據（重新獲取以確保最新信息）
-        user_data = self.user_repo.get_user_by_telegram_id(user.telegram_id)
-
-        # 生成客戶端訂單 ID
-        client_order_id = (
-            f"TG_{user.telegram_id}_{int(datetime.timestamp(datetime.now()))}"
-        )
-
-        # 獲取用戶 API 憑證
-        credentials = (
-            user_data.encrypted_api_key,
-            user_data.encrypted_secret_key,
-            user_data.encrypted_passphrase,
-        )
-
-        # 執行市價單
-        side = "buy" if direction == "long" else "sell"
-
-        # 限制數量精度到6位小數以符合Bitget要求
-        quantity = round(quantity, 6)
-
-        logger.info(f"Executing order for {symbol}, side: {side}, quantity: {quantity}")
-
-        # 先創建交易記錄
-        trade_record = self.trade_repo.create_trade(
-            user_id=user_data.id,
-            symbol=symbol,
-            side=side,
-            order_type="market",
-            quantity=quantity,
-            client_order_id=client_order_id,
-        )
-
-        # 保存trade_record的ID以便後續使用
-        trade_record_id = trade_record.id
+        trade_record_id = None
 
         try:
+            # 獲取用戶數據（重新獲取以確保最新信息）
+            user_data = await self.user_repo.get_user_by_telegram_id(user.telegram_id)
+            if (
+                not user_data
+                or not user_data.is_api_connected
+                or not all(
+                    [
+                        user_data.encrypted_api_key,
+                        user_data.encrypted_secret_key,
+                        user_data.encrypted_passphrase,
+                    ]
+                )
+            ):
+                raise RuntimeError("User API credentials are not configured")
+
+            # 生成客戶端訂單 ID
+            client_order_id = (
+                f"TG_{user.telegram_id}_{int(datetime.timestamp(datetime.now()))}"
+            )
+
+            # 獲取用戶 API 憑證
+            credentials = (
+                user_data.encrypted_api_key,
+                user_data.encrypted_secret_key,
+                user_data.encrypted_passphrase,
+            )
+
+            # 執行市價單
+            side = "buy" if direction == "long" else "sell"
+
+            # 限制數量精度到6位小數以符合Bitget要求
+            quantity = round(quantity, 6)
+
+            logger.info(
+                f"Executing order for {symbol}, side: {side}, quantity: {quantity}"
+            )
+
+            # 先創建交易記錄
+            trade_record = await self.trade_repo.create_trade(
+                user_id=user_data.id,
+                symbol=symbol,
+                side=side,
+                order_type="market",
+                quantity=quantity,
+                client_order_id=client_order_id,
+            )
+            trade_record_id = trade_record.id
+
             # 執行下單，添加必要的tradeSide參數
             logger.info(
                 f"Placing order: symbol={symbol}, side={side}, quantity={quantity}, stop_loss={stop_loss}"
@@ -2174,11 +2095,15 @@ class TelegramBot:
                 bitget_order_id = order_data.get("orderId", "")
 
                 # 更新交易記錄
-                self.trade_repo.update_trade_result(
+                await self.trade_repo.update_trade_result(
                     trade_record_id,
                     bitget_order_id=bitget_order_id,
                     status="filled",
                 )
+                if pending_order_token:
+                    await self.pending_order_repo.mark_executed(
+                        pending_order_token, trade_record_id
+                    )
 
                 # 發送成功通知
                 success_text = f"✅ **下單成功**\n\n"
@@ -2196,7 +2121,7 @@ class TelegramBot:
                 await self._send_private_message(query, user, success_text)
 
                 # 記錄用戶操作
-                self._log_user_action(
+                await self._log_user_action(
                     user,
                     "order_executed",
                     {
@@ -2208,11 +2133,12 @@ class TelegramBot:
                         "stop_loss": stop_loss,
                     },
                 )
+                return True
 
             else:
                 error_msg = result.get("msg", "未知錯誤")
                 # 更新交易記錄為失敗
-                self.trade_repo.update_trade_result(
+                await self.trade_repo.update_trade_result(
                     trade_record_id,
                     bitget_order_id=None,  # 使用 None 而不是空字符串
                     status="failed",
@@ -2227,19 +2153,23 @@ class TelegramBot:
 
         except Exception as e:
             logger.error(f"Order execution error: {e}")
-            # 更新交易記錄為失敗
-            self.trade_repo.update_trade_result(
-                trade_record_id,
-                bitget_order_id=None,  # 使用 None 而不是空字符串
-                status="failed",
-                error_message=str(e),
-            )
+            if trade_record_id is not None:
+                # 更新交易記錄為失敗
+                await self.trade_repo.update_trade_result(
+                    trade_record_id,
+                    bitget_order_id=None,  # 使用 None 而不是空字符串
+                    status="failed",
+                    error_message=str(e),
+                )
+            if pending_order_token:
+                await self.pending_order_repo.mark_failed(pending_order_token, str(e))
 
             await self._send_private_message(
                 query,
                 user,
                 f"❌ **執行下單時發生錯誤**\n\n錯誤詳情：{str(e)}\n\n請檢查API設置或聯繫支援。",
             )
+            return False
 
     async def _handle_confirm_modify_api(self, query, user):
         """處理確認修改 API"""
@@ -2291,7 +2221,7 @@ class TelegramBot:
             )
 
             # 創建交易記錄
-            trade_record = self.trade_repo.create_trade(
+            trade_record = await self.trade_repo.create_trade(
                 user_id=user.id,
                 symbol=symbol,
                 side=side,
@@ -2322,12 +2252,12 @@ class TelegramBot:
                 order_data = result.get("data", {})
                 bitget_order_id = order_data.get("orderId", "")
 
-                self.trade_repo.update_trade_result(
+                await self.trade_repo.update_trade_result(
                     trade_record.id, bitget_order_id=bitget_order_id, status="pending"
                 )
 
                 # 記錄成功日誌
-                self._log_user_action(
+                await self._log_user_action(
                     user,
                     "trade_executed",
                     {
@@ -2348,7 +2278,7 @@ class TelegramBot:
                 await query.edit_message_text(success_text, parse_mode="Markdown")
 
                 # 發送通知
-                self.notification_repo.create_notification(
+                await self.notification_repo.create_notification(
                     user_id=user.id,
                     message_type="trade",
                     title="交易執行成功",
@@ -2358,7 +2288,7 @@ class TelegramBot:
 
             else:
                 error_msg = result.get("msg", "未知錯誤")
-                self.trade_repo.update_trade_result(
+                await self.trade_repo.update_trade_result(
                     trade_record.id,
                     bitget_order_id="",
                     status="failed",
@@ -2396,7 +2326,7 @@ class TelegramBot:
     # 管理員功能
     async def admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """管理員命令處理器"""
-        user = self._get_or_create_user(update)
+        user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
             await update.message.reply_text("❌ 您沒有管理員權限")
@@ -2404,30 +2334,17 @@ class TelegramBot:
 
         try:
             # 獲取系統統計
-            users_data = self.user_repo.get_active_users()
+            users_data = await self.user_repo.get_active_users()
             active_users = len(users_data)
 
-            # 獲取頻道統計
-            channel_count = 0
-            try:
-                from app.database import get_db_manager
-                from app.models import ChannelGroup
-
-                with get_db_manager().get_session() as session:
-                    channel_count = (
-                        session.query(ChannelGroup)
-                        .filter(ChannelGroup.is_active == True)
-                        .count()
-                    )
-            except Exception as channel_error:
-                logger.warning(f"Failed to get channel count: {channel_error}")
-                pass
+            channel_count = await self.channel_repo.count_active_channels()
 
             admin_text = f"👑 **管理員面板**\n\n"
             admin_text += f"📊 **系統統計**\n"
             admin_text += f"• 活躍用戶：{active_users}\n"
             admin_text += f"• 管理頻道：{channel_count}\n"
-            admin_text += f"• 系統狀態：{'正常' if self.user_repo.db.health_check() else '異常'}\n\n"
+            db_ok = await self.user_repo.db.health_check()
+            admin_text += f"• 系統狀態：{'正常' if db_ok else '異常'}\n\n"
             admin_text += f"🛠️ **管理功能**\n"
             admin_text += f"• `/admin_users` - 查看用戶列表\n"
             admin_text += f"• `/admin_channels` - 管理頻道/群組\n"
@@ -2458,14 +2375,14 @@ class TelegramBot:
         try:
             if update.effective_user:
                 telegram_id = update.effective_user.id
-                user = self.user_repo.get_user_by_telegram_id(telegram_id)
+                user = await self.user_repo.get_user_by_telegram_id(telegram_id)
                 if user and hasattr(user, "id"):
                     user_id = user.id
         except Exception as e:
             logger.error(f"Error getting user info for error handler: {e}")
 
         try:
-            self.system_log_repo.log(
+            await self.system_log_repo.log(
                 level="ERROR",
                 message=str(context.error),
                 module="telegram_bot",
@@ -2528,6 +2445,7 @@ class TelegramBot:
 
             # 清理資源
             await self.trade_manager.cleanup()
+            await self.user_repo.db.close()
 
             logger.info("Telegram bot stopped successfully")
 

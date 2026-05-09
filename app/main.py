@@ -16,14 +16,13 @@ sys.path.insert(0, str(project_root))
 
 from app.config import Config
 from app.database import init_database, health_check
-from app.bot import run_bot
-from app.encryption import KeyGenerator
 
 # 設置日誌
 def setup_logging():
     """配置日誌系統"""
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     log_level = getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO)
+    Path('logs').mkdir(exist_ok=True)
     
     # 基本配置
     logging.basicConfig(
@@ -31,7 +30,7 @@ def setup_logging():
         format=log_format,
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler('app.log', encoding='utf-8')
+            logging.FileHandler('logs/app.log', encoding='utf-8')
         ]
     )
     
@@ -40,18 +39,19 @@ def setup_logging():
     logging.getLogger('telegram').setLevel(logging.WARNING)
     logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
 
-def check_requirements():
+async def check_requirements():
     """檢查必要的依賴和配置"""
     try:
         # 檢查配置
         Config.validate()
+        init_database()
         
         # 檢查必要目錄
         log_dir = Path('logs')
         log_dir.mkdir(exist_ok=True)
         
         # 檢查資料庫
-        if not health_check():
+        if not await health_check():
             logging.error("Database health check failed")
             return False
         
@@ -71,16 +71,16 @@ async def main():
     
     try:
         # 檢查運行要求
-        if not check_requirements():
+        if not await check_requirements():
             logger.error("❌ 系統檢查失敗，無法啟動")
             return 1
         
-        # 初始化資料庫
-        logger.info("初始化資料庫...")
-        init_database()
-        
+        logger.info("資料庫連線檢查完成")
+
         # 啟動機器人
         logger.info("啟動 Telegram 機器人...")
+        from app.bot import run_bot
+
         await run_bot()
         
         return 0
@@ -95,6 +95,8 @@ async def main():
 
 def generate_encryption_key():
     """生成加密金鑰的工具函數"""
+    from app.encryption import KeyGenerator
+
     key = KeyGenerator.generate_key()
     print(f"Generated encryption key: {key}")
     print(f"Add this to your .env file: ENCRYPTION_KEY={key}")
@@ -102,12 +104,18 @@ def generate_encryption_key():
 
 def create_env_template():
     """創建環境變數模板"""
+    from app.encryption import KeyGenerator
+
     template = """# Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
 TELEGRAM_ADMIN_IDS=your_telegram_user_id,another_admin_id
 
-# Database Configuration
-DATABASE_URL=sqlite:///./bitget_bot.db
+# PostgreSQL Configuration
+POSTGRES_DB=kaiyn_trading_bot
+POSTGRES_USER=kaiyn
+POSTGRES_PASSWORD=kaiyn
+POSTGRES_PORT=5432
+DATABASE_URL=postgresql+asyncpg://kaiyn:kaiyn@postgres:5432/kaiyn_trading_bot
 
 # Encryption Key (32 bytes base64 encoded)
 ENCRYPTION_KEY={encryption_key}
@@ -145,17 +153,11 @@ def init_project():
     if not Path('.env').exists():
         create_env_template()
     
-    # 初始化資料庫
-    try:
-        init_database()
-        print("✅ 資料庫初始化完成")
-    except Exception as e:
-        print(f"❌ 資料庫初始化失敗: {e}")
-    
     print("🎉 項目初始化完成！")
     print("\n下一步：")
     print("1. 編輯 .env 文件，填入正確的配置")
-    print("2. 運行 'python app/main.py' 啟動機器人")
+    print("2. 運行 'docker compose run --rm bot alembic upgrade head' 套用資料庫 migration")
+    print("3. 運行 'docker compose up bot' 啟動機器人")
 
 def show_help():
     """顯示幫助信息"""
@@ -166,17 +168,19 @@ def show_help():
   python app/main.py                    啟動機器人
   python app/main.py --init            初始化項目
   python app/main.py --generate-key    生成加密金鑰
+  python app/main.py --check-db        檢查 PostgreSQL 連線
   python app/main.py --help            顯示此幫助
 
 配置文件:
   .env                                 環境變數配置
 
 日誌文件:
-  app.log                             應用日誌
+  logs/app.log                        應用日誌
   logs/                               日誌目錄
 
 資料庫:
-  bitget_bot.db                       SQLite 資料庫文件 (開發環境)
+  PostgreSQL                          使用 Alembic 管理 schema
+  alembic upgrade head                套用資料庫 migration
   
 安全提醒:
   - 請妥善保管您的 API 金鑰
@@ -193,7 +197,7 @@ if __name__ == "__main__":
     parser.add_argument('--init', action='store_true', help='初始化項目')
     parser.add_argument('--generate-key', action='store_true', help='生成加密金鑰')
     parser.add_argument('--check-db', action='store_true', help='檢查資料庫連接')
-    parser.add_argument('--create-tables', action='store_true', help='創建資料庫表')
+    parser.add_argument('--create-tables', action='store_true', help='已停用，請使用 alembic upgrade head')
     
     args = parser.parse_args()
     
@@ -203,17 +207,20 @@ if __name__ == "__main__":
         generate_encryption_key()
     elif args.check_db:
         setup_logging()
-        if health_check():
-            print("✅ 資料庫連接正常")
-        else:
-            print("❌ 資料庫連接失敗")
-    elif args.create_tables:
-        setup_logging()
         try:
+            Config.validate_database_url()
             init_database()
-            print("✅ 資料庫表創建成功")
+            if asyncio.run(health_check()):
+                print("✅ 資料庫連接正常")
+            else:
+                print("❌ 資料庫連接失敗")
+                sys.exit(1)
         except Exception as e:
-            print(f"❌ 創建表失敗: {e}")
+            print(f"❌ 資料庫連接失敗: {e}")
+            sys.exit(1)
+    elif args.create_tables:
+        print("❌ --create-tables 已停用，請改用：alembic upgrade head")
+        sys.exit(1)
     elif len(sys.argv) > 1 and sys.argv[1] in ['--help', '-h']:
         show_help()
     else:
