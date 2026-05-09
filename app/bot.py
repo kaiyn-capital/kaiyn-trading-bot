@@ -269,11 +269,11 @@ class TelegramBot:
 🚀 **歡迎使用 Kaiyn Trading Bot！**
 
 這個機器人可以幫助您：
-• 針對Bitget專屬群的交易信號實現一鍵定損下單
+• 針對 Bitget 專屬群的交易信號實現一鍵定損下單
 
-💡加入Bitget專屬群方法：
+💡加入 Bitget 專屬群方法：
 1. 使用邀請碼 **"5nmb"** 註冊[Bitget交易所](https://partner.bitget.com/bg/JZQT5S)
-2. KYC完成並入金後，私信群主或管理員處理
+2. KYC 完成並入金後，私信群主或管理員處理
 
 📚 Resources:
 
@@ -310,7 +310,7 @@ class TelegramBot:
 • 機器人會引導您依序輸入，輸入後會自動刪除訊息保護隱私
 
 **交易功能：**
-• `/settings` - 設置交易參數（1R願意承受止損金額）
+• `/settings` - 設置交易參數（1R 願意承受止損金額）
 • `/balance` - 查看帳戶餘額
 • 📊 **信號交易** - 當管理員發送交易信號時可一鍵下單
 
@@ -1718,12 +1718,12 @@ class TelegramBot:
                             found_assets = True
 
                 if not found_assets:
-                    balance_text += "暫無USDT資產或餘額為零\n\n"
+                    balance_text += "暫無 USDT 資產或餘額為零\n\n"
                     balance_text += (
                         f"📊 **原始API數據：**\n```\n{str(assets)[:300]}...\n```\n\n"
                     )
 
-                balance_text += "ℹ️ **說明：** 僅顯示U本位合約帳戶的USDT餘額"
+                balance_text += "ℹ️ **說明：** 僅顯示 U 本位合約帳戶的 USDT 餘額"
 
                 keyboard = [
                     [InlineKeyboardButton("🔄 刷新", callback_data="refresh_balance")],
@@ -1746,11 +1746,11 @@ class TelegramBot:
 🚀 **歡迎使用 Kaiyn Trading Bot！**
 
 這個機器人可以幫助您：
-• 針對Bitget專屬群的交易信號實現一鍵定損下單
+• 針對 Bitget 專屬群的交易信號實現一鍵定損下單
 
-💡加入Bitget專屬群方法：
+💡加入 Bitget 專屬群方法：
 1. 使用邀請碼 **"5nmb"** 註冊[Bitget交易所](https://partner.bitget.com/bg/JZQT5S)
-2. KYC完成並入金後，私信群主或管理員處理
+2. KYC 完成並入金後，私信群主或管理員處理
 
 📚 Resources:
 
@@ -2114,8 +2114,10 @@ class TelegramBot:
                 success_text += f"**倉位名義價值：** ${position_value:.2f}\n"
                 success_text += f"**止損：** ${stop_loss:,.4f}\n"
                 success_text += f"**進場價格：** ${current_price:,.4f}\n"
-                success_text += f"**當前1R設置：** ${user_data.fixed_risk_amount:.2f}\n"
-                success_text += f"**訂單ID：** {bitget_order_id[:16]}...\n\n"
+                success_text += (
+                    f"**當前 1R 設置：** ${user_data.fixed_risk_amount:.2f}\n"
+                )
+                success_text += f"**訂單 ID：** {bitget_order_id[:16]}...\n\n"
                 success_text += "✅ 止損已同時設置"
 
                 await self._send_private_message(query, user, success_text)
@@ -2194,8 +2196,8 @@ class TelegramBot:
         self.user_sessions[user.telegram_id] = {"step": "risk_amount"}
 
         await query.edit_message_text(
-            "💰 **設置每單固定止損金額，以進行定R開倉。**\n\n"
-            "請輸入定R金額u（數字）：",
+            "💰 **設置每單固定止損金額，以進行定 R 開倉。**\n\n"
+            "請輸入定 R 金額 u（數字）：",
             parse_mode="Markdown",
         )
 
