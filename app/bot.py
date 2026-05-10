@@ -1279,8 +1279,12 @@ class TelegramBot:
             keyboard = [
                 [
                     InlineKeyboardButton(
-                        "💰 下單",
-                        callback_data=f"place_order_{symbol}_{direction}_{entry_lower}_{entry_upper}_{stop_loss}",
+                        "💰 市價下單",
+                        callback_data=f"place_order_market_{symbol}_{direction}_{entry_lower:g}_{entry_upper:g}_{stop_loss:g}",
+                    ),
+                    InlineKeyboardButton(
+                        "📌 掛單",
+                        callback_data=f"place_order_limit_{symbol}_{direction}_{entry_lower:g}_{entry_upper:g}_{stop_loss:g}",
                     )
                 ]
             ]
@@ -1810,15 +1814,27 @@ class TelegramBot:
         # 解析信號數據
         try:
             parts = data.split("_")
-            if len(parts) < 7:
+            if len(parts) >= 8 and parts[2] in {"market", "limit"}:
+                order_mode = parts[2]
+                symbol = parts[3]
+                direction = parts[4]
+                entry_lower = float(parts[5])
+                entry_upper = float(parts[6])
+                stop_loss = float(parts[7])
+            elif len(parts) >= 7:
+                order_mode = "market"
+                symbol = parts[2]
+                direction = parts[3]
+                entry_lower = float(parts[4])
+                entry_upper = float(parts[5])
+                stop_loss = float(parts[6])
+            else:
                 await self._send_private_message(query, user, "❌ 交易信號數據格式錯誤")
                 return
 
-            symbol = parts[2]
-            direction = parts[3]
-            entry_lower = float(parts[4])
-            entry_upper = float(parts[5])
-            stop_loss = float(parts[6])
+            if order_mode not in {"market", "limit"} or direction not in {"long", "short"}:
+                await self._send_private_message(query, user, "❌ 交易信號數據格式錯誤")
+                return
         except (ValueError, IndexError) as e:
             await self._send_private_message(query, user, "❌ 交易信號數據解析失敗")
             return
@@ -1856,14 +1872,37 @@ class TelegramBot:
 
             # 計算風險參數
             risk_amount = user_data.fixed_risk_amount
+            entry_low = min(entry_lower, entry_upper)
+            entry_high = max(entry_lower, entry_upper)
+            requested_order_mode = order_mode
+            limit_price = None
+            calculation_price = current_price
+            switch_notice = None
 
-            # 計算止損距離百分比
-            if direction == "long":
-                stop_distance_pct = abs((current_price - stop_loss) / current_price)
-            else:
-                stop_distance_pct = abs((stop_loss - current_price) / current_price)
+            if order_mode == "limit":
+                limit_price = entry_high if direction == "long" else entry_low
+                can_fill_immediately = (
+                    direction == "long" and limit_price >= current_price
+                ) or (direction == "short" and limit_price <= current_price)
 
-            # 計算開倉名義價值
+                if can_fill_immediately:
+                    order_mode = "market"
+                    limit_price = None
+                    calculation_price = current_price
+                    switch_notice = (
+                        "⚠️ 此掛單價已可能立即成交，已切換為市價下單確認。\n\n"
+                    )
+                else:
+                    calculation_price = limit_price
+
+            if calculation_price <= 0:
+                await self._send_private_message(
+                    query, user, "❌ 進場價格錯誤，無法計算倉位"
+                )
+                return
+
+            # 計算止損距離百分比與開倉名義價值
+            stop_distance_pct = abs((calculation_price - stop_loss) / calculation_price)
             if stop_distance_pct <= 0:
                 await self._send_private_message(
                     query, user, "❌ 止損價格設置錯誤，無法計算倉位"
@@ -1871,27 +1910,40 @@ class TelegramBot:
                 return
 
             position_value = risk_amount / stop_distance_pct
-            quantity = position_value / current_price
+            quantity = position_value / calculation_price
 
             # 顯示確認信息
             direction_text = "做多" if direction == "long" else "做空"
+            order_mode_text = "市價下單" if order_mode == "market" else "掛單"
 
             confirm_text = f"💰 **交易確認**\n\n"
+            if switch_notice:
+                confirm_text += switch_notice
             confirm_text += f"**交易對：** {symbol}\n"
             confirm_text += f"**方向：** {direction_text}\n"
+            confirm_text += f"**下單方式：** {order_mode_text}\n"
             confirm_text += f"**當前價格：** ${current_price:,.4f}\n"
+            if order_mode == "limit":
+                confirm_text += f"**掛單價格：** ${limit_price:,.4f}\n"
             confirm_text += f"**止損價格：** ${stop_loss:,.4f}\n"
             confirm_text += f"**交易數量：** {quantity:.6f}\n"
             confirm_text += f"**名義價值：** ${position_value:.2f}\n"
             confirm_text += f"**風險金額(1R)：** ${risk_amount:.2f}\n"
             confirm_text += f"**止損距離：** {stop_distance_pct*100:.2f}%\n\n"
-            confirm_text += "⚠️ 將使用市價單進場"
+            if order_mode == "limit":
+                confirm_text += "⚠️ 將送出 GTC 限價掛單，訂單送出不代表已成交"
+            else:
+                confirm_text += "⚠️ 將使用市價單進場"
 
             pending_order = await self.pending_order_repo.create_pending_order(
                 user_id=user_data.id,
                 telegram_id=user.telegram_id,
                 symbol=symbol,
                 direction=direction,
+                order_mode=order_mode,
+                limit_price=limit_price,
+                entry_lower=entry_low,
+                entry_upper=entry_high,
                 quantity=quantity,
                 stop_loss=stop_loss,
                 position_value=position_value,
@@ -1899,7 +1951,8 @@ class TelegramBot:
                 expires_at=datetime.utcnow() + timedelta(minutes=10),
             )
             logger.info(
-                f"Stored pending order {pending_order.token} for user {user.telegram_id}"
+                f"Stored {order_mode} pending order {pending_order.token} for user "
+                f"{user.telegram_id}; requested_mode={requested_order_mode}"
             )
 
             keyboard = [
@@ -1978,6 +2031,8 @@ class TelegramBot:
                 pending_order.stop_loss,
                 pending_order.position_value,
                 pending_order.current_price,
+                order_mode=pending_order.order_mode,
+                limit_price=pending_order.limit_price,
                 pending_order_token=token,
             )
 
@@ -2012,6 +2067,8 @@ class TelegramBot:
         stop_loss,
         position_value,
         current_price,
+        order_mode="market",
+        limit_price=None,
         pending_order_token=None,
     ):
         """執行訂單的核心邏輯"""
@@ -2047,14 +2104,22 @@ class TelegramBot:
                 user_data.encrypted_passphrase,
             )
 
-            # 執行市價單
+            order_mode = order_mode if order_mode in {"market", "limit"} else "market"
+            is_limit_order = order_mode == "limit"
+            order_type = "limit" if is_limit_order else "market"
+            order_price = limit_price if is_limit_order else None
+
+            if is_limit_order and not order_price:
+                raise RuntimeError("Limit order is missing limit_price")
+
             side = "buy" if direction == "long" else "sell"
 
             # 限制數量精度到6位小數以符合Bitget要求
             quantity = round(quantity, 6)
 
             logger.info(
-                f"Executing order for {symbol}, side: {side}, quantity: {quantity}"
+                f"Executing {order_type} order for {symbol}, side: {side}, "
+                f"quantity: {quantity}, limit_price: {order_price}"
             )
 
             # 先創建交易記錄
@@ -2062,28 +2127,45 @@ class TelegramBot:
                 user_id=user_data.id,
                 symbol=symbol,
                 side=side,
-                order_type="market",
+                order_type=order_type,
                 quantity=quantity,
+                price=order_price,
                 client_order_id=client_order_id,
             )
             trade_record_id = trade_record.id
 
             # 執行下單，添加必要的tradeSide參數
             logger.info(
-                f"Placing order: symbol={symbol}, side={side}, quantity={quantity}, stop_loss={stop_loss}"
+                f"Placing {order_type} order: symbol={symbol}, side={side}, "
+                f"quantity={quantity}, stop_loss={stop_loss}, limit_price={order_price}"
             )
-            result = await self.trade_manager.place_market_order(
-                user_data.id,
-                credentials,
-                symbol,
-                side,
-                str(quantity),
-                client_order_id,
-                "USDT",
-                "open",
-                stop_loss,
-            )
-            logger.info(f"place_market_order result: {result}")
+            if is_limit_order:
+                result = await self.trade_manager.place_limit_order(
+                    user_data.id,
+                    credentials,
+                    symbol,
+                    side,
+                    str(quantity),
+                    str(order_price),
+                    client_order_id,
+                    "USDT",
+                    "open",
+                    stop_loss,
+                    force="gtc",
+                )
+            else:
+                result = await self.trade_manager.place_market_order(
+                    user_data.id,
+                    credentials,
+                    symbol,
+                    side,
+                    str(quantity),
+                    client_order_id,
+                    "USDT",
+                    "open",
+                    stop_loss,
+                )
+            logger.info(f"place_{order_type}_order result: {result}")
 
             if not result or result.get("code") != "00000":
                 error_msg = f"Order failed for {symbol}: {result.get('msg', 'Unknown error') if result else 'No response'}"
@@ -2098,7 +2180,7 @@ class TelegramBot:
                 await self.trade_repo.update_trade_result(
                     trade_record_id,
                     bitget_order_id=bitget_order_id,
-                    status="filled",
+                    status="pending" if is_limit_order else "filled",
                 )
                 if pending_order_token:
                     await self.pending_order_repo.mark_executed(
@@ -2106,19 +2188,30 @@ class TelegramBot:
                     )
 
                 # 發送成功通知
-                success_text = f"✅ **下單成功**\n\n"
+                success_text = (
+                    "✅ **掛單已送出**\n\n"
+                    if is_limit_order
+                    else "✅ **下單成功**\n\n"
+                )
                 success_text += f"**幣種：** {symbol}\n"
                 success_text += (
                     f"**方向：** {'做多' if direction == 'long' else '做空'}\n"
                 )
+                success_text += f"**下單方式：** {'掛單' if is_limit_order else '市價'}\n"
                 success_text += f"**倉位名義價值：** ${position_value:.2f}\n"
                 success_text += f"**止損：** ${stop_loss:,.4f}\n"
-                success_text += f"**進場價格：** ${current_price:,.4f}\n"
+                if is_limit_order:
+                    success_text += f"**掛單價格：** ${order_price:,.4f}\n"
+                    success_text += f"**當前價格：** ${current_price:,.4f}\n"
+                else:
+                    success_text += f"**進場價格：** ${current_price:,.4f}\n"
                 success_text += (
                     f"**當前 1R 設置：** ${user_data.fixed_risk_amount:.2f}\n"
                 )
                 success_text += f"**訂單 ID：** {bitget_order_id[:16]}...\n\n"
                 success_text += "✅ 止損已同時設置"
+                if is_limit_order:
+                    success_text += "\n⚠️ 掛單成功代表訂單已送出，不代表已成交"
 
                 await self._send_private_message(query, user, success_text)
 
@@ -2133,6 +2226,8 @@ class TelegramBot:
                         "position_value": position_value,
                         "bitget_order_id": bitget_order_id,
                         "stop_loss": stop_loss,
+                        "order_mode": order_mode,
+                        "limit_price": order_price,
                     },
                 )
                 return True

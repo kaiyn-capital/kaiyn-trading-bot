@@ -107,6 +107,10 @@ class PendingOrder(Base):
     # Signal and computed order data
     symbol = Column(String, nullable=False)
     direction = Column(String, nullable=False)  # long/short
+    order_mode = Column(String, default="market", nullable=False)  # market/limit
+    limit_price = Column(Float, nullable=True)
+    entry_lower = Column(Float, nullable=True)
+    entry_upper = Column(Float, nullable=True)
     quantity = Column(Float, nullable=False)
     stop_loss = Column(Float, nullable=False)
     position_value = Column(Float, nullable=False)

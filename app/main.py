@@ -8,6 +8,7 @@ import asyncio
 import logging
 import sys
 import os
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 # 添加項目根目錄到 Python 路徑
@@ -15,7 +16,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from app.config import Config
-from app.database import init_database, health_check
+from app.database import init_database, health_check, cleanup_retention_records
 
 # 設置日誌
 def setup_logging():
@@ -23,6 +24,13 @@ def setup_logging():
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     log_level = getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO)
     Path('logs').mkdir(exist_ok=True)
+    file_handler = TimedRotatingFileHandler(
+        'logs/app.log',
+        when='midnight',
+        interval=1,
+        backupCount=Config.RETENTION_DAYS,
+        encoding='utf-8',
+    )
     
     # 基本配置
     logging.basicConfig(
@@ -30,8 +38,9 @@ def setup_logging():
         format=log_format,
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler('logs/app.log', encoding='utf-8')
-        ]
+            file_handler,
+        ],
+        force=True,
     )
     
     # 設置第三方庫日誌級別
@@ -93,6 +102,39 @@ async def main():
         logger.error(f"❌ 啟動失敗: {e}")
         return 1
 
+async def run_cleanup_retention(dry_run: bool = False) -> int:
+    """Run retention cleanup without requiring Telegram credentials."""
+    setup_logging()
+    logger = logging.getLogger(__name__)
+
+    try:
+        Config.validate_database_url()
+        init_database()
+
+        if not await health_check():
+            print("❌ 資料庫連接失敗")
+            return 1
+
+        result = await cleanup_retention_records(
+            retention_days=Config.RETENTION_DAYS,
+            dry_run=dry_run,
+        )
+        action = "將清理" if dry_run else "已清理"
+        print(
+            f"✅ Retention cleanup {'dry run' if dry_run else 'completed'} "
+            f"(retention_days={result['retention_days']}, cutoff={result['cutoff']})"
+        )
+        for table_name, count in result["tables"].items():
+            print(f"- {table_name}: {action} {count} 筆")
+
+        logger.info(f"Retention cleanup result: {result}")
+        return 0
+
+    except Exception as e:
+        logger.error(f"Retention cleanup failed: {e}")
+        print(f"❌ Retention cleanup failed: {e}")
+        return 1
+
 def generate_encryption_key():
     """生成加密金鑰的工具函數"""
     from app.encryption import KeyGenerator
@@ -128,6 +170,9 @@ DEBUG=True
 LOG_LEVEL=INFO
 MAX_DAILY_TRADES=10
 MAX_POSITION_SIZE=1000
+RETENTION_DAYS=30
+MAINTENANCE_INTERVAL_SECONDS=86400
+BACKUP_INTERVAL_SECONDS=86400
 """
     
     key = KeyGenerator.generate_key()
@@ -169,6 +214,8 @@ def show_help():
   python app/main.py --init            初始化項目
   python app/main.py --generate-key    生成加密金鑰
   python app/main.py --check-db        檢查 PostgreSQL 連線
+  python app/main.py --cleanup-retention [--dry-run]
+                                        清理超過保留期限的累積資料
   python app/main.py --help            顯示此幫助
 
 配置文件:
@@ -198,6 +245,8 @@ if __name__ == "__main__":
     parser.add_argument('--generate-key', action='store_true', help='生成加密金鑰')
     parser.add_argument('--check-db', action='store_true', help='檢查資料庫連接')
     parser.add_argument('--create-tables', action='store_true', help='已停用，請使用 alembic upgrade head')
+    parser.add_argument('--cleanup-retention', action='store_true', help='清理超過保留期限的資料')
+    parser.add_argument('--dry-run', action='store_true', help='搭配 --cleanup-retention，只顯示會清理的筆數')
     
     args = parser.parse_args()
     
@@ -221,6 +270,9 @@ if __name__ == "__main__":
     elif args.create_tables:
         print("❌ --create-tables 已停用，請改用：alembic upgrade head")
         sys.exit(1)
+    elif args.cleanup_retention:
+        exit_code = asyncio.run(run_cleanup_retention(dry_run=args.dry_run))
+        sys.exit(exit_code)
     elif len(sys.argv) > 1 and sys.argv[1] in ['--help', '-h']:
         show_help()
     else:

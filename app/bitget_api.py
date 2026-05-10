@@ -173,7 +173,8 @@ class BitgetAPIClient:
                          size: str, price: str = None, client_order_id: str = None,
                          margin_coin: str = 'USDT', margin_mode: str = 'crossed',
                          product_type: str = 'USDT-FUTURES', trade_side: str = 'open',
-                         stop_loss_price: str = None, take_profit_price: str = None) -> Dict:
+                         stop_loss_price: str = None, take_profit_price: str = None,
+                         force: str = None) -> Dict:
         """下合約訂單 - 基於第三方SDK，添加必要的tradeSide參數"""
         # 基於第三方SDK，但添加雙向持倉模式必需的tradeSide參數
         data = {
@@ -190,6 +191,9 @@ class BitgetAPIClient:
         # 只在限價單時添加價格
         if price and order_type == 'limit':
             data['price'] = price
+
+        if force and order_type == 'limit':
+            data['force'] = force
         
         # 只在有客戶端訂單ID時添加
         if client_order_id:
@@ -395,7 +399,8 @@ class BitgetTradeManager:
     async def place_limit_order(self, user_id: int, encrypted_credentials: Tuple[str, str, str],
                               symbol: str, side: str, size: str, price: str,
                               client_order_id: str = None, margin_coin: str = 'USDT',
-                              trade_side: str = 'open') -> Dict:
+                              trade_side: str = 'open', stop_loss_price: float = None,
+                              take_profit_price: float = None, force: str = 'gtc') -> Dict:
         """下合約限價單 - 添加必要的tradeSide參數"""
         client = self._get_client(user_id, encrypted_credentials)
         return await client.place_order(
@@ -407,7 +412,10 @@ class BitgetTradeManager:
             client_order_id=client_order_id,
             margin_coin=margin_coin,
             margin_mode='crossed',
-            trade_side=trade_side
+            trade_side=trade_side,
+            stop_loss_price=str(stop_loss_price) if stop_loss_price else None,
+            take_profit_price=str(take_profit_price) if take_profit_price else None,
+            force=force
         )
     
     async def get_order_status(self, user_id: int, encrypted_credentials: Tuple[str, str, str],

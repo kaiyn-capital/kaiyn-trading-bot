@@ -1,10 +1,10 @@
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import secrets
 from typing import AsyncGenerator, Optional
 
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .config import Config
@@ -273,6 +273,10 @@ class PendingOrderRepository:
         telegram_id: int,
         symbol: str,
         direction: str,
+        order_mode: str,
+        limit_price: Optional[float],
+        entry_lower: Optional[float],
+        entry_upper: Optional[float],
         quantity: float,
         stop_loss: float,
         position_value: float,
@@ -297,6 +301,10 @@ class PendingOrderRepository:
                 telegram_id=telegram_id,
                 symbol=symbol,
                 direction=direction,
+                order_mode=order_mode,
+                limit_price=limit_price,
+                entry_lower=entry_lower,
+                entry_upper=entry_upper,
                 quantity=quantity,
                 stop_loss=stop_loss,
                 position_value=position_value,
@@ -472,6 +480,40 @@ class SystemLogRepository:
             session.add(log_entry)
             await session.flush()
             return log_entry
+
+
+async def cleanup_retention_records(retention_days: int, dry_run: bool = False) -> dict:
+    """Delete retention-managed records older than the configured window."""
+    if retention_days <= 0:
+        raise ValueError("retention_days must be greater than 0")
+
+    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    cleanup_targets = [
+        ("pending_orders", PendingOrder),
+        ("trades", Trade),
+        ("notification_logs", NotificationLog),
+        ("system_logs", SystemLog),
+    ]
+
+    result = {
+        "retention_days": retention_days,
+        "cutoff": cutoff.isoformat(),
+        "dry_run": dry_run,
+        "tables": {},
+    }
+
+    async with get_db_manager().get_session() as session:
+        for table_name, model in cleanup_targets:
+            count_result = await session.execute(
+                select(func.count()).select_from(model).where(model.created_at < cutoff)
+            )
+            count = int(count_result.scalar_one())
+            result["tables"][table_name] = count
+
+            if count and not dry_run:
+                await session.execute(delete(model).where(model.created_at < cutoff))
+
+    return result
 
 
 class ChannelRepository:

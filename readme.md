@@ -13,6 +13,7 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 - Docker Compose 本地/部署一致環境
 - U 本位合約 USDT 餘額查詢
 - 固定風險金額 1R 設定
+- 交易信號支援市價下單與 GTC 限價掛單
 - 管理員與發單員權限管理
 - 頻道或群組管理與交易信號轉發
 - Pending order 寫入 PostgreSQL，Bot 重啟後仍可確認尚未過期的訂單
@@ -84,6 +85,9 @@ DEBUG=False
 LOG_LEVEL=INFO
 MAX_DAILY_TRADES=10
 MAX_POSITION_SIZE=1000
+RETENTION_DAYS=30
+MAINTENANCE_INTERVAL_SECONDS=86400
+BACKUP_INTERVAL_SECONDS=86400
 ```
 
 `DATABASE_URL` 必須使用 `postgresql+asyncpg://`。此專案不再支援 SQLite fallback。
@@ -122,6 +126,12 @@ docker compose run --rm bot python -m app.main --check-db
 docker compose up -d bot
 ```
 
+啟動長期維護與備份：
+
+```bash
+docker compose up -d maintenance db-backup
+```
+
 查看 log：
 
 ```bash
@@ -132,6 +142,38 @@ docker compose logs -f bot
 
 ```bash
 ./restart_bot.sh
+```
+
+## 長期維護
+
+部署後建議同時啟動 `maintenance` 與 `db-backup` 服務，避免舊資料、檔案 log、Docker log 或備份檔長期撐滿磁碟。
+
+保留策略：
+
+- Docker container logs：每個服務單檔 10MB，最多 5 個檔案。
+- Bot 檔案日誌 `logs/app.log`：每日輪轉，保留 30 天。
+- PostgreSQL 累積紀錄：`system_logs`、`notification_logs`、`pending_orders`、`trades` 保留 30 天。
+- PostgreSQL 備份：每天建立 gzip SQL 備份到 `./backups`，保留 30 天。
+
+手動 dry-run 檢查會清理多少資料：
+
+```bash
+docker compose run --rm bot python -m app.main --cleanup-retention --dry-run
+```
+
+手動執行清理：
+
+```bash
+docker compose run --rm bot python -m app.main --cleanup-retention
+```
+
+查看維護與備份服務：
+
+```bash
+docker compose ps
+docker compose logs maintenance
+docker compose logs db-backup
+ls -lh backups
 ```
 
 ## Telegram 指令
@@ -177,20 +219,28 @@ docker compose logs -f bot
 ## 下單流程
 
 1. 管理員或發單員使用 `/send_signal` 發送交易信號。
-2. Bot 將信號轉發到已啟用的頻道或群組，並附上下單按鈕。
-3. 使用者點擊下單後，Bot 會檢查 API 設定與固定風險金額 1R。
+2. Bot 將信號轉發到已啟用的頻道或群組，並附上「市價下單」與「掛單」按鈕。
+3. 使用者點擊任一下單方式後，Bot 會檢查 API 設定與固定風險金額 1R。
 4. Bot 取得 Bitget 當前市價，計算倉位名義價值與數量。
 5. Bot 將待確認訂單寫入 `pending_orders`，並發送確認/取消按鈕。
 6. 使用者確認後，Bot 使用 row lock 將 pending order 標為 `processing`，避免重複下單。
 7. Bitget 下單完成後，Bot 更新 `trades` 與 `pending_orders` 狀態。
 
+下單方式：
+
+- 市價下單：使用目前市價計算 1R，送出 market order，成功後 `trades.status` 記為 `filled`。
+- 掛單：Long 使用 entry 區間較高點，Short 使用 entry 區間較低點，送出 GTC limit order 並同時帶止損，成功後 `trades.status` 記為 `pending`。
+- 若掛單價格已可能立即成交，Bot 會切換到市價下單確認流程並提示原因。
+
 倉位計算概念：
 
 ```text
-止損距離百分比 = abs(目前價格 - 止損價) / 目前價格
+止損距離百分比 = abs(計算價格 - 止損價) / 計算價格
 倉位名義價值 = 固定風險金額 1R / 止損距離百分比
-交易數量 = 倉位名義價值 / 目前價格
+交易數量 = 倉位名義價值 / 計算價格
 ```
+
+市價下單的計算價格為目前市價；掛單的計算價格為掛單價。
 
 ## Database
 
@@ -200,7 +250,7 @@ Schema 由 Alembic 管理，不使用 `create_all()` 建表。
 
 - `users`：Telegram 使用者、加密 API 憑證、交易設定、發單員權限。
 - `trades`：交易紀錄、Bitget 訂單 ID、狀態與錯誤訊息。
-- `pending_orders`：待確認訂單、callback token、計算結果、狀態與過期時間。
+- `pending_orders`：待確認訂單、callback token、order mode、掛單價、entry 區間、計算結果、狀態與過期時間。
 - `notification_logs`：通知紀錄。
 - `trading_pairs`：交易對與限制資料。
 - `channel_groups`：受管理的 Telegram 頻道或群組。
@@ -231,7 +281,10 @@ docker compose build
 docker compose up -d postgres
 docker compose run --rm bot alembic upgrade head
 docker compose run --rm bot python -m app.main --check-db
+docker compose run --rm bot python -m app.main --cleanup-retention --dry-run
+docker compose run --rm bot python -m app.main --cleanup-retention
 docker compose up -d bot
+docker compose up -d maintenance db-backup
 ```
 
 接著在 Telegram 手動驗證：
@@ -240,5 +293,6 @@ docker compose up -d bot
 - `/status`
 - `/settings`
 - `/admin`
-- 發送測試信號並確認 `pending_orders` 有資料
+- 發送測試信號並確認信號上出現「市價下單」與「掛單」
+- 點擊兩種下單方式，確認 `pending_orders.order_mode` 與 `limit_price` 正確寫入
 - 重啟 Bot 後確認尚未過期的 pending order 仍可被確認

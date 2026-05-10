@@ -33,6 +33,9 @@ class Config:
     # Application
     DEBUG = os.getenv("DEBUG", "False").lower() == "true"
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+    RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "30"))
+    MAINTENANCE_INTERVAL_SECONDS = int(os.getenv("MAINTENANCE_INTERVAL_SECONDS", "86400"))
+    BACKUP_INTERVAL_SECONDS = int(os.getenv("BACKUP_INTERVAL_SECONDS", "86400"))
     
     # Trading Limits
     MAX_DAILY_TRADES = int(os.getenv("MAX_DAILY_TRADES", "10"))

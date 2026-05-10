@@ -1,6 +1,15 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-bot-image: &bot-image kaiyn-trading-bot-app
+
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-kaiyn_trading_bot}
       POSTGRES_USER: ${POSTGRES_USER:-kaiyn}
@@ -14,9 +23,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+    logging: *default-logging
 
   bot:
+    image: *bot-image
     build: .
+    restart: unless-stopped
     env_file:
       - path: .env
         required: false
@@ -28,6 +40,64 @@ services:
     volumes:
       - ./logs:/app/logs
     command: ["python", "-m", "app.main"]
+    logging: *default-logging
+
+  maintenance:
+    image: *bot-image
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://kaiyn:kaiyn@postgres:5432/kaiyn_trading_bot}
+      RETENTION_DAYS: ${RETENTION_DAYS:-30}
+      MAINTENANCE_INTERVAL_SECONDS: ${MAINTENANCE_INTERVAL_SECONDS:-86400}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          date
+          python -m app.main --cleanup-retention
+          sleep "$${MAINTENANCE_INTERVAL_SECONDS:-86400}"
+        done
+    logging: *default-logging
+
+  db-backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kaiyn_trading_bot}
+      POSTGRES_USER: ${POSTGRES_USER:-kaiyn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kaiyn}
+      RETENTION_DAYS: ${RETENTION_DAYS:-30}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backups:/backups
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /backups
+        while true; do
+          timestamp=$$(date +%Y%m%d_%H%M%S)
+          backup_name="kaiyn_trading_bot_$${timestamp}.sql"
+          echo "$$(date) Starting PostgreSQL backup: $${backup_name}.gz"
+          if PGPASSWORD="$${POSTGRES_PASSWORD}" pg_dump -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -f "/backups/$${backup_name}"; then
+            gzip -f "/backups/$${backup_name}"
+            find /backups -type f -name "kaiyn_trading_bot_*.sql.gz" -mtime +"$${RETENTION_DAYS:-30}" -delete
+            echo "$$(date) PostgreSQL backup completed: $${backup_name}.gz"
+          else
+            rm -f "/backups/$${backup_name}" "/backups/$${backup_name}.gz"
+            echo "$$(date) PostgreSQL backup failed"
+          fi
+          sleep "$${BACKUP_INTERVAL_SECONDS:-86400}"
+        done
+    logging: *default-logging
 
 volumes:
   postgres_data:
