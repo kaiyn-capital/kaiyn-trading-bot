@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramBot:
-    """Telegram 機器人主類"""
+    """Telegram 机器人主类"""
 
     def __init__(self):
         self.token = Config.TELEGRAM_BOT_TOKEN
@@ -72,7 +72,7 @@ class TelegramBot:
         self._setup_handlers()
 
     def _setup_handlers(self):
-        """設置處理器"""
+        """设置处理器"""
         # 基本命令
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("help", self.help_command))
@@ -155,14 +155,14 @@ class TelegramBot:
         asyncio.create_task(self.setup_commands())
 
     async def setup_commands(self):
-        """設置機器人命令菜單"""
+        """设置机器人命令菜单"""
         commands = [
-            BotCommand("start", "開始使用機器人"),
-            BotCommand("help", "查看幫助信息"),
-            BotCommand("setapi", "設置 Bitget API"),
-            BotCommand("status", "查看連接狀態"),
-            BotCommand("balance", "查看帳戶餘額"),
-            BotCommand("settings", "交易設置"),
+            BotCommand("start", "开始使用机器人"),
+            BotCommand("help", "查看帮助信息"),
+            BotCommand("setapi", "设置 Bitget API"),
+            BotCommand("status", "查看连接状态"),
+            BotCommand("balance", "查看账户余额"),
+            BotCommand("settings", "交易设置"),
         ]
 
         try:
@@ -172,7 +172,7 @@ class TelegramBot:
             logger.error(f"Failed to set bot commands: {e}")
 
     async def _get_or_create_user(self, update: Update) -> User:
-        """獲取或創建用戶"""
+        """获取或创建用户"""
         telegram_user = update.effective_user
         user = await self.user_repo.get_user_by_telegram_id(telegram_user.id)
 
@@ -188,7 +188,7 @@ class TelegramBot:
         return user
 
     def _escape_markdown(self, text: str) -> str:
-        """轉義 Markdown 特殊字符"""
+        """转义 Markdown 特殊字符"""
         if not text:
             return text
 
@@ -218,7 +218,7 @@ class TelegramBot:
         return text
 
     async def _is_trader_or_admin(self, telegram_id: int) -> bool:
-        """檢查是否為管理員或發單員"""
+        """检查是否为管理员或发单员"""
         if Config.is_admin(telegram_id):
             return True
 
@@ -229,7 +229,7 @@ class TelegramBot:
             return False
 
     def _get_sender_username(self, update: Update) -> str:
-        """獲取發送者的 username"""
+        """获取发送者的 username"""
         if update.effective_user and update.effective_user.username:
             return update.effective_user.username
         elif update.effective_user:
@@ -239,7 +239,7 @@ class TelegramBot:
     async def _log_user_action(
         self, user: User, action: str, details: Optional[Dict] = None
     ):
-        """記錄用戶操作"""
+        """记录用户操作"""
         try:
             await self.system_log_repo.log(
                 level="INFO",
@@ -261,33 +261,33 @@ class TelegramBot:
             )
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """開始命令處理器"""
+        """开始命令处理器"""
         user = await self._get_or_create_user(update)
         await self._log_user_action(user, "start_command")
 
         welcome_message = """
-🚀 **歡迎使用 Kaiyn Trading Bot！**
+🚀 **欢迎使用 Kaiyn Trading Bot！**
 
-這個機器人可以幫助您：
-• 針對 Bitget 專屬群的交易信號實現一鍵定損下單
+这个机器人可以帮助您：
+• 针对 Bitget 专属群的交易信号实现一键定损下单
 
-💡加入 Bitget 專屬群方法：
-1. 使用邀請碼 **"5nmb"** 註冊[Bitget交易所](https://partner.bitget.com/bg/JZQT5S)
-2. KYC 完成並入金後，私信群主或管理員處理
+💡加入 Bitget 专属群方法：
+1. 使用邀请码 **"5nmb"** 注册[Bitget交易所](https://partner.bitget.com/bg/JZQT5S)
+2. KYC 完成并入金后，私信群主或管理员处理
 
 📚 Resources:
 
-• 👁️‍🗨️ [Kaiyn Capital 公開討論群](https://t.me/kaiyncapital)
-• 🌏 [Kaiyn Capital 官方網站](https://kaiyn.org)
+• 👁️‍🗨️ [Kaiyn Capital 公开讨论群](https://t.me/kaiyncapital)
+• 🌏 [Kaiyn Capital 官方网站](https://kaiyn.org)
 
-輸入 `/help` 查看完整命令列表。
+输入 `/help` 查看完整命令列表。
         """
 
         keyboard = [
-            [InlineKeyboardButton("🔗 設置 API", callback_data="setup_api")],
-            [InlineKeyboardButton("📊 查看狀態", callback_data="check_status")],
-            [InlineKeyboardButton("💰 查看餘額", callback_data="check_balance")],
-            [InlineKeyboardButton("⚙️ 交易設置", callback_data="trading_settings")],
+            [InlineKeyboardButton("🔗 设置 API", callback_data="setup_api")],
+            [InlineKeyboardButton("📊 查看状态", callback_data="check_status")],
+            [InlineKeyboardButton("💰 查看余额", callback_data="check_balance")],
+            [InlineKeyboardButton("⚙️ 交易设置", callback_data="trading_settings")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -296,38 +296,38 @@ class TelegramBot:
         )
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """幫助命令處理器"""
+        """帮助命令处理器"""
         help_text = """
-📖 **命令說明**
+📖 **命令说明**
 
 **基本命令：**
-• `/start` - 開始使用機器人
-• `/help` - 查看此幫助信息
-• `/status` - 查看 API 連接狀態
+• `/start` - 开始使用机器人
+• `/help` - 查看此帮助信息
+• `/status` - 查看 API 连接状态
 
 **API 管理：**
-• `/setapi` - 設置 Bitget API 金鑰
-• 機器人會引導您依序輸入，輸入後會自動刪除訊息保護隱私
+• `/setapi` - 设置 Bitget API 密钥
+• 机器人会引导您依序输入，输入后会自动删除消息保护隐私
 
 **交易功能：**
-• `/settings` - 設置交易參數（1R 願意承受止損金額）
-• `/balance` - 查看帳戶餘額
-• 📊 **信號交易** - 當管理員發送交易信號時可一鍵下單
+• `/settings` - 设置交易参数（1R 愿意承受止损金额）
+• `/balance` - 查看账户余额
+• 📊 **信号交易** - 当管理员发送交易信号时可一键下单
 
-**管理員功能：**（僅管理員可用）
-• `/admin` - 管理員面板
+**管理员功能：**（仅管理员可用）
+• `/admin` - 管理员面板
 
 
-**安全須知：**
-🔒 所有 API 資訊都會加密存儲
-🔒 輸入的 API 金鑰會自動刪除保護隱私
-🔒 只給予交易權限，不要給予提幣權限
+**安全须知：**
+🔒 所有 API 信息都会加密存储
+🔒 输入的 API 密钥会自动删除保护隐私
+🔒 只给予交易权限，不要给予提币权限
         """
 
         await update.message.reply_text(help_text, parse_mode="Markdown")
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """狀態命令處理器"""
+        """状态命令处理器"""
         user = await self._get_or_create_user(update)
         await self._log_user_action(user, "status_command")
 
@@ -339,7 +339,7 @@ class TelegramBot:
             ]
         ):
             await update.message.reply_text(
-                "❌ API 未連接\n\n請先使用 `/setapi` 命令設置您的 Bitget API 金鑰。",
+                "❌ API 未连接\n\n请先使用 `/setapi` 命令设置您的 Bitget API 密钥。",
                 parse_mode="Markdown",
             )
             return
@@ -359,17 +359,17 @@ class TelegramBot:
                 # 獲取 Bitget UID
                 bitget_uid = await self.trade_manager.get_user_uid(credentials)
 
-                status_text = f"""Bitget UID: {bitget_uid}\n✅ **API 連接狀態：正常**"""
+                status_text = f"""Bitget UID: {bitget_uid}\n✅ **API 连接状态：正常**"""
 
                 keyboard = [
                     [
                         InlineKeyboardButton(
-                            "💰 查看餘額", callback_data="check_balance"
+                            "💰 查看余额", callback_data="check_balance"
                         )
                     ],
                     [
                         InlineKeyboardButton(
-                            "⚙️ 交易設置", callback_data="trading_settings"
+                            "⚙️ 交易设置", callback_data="trading_settings"
                         )
                     ],
                 ]
@@ -380,22 +380,22 @@ class TelegramBot:
                 )
             else:
                 await update.message.reply_text(
-                    f"❌ **API 連接失敗**\n\n錯誤信息: {message}\n\n請檢查您的 API 設置或重新配置。",
+                    f"❌ **API 连接失败**\n\n错误信息: {message}\n\n请检查您的 API 设置或重新配置。",
                     parse_mode="Markdown",
                 )
 
         except Exception as e:
             logger.error(f"Status check failed: {e}")
-            await update.message.reply_text("❌ 檢查狀態時發生錯誤，請稍後再試。")
+            await update.message.reply_text("❌ 检查状态时发生错误，请稍后再试。")
 
     async def balance_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """餘額命令處理器"""
+        """余额命令处理器"""
         user = await self._get_or_create_user(update)
         await self._log_user_action(user, "balance_command")
 
         if not user.is_api_connected:
             await update.message.reply_text(
-                "❌ 請先設置 API 連接。使用 `/setapi` 命令。"
+                "❌ 请先设置 API 连接。使用 `/setapi` 命令。"
             )
             return
 
@@ -419,7 +419,7 @@ class TelegramBot:
                 logger.info(f"Assets data: {assets}")
 
                 # 只顯示USDT資產（U本位合約）
-                balance_text = "💰 **U本位合約帳戶餘額**\n\n"
+                balance_text = "💰 **U本位合约账户余额**\n\n"
 
                 found_assets = False
 
@@ -452,8 +452,8 @@ class TelegramBot:
                             if total > 0:
                                 balance_text += f"**USDT:**\n"
                                 balance_text += f"  可用: {available:.4f}\n"
-                                balance_text += f"  凍結: {frozen:.4f}\n"
-                                balance_text += f"  總計: {total:.4f}\n\n"
+                                balance_text += f"  冻结: {frozen:.4f}\n"
+                                balance_text += f"  总计: {total:.4f}\n\n"
                                 found_assets = True
                                 break
                 elif isinstance(assets, dict):
@@ -476,22 +476,22 @@ class TelegramBot:
                         if total > 0:
                             balance_text += f"**USDT:**\n"
                             balance_text += f"  可用: {available:.4f}\n"
-                            balance_text += f"  凍結: {frozen:.4f}\n"
-                            balance_text += f"  總計: {total:.4f}\n\n"
+                            balance_text += f"  冻结: {frozen:.4f}\n"
+                            balance_text += f"  总计: {total:.4f}\n\n"
                             found_assets = True
 
                 if not found_assets:
-                    balance_text += "暫無USDT資產或餘額為零\n\n"
+                    balance_text += "暂无USDT资产或余额为零\n\n"
                     balance_text += (
-                        f"📊 **原始API數據：**\n```\n{str(assets)[:500]}...\n```\n\n"
+                        f"📊 **原始API数据：**\n```\n{str(assets)[:500]}...\n```\n\n"
                     )
 
-                balance_text += "ℹ️ **說明：** 僅顯示U本位合約帳戶的USDT餘額"
+                balance_text += "ℹ️ **说明：** 仅显示U本位合约账户的USDT余额"
 
                 keyboard = [
                     [
                         InlineKeyboardButton(
-                            "🔄 刷新餘額", callback_data="refresh_balance"
+                            "🔄 刷新余额", callback_data="refresh_balance"
                         )
                     ],
                     [InlineKeyboardButton("🏠 返回", callback_data="return_start")],
@@ -502,29 +502,29 @@ class TelegramBot:
                     balance_text, reply_markup=reply_markup, parse_mode="Markdown"
                 )
             else:
-                await update.message.reply_text("❌ 獲取餘額失敗，請檢查 API 設置。")
+                await update.message.reply_text("❌ 获取余额失败，请检查 API 设置。")
 
         except BitgetAPIError as e:
             logger.error(f"Bitget API error: {e}")
-            await update.message.reply_text(f"❌ API 錯誤: {e.message}")
+            await update.message.reply_text(f"❌ API 错误: {e.message}")
         except Exception as e:
             logger.error(f"Balance check failed: {e}")
-            await update.message.reply_text("❌ 查詢餘額時發生錯誤，請稍後再試。")
+            await update.message.reply_text("❌ 查询余额时发生错误，请稍后再试。")
 
     async def add_trader_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
-        """管理員添加發單員"""
+        """管理员添加发单员"""
         user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您沒有管理員權限")
+            await update.message.reply_text("❌ 您没有管理员权限")
             return
 
         # 獲取 Telegram ID
         if not context.args:
             await update.message.reply_text(
-                "👥 **添加發單員**\n\n"
+                "👥 **添加发单员**\n\n"
                 "使用方法：\n"
                 "`/add_trader Telegram_ID`\n\n"
                 "例如：\n"
@@ -541,23 +541,23 @@ class TelegramBot:
 
             if success:
                 await update.message.reply_text(
-                    f"✅ **發單員添加成功**\n\n"
+                    f"✅ **发单员添加成功**\n\n"
                     f"Telegram ID：{telegram_id}\n"
-                    f"現在該用戶可以使用 `/send_signal` 命令發送交易信號。",
+                    f"现在该用户可以使用 `/send_signal` 命令发送交易信号。",
                     parse_mode="Markdown",
                 )
             else:
-                await update.message.reply_text("❌ 設置發單員失敗，請稍後重試")
+                await update.message.reply_text("❌ 设置发单员失败，请稍后重试")
 
         except ValueError:
-            await update.message.reply_text("❌ Telegram ID 必須是數字")
+            await update.message.reply_text("❌ Telegram ID 必须是数字")
         except Exception as e:
             logger.error(f"Add trader error: {e}")
-            await update.message.reply_text("❌ 添加發單員失敗")
+            await update.message.reply_text("❌ 添加发单员失败")
 
     # API 設置相關方法
     async def set_api_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """開始 API 設置"""
+        """开始 API 设置"""
         user = await self._get_or_create_user(update)
         await self._log_user_action(user, "set_api_start")
 
@@ -566,7 +566,7 @@ class TelegramBot:
             keyboard = [
                 [
                     InlineKeyboardButton(
-                        "✅ 確認修改", callback_data="confirm_modify_api"
+                        "✅ 确认修改", callback_data="confirm_modify_api"
                     )
                 ],
                 [InlineKeyboardButton("❌ 取消", callback_data="cancel_modify_api")],
@@ -574,9 +574,9 @@ class TelegramBot:
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await update.message.reply_text(
-                "🔐 **API 設置**\n\n"
-                "您已經設置完成 Bitget API 連接。\n\n"
-                "是否要修改現有的 API 設置？",
+                "🔐 **API 设置**\n\n"
+                "您已经设置完成 Bitget API 连接。\n\n"
+                "是否要修改现有的 API 设置？",
                 reply_markup=reply_markup,
                 parse_mode="Markdown",
             )
@@ -589,18 +589,18 @@ class TelegramBot:
         self.user_sessions[user.telegram_id] = {"step": "api_key"}
 
         await update.message.reply_text(
-            "🔐 **設置 Bitget API**\n\n"
-            "請按順序提供您的 API 資訊。\n\n"
+            "🔐 **设置 Bitget API**\n\n"
+            "请按顺序提供您的 API 信息。\n\n"
             "**第 1 步：API Key**\n"
-            "請發送您的 Bitget API Key\n\n"
-            "💡 提示：您可以在 Bitget 官網的 API 管理頁面獲取",
+            "请发送您的 Bitget API Key\n\n"
+            "💡 提示：您可以在 Bitget 官网的 API 管理页面获取",
             parse_mode="Markdown",
         )
 
         return WAITING_API_KEY
 
     async def set_api_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """設置 API Key"""
+        """设置 API Key"""
         user = await self._get_or_create_user(update)
         api_key = update.message.text.strip()
 
@@ -613,7 +613,7 @@ class TelegramBot:
         if not api_key or len(api_key) < 10:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="❌ API Key 格式不正確，請重新輸入：",
+                text="❌ API Key 格式不正确，请重新输入：",
             )
             return WAITING_API_KEY
 
@@ -623,13 +623,13 @@ class TelegramBot:
             chat_id=update.effective_chat.id,
             text="✅ API Key 已保存\n\n"
             "**第 2 步：Secret Key**\n"
-            "請發送您的 Secret Key",
+            "请发送您的 Secret Key",
         )
 
         return WAITING_SECRET_KEY
 
     async def set_secret_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """設置 Secret Key"""
+        """设置 Secret Key"""
         user = await self._get_or_create_user(update)
         secret_key = update.message.text.strip()
 
@@ -642,7 +642,7 @@ class TelegramBot:
         if not secret_key or len(secret_key) < 10:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="❌ Secret Key 格式不正確，請重新輸入：",
+                text="❌ Secret Key 格式不正确，请重新输入：",
             )
             return WAITING_SECRET_KEY
 
@@ -652,13 +652,13 @@ class TelegramBot:
             chat_id=update.effective_chat.id,
             text="✅ Secret Key 已保存\n\n"
             "**第 3 步：Passphrase**\n"
-            "請發送您的 Passphrase",
+            "请发送您的 Passphrase",
         )
 
         return WAITING_PASSPHRASE
 
     async def set_passphrase(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """設置 Passphrase 並完成 API 設置"""
+        """设置 Passphrase 并完成 API 设置"""
         user = await self._get_or_create_user(update)
         passphrase = update.message.text.strip()
 
@@ -671,7 +671,7 @@ class TelegramBot:
         if not passphrase:
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="❌ Passphrase 不能為空，請重新輸入：",
+                text="❌ Passphrase 不能为空，请重新输入：",
             )
             return WAITING_PASSPHRASE
 
@@ -682,14 +682,14 @@ class TelegramBot:
         if not all([api_key, secret_key]):
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="❌ 設置過程中出現錯誤，請重新開始。",
+                text="❌ 设置过程中出现错误，请重新开始。",
             )
             return ConversationHandler.END
 
         try:
             # 測試 API 連接
             test_msg = await context.bot.send_message(
-                chat_id=update.effective_chat.id, text="🔄 正在測試 API 連接..."
+                chat_id=update.effective_chat.id, text="🔄 正在测试 API 连接..."
             )
 
             credentials = self.encryption_manager.encrypt_api_credentials(
@@ -708,17 +708,17 @@ class TelegramBot:
                 await self._log_user_action(user, "api_setup_success")
 
                 await test_msg.edit_text(
-                    "✅ **API 設置成功！**\n\n"
-                    "您的 API 金鑰已加密保存，現在可以開始使用交易功能。\n\n"
-                    "使用 `/status` 檢查連接狀態\n"
-                    "使用 `/settings` 設置交易參數（1R願意承受止損金額）",
+                    "✅ **API 设置成功！**\n\n"
+                    "您的 API 密钥已加密保存，现在可以开始使用交易功能。\n\n"
+                    "使用 `/status` 检查连接状态\n"
+                    "使用 `/settings` 设置交易参数（1R愿意承受止损金额）",
                     parse_mode="Markdown",
                 )
             else:
                 await test_msg.edit_text(
-                    f"❌ **API 連接測試失敗**\n\n"
-                    f"錯誤信息: {message}\n\n"
-                    "請檢查您的 API 憑證是否正確，然後重新設置。",
+                    f"❌ **API 连接测试失败**\n\n"
+                    f"错误信息: {message}\n\n"
+                    "请检查您的 API 凭证是否正确，然后重新设置。",
                     parse_mode="Markdown",
                 )
 
@@ -726,7 +726,7 @@ class TelegramBot:
             logger.error(f"API setup failed: {e}")
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="❌ 設置過程中發生錯誤，請稍後重試。",
+                text="❌ 设置过程中发生错误，请稍后重试。",
             )
 
         finally:
@@ -739,28 +739,28 @@ class TelegramBot:
     async def settings_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
-        """交易設置命令處理器"""
+        """交易设置命令处理器"""
         user = await self._get_or_create_user(update)
         await self._log_user_action(user, "settings_command")
 
         # 獲取用戶的 1R 設置
         risk_amount = getattr(user, "fixed_risk_amount", None)
-        risk_text = f"{risk_amount} USDT" if risk_amount else "未設置"
+        risk_text = f"{risk_amount} USDT" if risk_amount else "未设置"
 
         settings_text = f"""
-⚙️ **交易設置**
+⚙️ **交易设置**
 
-**當前設置：**
-• 固定風險金額(1R)：{risk_text}
+**当前设置：**
+• 固定风险金额(1R)：{risk_text}
 
-**風險管理：**
-固定風險金額(1R)用於計算每筆交易的開倉金額
+**风险管理：**
+固定风险金额(1R)用于计算每笔交易的开仓金额
         """
 
         keyboard = [
             [
                 InlineKeyboardButton(
-                    "💰 設置固定風險金額(1R)", callback_data="set_risk_amount"
+                    "💰 设置固定风险金额(1R)", callback_data="set_risk_amount"
                 )
             ]
         ]
@@ -771,7 +771,7 @@ class TelegramBot:
         )
 
     async def set_risk_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """開始設置 1R 風險金額"""
+        """开始设置 1R 风险金额"""
         query = update.callback_query
         await query.answer()
 
@@ -784,8 +784,8 @@ class TelegramBot:
             self.user_sessions[user.telegram_id] = {"step": "risk_amount"}
 
             await query.edit_message_text(
-                "💰 **設置每單固定止損金額，以進行定R開倉。**\n\n"
-                "請輸入定R金額u（數字）：",
+                "💰 **设置每单固定止损金额，以进行定R开仓。**\n\n"
+                "请输入定R金额u（数字）：",
                 parse_mode="Markdown",
             )
         else:
@@ -793,7 +793,7 @@ class TelegramBot:
             keyboard = [
                 [
                     InlineKeyboardButton(
-                        "✅ 確認更改", callback_data="confirm_change_risk"
+                        "✅ 确认更改", callback_data="confirm_change_risk"
                     )
                 ],
                 [InlineKeyboardButton("❌ 取消", callback_data="cancel_change_risk")],
@@ -801,15 +801,15 @@ class TelegramBot:
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await query.edit_message_text(
-                f"💰 **設置每單固定止損金額，以進行定R開倉。**\n\n"
-                f"您目前已設置定損為 {current_risk} USDT，要更改嗎？",
+                f"💰 **设置每单固定止损金额，以进行定R开仓。**\n\n"
+                f"您目前已设置定损为 {current_risk} USDT，要更改吗？",
                 reply_markup=reply_markup,
                 parse_mode="Markdown",
             )
             return ConversationHandler.END
 
     async def set_risk_amount(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """設置風險金額"""
+        """设置风险金额"""
         user = await self._get_or_create_user(update)
         amount_text = update.message.text.strip()
 
@@ -817,17 +817,17 @@ class TelegramBot:
             # 驗證輸入格式
             amount = float(amount_text)
             if amount <= 0:
-                raise ValueError("金額必須大於 0")
+                raise ValueError("金额必须大于 0")
 
             # 更新用戶設置
             success = await self.user_repo.update_user_risk_amount(user.id, amount)
 
             if success:
                 await update.message.reply_text(
-                    f"✅ **已設置定R止損為 {amount} USDT**", parse_mode="Markdown"
+                    f"✅ **已设置定R止损为 {amount} USDT**", parse_mode="Markdown"
                 )
             else:
-                await update.message.reply_text("❌ 設置失敗，請重試")
+                await update.message.reply_text("❌ 设置失败，请重试")
 
             # 清除 session
             if user.telegram_id in self.user_sessions:
@@ -837,7 +837,7 @@ class TelegramBot:
 
         except ValueError:
             await update.message.reply_text(
-                "❌ 輸入格式不正確，請輸入有效數字：\n\n" "例如：50 或 100.5"
+                "❌ 输入格式不正确，请输入有效数字：\n\n" "例如：50 或 100.5"
             )
             # 保持 session 狀態，繼續等待輸入
             return
@@ -845,7 +845,7 @@ class TelegramBot:
     async def handle_global_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
-        """處理全局消息（主要用於 API 設置）"""
+        """处理全局消息（主要用于 API 设置）"""
         user = await self._get_or_create_user(update)
 
         # 檢查是否在 API 設置流程中
@@ -874,11 +874,11 @@ class TelegramBot:
     async def delete_channel_by_number(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
-        """根據編號刪除頻道"""
+        """根据编号删除频道"""
         user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您沒有管理員權限")
+            await update.message.reply_text("❌ 您没有管理员权限")
             return
 
         try:
@@ -893,7 +893,7 @@ class TelegramBot:
                 or channel_number < 1
                 or channel_number > len(channels_data)
             ):
-                await update.message.reply_text("❌ 無效的頻道編號")
+                await update.message.reply_text("❌ 无效的频道编号")
                 return
 
             # 獲取要刪除的頻道
@@ -904,38 +904,38 @@ class TelegramBot:
             )
             if deleted:
                 await update.message.reply_text(
-                    f"✅ **頻道已刪除**\n\n"
-                    f"頻道名稱：{channel_to_delete['title']}\n"
-                    f"已從管理列表中移除。",
+                    f"✅ **频道已删除**\n\n"
+                    f"频道名称：{channel_to_delete['title']}\n"
+                    f"已从管理列表中移除。",
                     parse_mode="Markdown",
                 )
             else:
-                await update.message.reply_text("❌ 找不到指定的頻道")
+                await update.message.reply_text("❌ 找不到指定的频道")
 
             # 清除 session
             if user.telegram_id in self.user_sessions:
                 del self.user_sessions[user.telegram_id]
 
         except ValueError:
-            await update.message.reply_text("❌ 請輸入有效的數字")
+            await update.message.reply_text("❌ 请输入有效的数字")
         except Exception as e:
             logger.error(f"Delete channel error: {e}")
-            await update.message.reply_text("❌ 刪除頻道失敗")
+            await update.message.reply_text("❌ 删除频道失败")
 
     async def admin_users_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
-        """管理員查看用戶列表"""
+        """管理员查看用户列表"""
         user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您沒有管理員權限")
+            await update.message.reply_text("❌ 您没有管理员权限")
             return
 
         try:
             users_data = await self.user_repo.get_active_users()
 
-            users_text = "👥 **用戶列表**\n\n"
+            users_text = "👥 **用户列表**\n\n"
             for u in users_data[:20]:  # 限制顯示數量
                 api_status = "✅" if u.get("is_api_connected") else "❌"
                 first_name = u.get("first_name") or "Unknown"
@@ -944,10 +944,10 @@ class TelegramBot:
                 created_at = u.get("created_at")
 
                 users_text += f"{api_status} {first_name} (@{username})\n"
-                users_text += f"   ID: {telegram_id} | 註冊: {created_at.strftime('%m-%d') if created_at else 'N/A'}\n\n"
+                users_text += f"   ID: {telegram_id} | 注册: {created_at.strftime('%m-%d') if created_at else 'N/A'}\n\n"
 
             if len(users_data) > 20:
-                users_text += f"... 還有 {len(users_data) - 20} 位用戶"
+                users_text += f"... 还有 {len(users_data) - 20} 位用户"
 
             # 使用 HTML 模式而非 Markdown 以避免特殊字符問題
             import re
@@ -957,25 +957,25 @@ class TelegramBot:
 
         except Exception as e:
             logger.error(f"Admin users command error: {e}")
-            await update.message.reply_text("❌ 獲取用戶列表時發生錯誤")
+            await update.message.reply_text("❌ 获取用户列表时发生错误")
 
     async def admin_broadcast_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
-        """管理員廣播消息"""
+        """管理员广播消息"""
         user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您沒有管理員權限")
+            await update.message.reply_text("❌ 您没有管理员权限")
             return
 
         # 獲取廣播消息
         message_text = " ".join(context.args)
         if not message_text:
             await update.message.reply_text(
-                "📢 **廣播消息**\n\n"
-                "使用方法：`/admin_broadcast 您的消息內容`\n\n"
-                "例如：`/admin_broadcast 系統將於今晚進行維護`",
+                "📢 **广播消息**\n\n"
+                "使用方法：`/admin_broadcast 您的消息内容`\n\n"
+                "例如：`/admin_broadcast 系统将于今晚进行维护`",
                 parse_mode="Markdown",
             )
             return
@@ -985,7 +985,7 @@ class TelegramBot:
             sent_to_channels = 0
             failed_channels = 0
             status_msg = await update.message.reply_text(
-                f"📤 開始廣播給 {len(channels)} 個頻道/群組..."
+                f"📤 开始广播给 {len(channels)} 个频道/群组..."
             )
 
             # 獲取發送者的 username
@@ -995,7 +995,7 @@ class TelegramBot:
                 try:
                     await context.bot.send_message(
                         chat_id=channel["chat_id"],
-                        text=f"📢 **管理員廣播** by @{sender_username}\n\n{message_text}",
+                        text=f"📢 **管理员广播** by @{sender_username}\n\n{message_text}",
                         parse_mode="Markdown",
                     )
                     sent_to_channels += 1
@@ -1006,24 +1006,24 @@ class TelegramBot:
                     failed_channels += 1
 
             await status_msg.edit_text(
-                f"✅ **廣播完成**\n\n"
-                f"成功發送：{sent_to_channels} 個頻道/群組\n"
-                f"發送失敗：{failed_channels} 個頻道/群組",
+                f"✅ **广播完成**\n\n"
+                f"成功发送：{sent_to_channels} 个频道/群组\n"
+                f"发送失败：{failed_channels} 个频道/群组",
                 parse_mode="Markdown",
             )
 
         except Exception as e:
             logger.error(f"Broadcast error: {e}")
-            await update.message.reply_text("❌ 廣播時發生錯誤")
+            await update.message.reply_text("❌ 广播时发生错误")
 
     async def admin_channels_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
-        """管理員查看頻道/群組列表"""
+        """管理员查看频道/群组列表"""
         user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您沒有管理員權限")
+            await update.message.reply_text("❌ 您没有管理员权限")
             return
 
         try:
@@ -1031,14 +1031,14 @@ class TelegramBot:
 
             if not channels:
                 await update.message.reply_text(
-                    "📺 **頻道/群組管理**\n\n"
-                    "目前沒有管理的頻道或群組。\n\n"
-                    "使用 `/add_channel` 添加頻道或群組。",
+                    "📺 **频道/群组管理**\n\n"
+                    "目前没有管理的频道或群组。\n\n"
+                    "使用 `/add_channel` 添加频道或群组。",
                     parse_mode="Markdown",
                 )
                 return
 
-            channels_text = "📺 **已管理的頻道/群組**\n\n"
+            channels_text = "📺 **已管理的频道/群组**\n\n"
             for channel in channels:
                 status = "✅" if channel["auto_forward_signals"] else "❌"
 
@@ -1047,21 +1047,21 @@ class TelegramBot:
                 username = channel["username"]
 
                 channels_text += f"{status} **{title}**\n"
-                channels_text += f"   類型: {chat_type}\n"
+                channels_text += f"   类型: {chat_type}\n"
                 channels_text += f"   ID: `{channel['chat_id']}`\n"
                 if username:
-                    channels_text += f"   用戶名: @{username}\n"
-                channels_text += f"   自動轉發: {'開啟' if channel['auto_forward_signals'] else '關閉'}\n\n"
+                    channels_text += f"   用户名: @{username}\n"
+                channels_text += f"   自动转发: {'开启' if channel['auto_forward_signals'] else '关闭'}\n\n"
 
             keyboard = [
-                [InlineKeyboardButton("➕ 添加頻道", callback_data="add_new_channel")],
-                [InlineKeyboardButton("⚙️ 管理設置", callback_data="manage_channels")],
+                [InlineKeyboardButton("➕ 添加频道", callback_data="add_new_channel")],
+                [InlineKeyboardButton("⚙️ 管理设置", callback_data="manage_channels")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             # 使用 HTML 模式避免 Markdown 解析錯誤
             channels_text_html = channels_text.replace(
-                "**已管理的頻道/群組**", "<b>已管理的頻道/群組</b>"
+                "**已管理的频道/群组**", "<b>已管理的频道/群组</b>"
             )
             # 處理其他 ** 標記
             import re
@@ -1082,35 +1082,35 @@ class TelegramBot:
             import traceback
 
             traceback.print_exc()
-            await update.message.reply_text(f"❌ 獲取頻道列表時發生錯誤: {str(e)}")
+            await update.message.reply_text(f"❌ 获取频道列表时发生错误: {str(e)}")
 
     async def add_channel_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
-        """管理員添加頻道/群組"""
+        """管理员添加频道/群组"""
         user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您沒有管理員權限")
+            await update.message.reply_text("❌ 您没有管理员权限")
             return
 
         args = context.args
         if not args:
             await update.message.reply_text(
-                "📺 **添加頻道/群組**\n\n"
+                "📺 **添加频道/群组**\n\n"
                 "使用方法：\n"
                 "`/add_channel @username 描述`\n"
-                "`/add_channel -1001234567890 私人群組`\n\n"
+                "`/add_channel -1001234567890 私人群组`\n\n"
                 "**注意：**\n"
-                "• 機器人必須是頻道/群組的管理員\n"
-                "• 對於私人群組，請使用群組的數字 ID\n"
-                "• 對於公開頻道，可使用 @username",
+                "• 机器人必须是频道/群组的管理员\n"
+                "• 对于私人群组，请使用群组的数字 ID\n"
+                "• 对于公开频道，可使用 @username",
                 parse_mode="Markdown",
             )
             return
 
         chat_identifier = args[0]
-        description = " ".join(args[1:]) if len(args) > 1 else "管理員添加的頻道"
+        description = " ".join(args[1:]) if len(args) > 1 else "管理员添加的频道"
 
         try:
             # 測試是否可以訪問該頻道/群組
@@ -1122,15 +1122,15 @@ class TelegramBot:
             )
             if bot_member.status not in ["administrator", "creator"]:
                 await update.message.reply_text(
-                    "❌ 機器人在該頻道/群組中不是管理員\n\n"
-                    "請確保機器人有管理員權限後再試。"
+                    "❌ 机器人在该频道/群组中不是管理员\n\n"
+                    "请确保机器人有管理员权限后再试。"
                 )
                 return
 
             existing = await self.channel_repo.get_channel_by_chat_id(str(chat_info.id))
             if existing:
                 await update.message.reply_text(
-                    f"⚠️ 頻道/群組 **{chat_info.title}** 已經在管理列表中"
+                    f"⚠️ 频道/群组 **{chat_info.title}** 已经在管理列表中"
                 )
                 return
 
@@ -1144,43 +1144,43 @@ class TelegramBot:
             )
 
             await update.message.reply_text(
-                f"✅ **頻道/群組添加成功**\n\n"
-                f"**名稱：** {chat_info.title}\n"
-                f"**類型：** {chat_info.type.value}\n"
+                f"✅ **频道/群组添加成功**\n\n"
+                f"**名称：** {chat_info.title}\n"
+                f"**类型：** {chat_info.type.value}\n"
                 f"**ID：** `{chat_info.id}`\n"
                 f"**描述：** {description}\n\n"
-                "現在可以向此頻道發送交易信號了！",
+                "现在可以向此频道发送交易信号了！",
                 parse_mode="Markdown",
             )
 
         except Exception as e:
             logger.error(f"Add channel error: {e}")
             await update.message.reply_text(
-                f"❌ 添加頻道失敗\n\n"
+                f"❌ 添加频道失败\n\n"
                 f"可能的原因：\n"
-                f"• 頻道/群組不存在\n"
-                f"• 機器人沒有訪問權限\n"
-                f"• ID 格式錯誤\n\n"
-                f"錯誤詳情：{str(e)}"
+                f"• 频道/群组不存在\n"
+                f"• 机器人没有访问权限\n"
+                f"• ID 格式错误\n\n"
+                f"错误详情：{str(e)}"
             )
 
     async def send_to_channel_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
-        """管理員向指定頻道發送消息"""
+        """管理员向指定频道发送消息"""
         user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您沒有管理員權限")
+            await update.message.reply_text("❌ 您没有管理员权限")
             return
 
         args = context.args
         if len(args) < 2:
             await update.message.reply_text(
-                "📤 **發送到頻道**\n\n"
+                "📤 **发送到频道**\n\n"
                 "使用方法：\n"
-                "`/send_to_channel @channel_username 消息內容`\n"
-                "`/send_to_channel -1001234567890 消息內容`\n\n"
+                "`/send_to_channel @channel_username 消息内容`\n"
+                "`/send_to_channel -1001234567890 消息内容`\n\n"
                 "例如：\n"
                 "`/send_to_channel @my_signals 今日重要公告`",
                 parse_mode="Markdown",
@@ -1197,34 +1197,34 @@ class TelegramBot:
             )
 
             await update.message.reply_text(
-                f"✅ **消息已發送**\n\n"
-                f"目標頻道：{chat_identifier}\n"
+                f"✅ **消息已发送**\n\n"
+                f"目标频道：{chat_identifier}\n"
                 f"消息 ID：{sent_message.message_id}",
                 parse_mode="Markdown",
             )
 
         except Exception as e:
             logger.error(f"Send to channel error: {e}")
-            await update.message.reply_text(f"❌ 發送失敗\n\n" f"錯誤：{str(e)}")
+            await update.message.reply_text(f"❌ 发送失败\n\n" f"错误：{str(e)}")
 
     async def send_signal_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
-        """管理員或發單員發送交易信號 - JSON 格式"""
+        """管理员或发单员发送交易信号 - JSON 格式"""
         user = await self._get_or_create_user(update)
 
         # 檢查是否為管理員或發單員
         if not await self._is_trader_or_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您沒有發送交易信號的權限")
+            await update.message.reply_text("❌ 您没有发送交易信号的权限")
             return
 
         # 解析信號參數
         args = context.args
         if len(args) < 6:
             await update.message.reply_text(
-                "📊 **發送交易信號 - 格式**\n\n"
+                "📊 **发送交易信号 - 格式**\n\n"
                 "使用方法：\n"
-                "`/send_signal 交易對 方向 低進場價 高進場價 止損價 止盈價1 [止盈價2] [止盈價3] [止盈價4]`\n\n"
+                "`/send_signal 交易对 方向 低进场价 高进场价 止损价 止盈价1 [止盈价2] [止盈价3] [止盈价4]`\n\n"
                 "例如：\n"
                 "`/send_signal BTCUSDT long 115000 115500 114200 117500 110500 123500 130000`\n"
                 "`/send_signal ETHUSDT short 3200 3250 3300 3100 3000 2900`",
@@ -1248,7 +1248,7 @@ class TelegramBot:
                     break
 
             if direction not in ["long", "short"]:
-                await update.message.reply_text("❌ 交易方向必須是 long 或 short")
+                await update.message.reply_text("❌ 交易方向必须是 long 或 short")
                 return
 
             # 創建信號 JSON
@@ -1267,7 +1267,7 @@ class TelegramBot:
             # 獲取發送者的 username
             sender_username = self._get_sender_username(update)
 
-            signal_text = f"🚨 **交易信號** by @{sender_username}\n\n"
+            signal_text = f"🚨 **交易信号** by @{sender_username}\n\n"
             signal_text += f"**Symbol：** {symbol}\n"
             signal_text += f"**Direction：** {direction_text}\n"
             signal_text += f"**Entry：** {int(entry_upper)}-{int(entry_lower)}\n"
@@ -1279,11 +1279,11 @@ class TelegramBot:
             keyboard = [
                 [
                     InlineKeyboardButton(
-                        "💰 市價下單",
+                        "💰 市价下单",
                         callback_data=f"place_order_market_{symbol}_{direction}_{entry_lower:g}_{entry_upper:g}_{stop_loss:g}",
                     ),
                     InlineKeyboardButton(
-                        "📌 掛單",
+                        "📌 挂单",
                         callback_data=f"place_order_limit_{symbol}_{direction}_{entry_lower:g}_{entry_upper:g}_{stop_loss:g}",
                     )
                 ]
@@ -1339,24 +1339,24 @@ class TelegramBot:
                 logger.error(f"Error getting channels: {e}")
 
             # 發送確認消息
-            confirm_text = f"✅ **交易信號已發送**\n\n"
+            confirm_text = f"✅ **交易信号已发送**\n\n"
             # confirm_text += f"👥 發送給用戶：{sent_to_users} 位\n"
-            confirm_text += f"📺 發送到頻道：{sent_to_channels} 個\n\n"
-            confirm_text += f"**信號詳情：**\n{signal_text}"
+            confirm_text += f"📺 发送到频道：{sent_to_channels} 个\n\n"
+            confirm_text += f"**信号详情：**\n{signal_text}"
 
             await update.message.reply_text(confirm_text, parse_mode="Markdown")
 
         except ValueError:
-            await update.message.reply_text("❌ 價格格式錯誤，請輸入有效數字")
+            await update.message.reply_text("❌ 价格格式错误，请输入有效数字")
         except Exception as e:
             logger.error(f"Send signal error: {e}")
             await update.message.reply_text(
-                "❌ 發送信號時發生錯誤", parse_mode="Markdown"
+                "❌ 发送信号时发生错误", parse_mode="Markdown"
             )
 
     # 按鈕回調處理器
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """處理所有按鈕回調"""
+        """处理所有按钮回调"""
         query = update.callback_query
         await query.answer()
 
@@ -1383,12 +1383,12 @@ class TelegramBot:
                 await self._handle_confirm_modify_api(query, user)
             elif data == "cancel_modify_api":
                 await query.answer("已取消")
-                await query.edit_message_text("✅ 已取消修改 API 設置")
+                await query.edit_message_text("✅ 已取消修改 API 设置")
             elif data == "confirm_change_risk":
                 await self._handle_confirm_change_risk(query, user)
             elif data == "cancel_change_risk":
                 await query.answer("已取消")
-                await query.edit_message_text("✅ 已取消更改風險設置")
+                await query.edit_message_text("✅ 已取消更改风险设置")
             elif data == "return_start":
                 await self._handle_return_start_callback(query, user)
             elif data.startswith("confirm_order_"):
@@ -1406,15 +1406,15 @@ class TelegramBot:
             elif data == "cancel_trade":
                 await self._handle_cancel_trade_callback(query, user)
             elif data == "cancel_order":
-                await query.answer("已取消下單")
-                await self._send_private_message(query, user, "✅ 已取消下單")
+                await query.answer("已取消下单")
+                await self._send_private_message(query, user, "✅ 已取消下单")
             elif data == "add_new_channel":
                 await query.edit_message_text(
-                    "📺 **添加頻道/群組**\n\n"
-                    "請使用 `/add_channel` 命令添加新的頻道或群組。\n\n"
+                    "📺 **添加频道/群组**\n\n"
+                    "请使用 `/add_channel` 命令添加新的频道或群组。\n\n"
                     "使用方法：\n"
                     "`/add_channel @username 描述`\n"
-                    "`/add_channel -1001234567890 私人群組`",
+                    "`/add_channel -1001234567890 私人群组`",
                     parse_mode="Markdown",
                 )
             elif data == "manage_channels":
@@ -1424,9 +1424,9 @@ class TelegramBot:
 
                     if not channels:
                         await query.edit_message_text(
-                            "📺 **管理頻道**\n\n"
-                            "目前沒有任何頻道。\n\n"
-                            "使用 `/add_channel` 添加頻道。",
+                            "📺 **管理频道**\n\n"
+                            "目前没有任何频道。\n\n"
+                            "使用 `/add_channel` 添加频道。",
                             parse_mode="Markdown",
                         )
                         return
@@ -1442,7 +1442,7 @@ class TelegramBot:
                     ]
 
                     # 顯示頻道列表 - 使用HTML模式避免Markdown解析問題
-                    manage_text = "📺 <b>管理頻道</b>\n\n"
+                    manage_text = "📺 <b>管理频道</b>\n\n"
                     for ch in channels_data:
                         # 轉義HTML特殊字符
                         title_escaped = (
@@ -1454,12 +1454,12 @@ class TelegramBot:
                         username_text = f"(@{ch['username']})" if ch["username"] else ""
                         manage_text += f"{ch['id']}. {title_escaped} {username_text}\n"
 
-                    manage_text += "\n請選擇操作："
+                    manage_text += "\n请选择操作："
 
                     keyboard = [
                         [
                             InlineKeyboardButton(
-                                "🗑️ 刪除頻道", callback_data="delete_channel_start"
+                                "🗑️ 删除频道", callback_data="delete_channel_start"
                             )
                         ],
                         [
@@ -1482,13 +1482,13 @@ class TelegramBot:
                 except Exception as e:
                     logger.error(f"Manage channels error: {e}")
                     await query.edit_message_text(
-                        "❌ 獲取頻道列表失敗\n\n"
-                        f"錯誤詳情: {str(e)}\n\n"
-                        "請檢查資料庫連接狀態。"
+                        "❌ 获取频道列表失败\n\n"
+                        f"错误详情: {str(e)}\n\n"
+                        "请检查数据库连接状态。"
                     )
             elif data == "delete_channel_start":
                 await query.edit_message_text(
-                    "🗑️ **刪除頻道**\n\n" "請輸入要刪除的頻道編號：",
+                    "🗑️ **删除频道**\n\n" "请输入要删除的频道编号：",
                     parse_mode="Markdown",
                 )
                 # 設置 session 狀態
@@ -1503,14 +1503,14 @@ class TelegramBot:
 
                     if not channels:
                         await query.edit_message_text(
-                            "📺 **頻道/群組管理**\n\n"
-                            "目前沒有管理的頻道或群組。\n\n"
-                            "使用 `/add_channel` 添加頻道或群組。",
+                            "📺 **频道/群组管理**\n\n"
+                            "目前没有管理的频道或群组。\n\n"
+                            "使用 `/add_channel` 添加频道或群组。",
                             parse_mode="Markdown",
                         )
                         return
 
-                    channels_text = "📺 **已管理的頻道/群組**\n\n"
+                    channels_text = "📺 **已管理的频道/群组**\n\n"
                     for channel in channels:
                         status = "✅" if channel["auto_forward_signals"] else "❌"
 
@@ -1519,21 +1519,21 @@ class TelegramBot:
                         username = channel["username"]
 
                         channels_text += f"{status} **{title}**\n"
-                        channels_text += f"   類型: {chat_type}\n"
+                        channels_text += f"   类型: {chat_type}\n"
                         channels_text += f"   ID: `{channel['chat_id']}`\n"
                         if username:
-                            channels_text += f"   用戶名: @{username}\n"
-                        channels_text += f"   自動轉發: {'開啟' if channel['auto_forward_signals'] else '關閉'}\n\n"
+                            channels_text += f"   用户名: @{username}\n"
+                        channels_text += f"   自动转发: {'开启' if channel['auto_forward_signals'] else '关闭'}\n\n"
 
                     keyboard = [
                         [
                             InlineKeyboardButton(
-                                "➕ 添加頻道", callback_data="add_new_channel"
+                                "➕ 添加频道", callback_data="add_new_channel"
                             )
                         ],
                         [
                             InlineKeyboardButton(
-                                "⚙️ 管理設置", callback_data="manage_channels"
+                                "⚙️ 管理设置", callback_data="manage_channels"
                             )
                         ],
                     ]
@@ -1556,22 +1556,22 @@ class TelegramBot:
                     )
                 except Exception as e:
                     logger.error(f"Return admin channels error: {e}")
-                    await query.edit_message_text("❌ 獲取頻道列表失敗")
+                    await query.edit_message_text("❌ 获取频道列表失败")
             else:
                 await query.edit_message_text("❓ 未知操作")
 
         except Exception as e:
             logger.error(f"Button callback error: {e}")
-            await query.edit_message_text("❌ 操作失敗，請重試")
+            await query.edit_message_text("❌ 操作失败，请重试")
 
     async def _handle_setup_api_callback(self, query, user):
-        """處理設置 API 按鈕"""
+        """处理设置 API 按钮"""
         # 檢查是否已設置 API
         if user.is_api_connected and user.encrypted_api_key:
             keyboard = [
                 [
                     InlineKeyboardButton(
-                        "✅ 確認修改", callback_data="confirm_modify_api"
+                        "✅ 确认修改", callback_data="confirm_modify_api"
                     )
                 ],
                 [InlineKeyboardButton("❌ 取消", callback_data="cancel_modify_api")],
@@ -1579,9 +1579,9 @@ class TelegramBot:
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await query.edit_message_text(
-                "🔐 **API 設置**\n\n"
-                "您已經設置完成 Bitget API 連接。\n\n"
-                "是否要修改現有的 API 設置？",
+                "🔐 **API 设置**\n\n"
+                "您已经设置完成 Bitget API 连接。\n\n"
+                "是否要修改现有的 API 设置？",
                 reply_markup=reply_markup,
                 parse_mode="Markdown",
             )
@@ -1595,21 +1595,21 @@ class TelegramBot:
         self.user_sessions[user.telegram_id] = {"step": "api_key"}
 
         await query.edit_message_text(
-            "🔐 **設置 Bitget API**\n\n"
-            "請按順序提供您的 API 資訊。\n\n"
+            "🔐 **设置 Bitget API**\n\n"
+            "请按顺序提供您的 API 信息。\n\n"
             "**第 1 步：API Key**\n"
-            "請發送您的 Bitget API Key\n\n"
-            "💡 提示：您可以在 Bitget 官網的 API 管理頁面獲取",
+            "请发送您的 Bitget API Key\n\n"
+            "💡 提示：您可以在 Bitget 官网的 API 管理页面获取",
             parse_mode="Markdown",
         )
 
         # callback 中不能直接啟動對話，所以我們等待用戶的下一個消息
 
     async def _handle_status_callback(self, query, user):
-        """處理狀態檢查按鈕"""
+        """处理状态检查按钮"""
         if not user.is_api_connected:
             await query.edit_message_text(
-                "❌ API 未連接\n\n請先使用 `/setapi` 命令設置您的 API。",
+                "❌ API 未连接\n\n请先使用 `/setapi` 命令设置您的 API。",
                 parse_mode="Markdown",
             )
             return
@@ -1627,24 +1627,24 @@ class TelegramBot:
             if is_connected:
                 # 獲取 Bitget UID
                 bitget_uid = await self.trade_manager.get_user_uid(credentials)
-                status_text = f"Bitget UID: {bitget_uid}\n✅ **API 連接狀態：正常**"
+                status_text = f"Bitget UID: {bitget_uid}\n✅ **API 连接状态：正常**"
                 await query.edit_message_text(status_text, parse_mode="Markdown")
             else:
                 await query.edit_message_text(
-                    f"❌ **API 連接失敗**\n\n{message}", parse_mode="Markdown"
+                    f"❌ **API 连接失败**\n\n{message}", parse_mode="Markdown"
                 )
 
         except Exception as e:
-            await query.edit_message_text("❌ 檢查狀態時發生錯誤")
+            await query.edit_message_text("❌ 检查状态时发生错误")
 
     async def _handle_balance_callback(self, query, user):
-        """處理餘額查詢按鈕"""
+        """处理余额查询按钮"""
         if not user.is_api_connected:
-            await query.edit_message_text("❌ 請先設置 API 連接")
+            await query.edit_message_text("❌ 请先设置 API 连接")
             return
 
         try:
-            await query.edit_message_text("🔄 正在查詢餘額...")
+            await query.edit_message_text("🔄 正在查询余额...")
 
             credentials = (
                 user.encrypted_api_key,
@@ -1660,7 +1660,7 @@ class TelegramBot:
                 logger.info(f"Balance callback - Assets data: {assets}")
 
                 # 只顯示USDT資產（U本位合約）
-                balance_text = "💰 **U本位合約帳戶餘額**\n\n"
+                balance_text = "💰 **U本位合约账户余额**\n\n"
 
                 found_assets = False
 
@@ -1693,8 +1693,8 @@ class TelegramBot:
                             if total > 0:
                                 balance_text += f"**USDT:**\n"
                                 balance_text += f"  可用: {available:.4f}\n"
-                                balance_text += f"  凍結: {frozen:.4f}\n"
-                                balance_text += f"  總計: {total:.4f}\n\n"
+                                balance_text += f"  冻结: {frozen:.4f}\n"
+                                balance_text += f"  总计: {total:.4f}\n\n"
                                 found_assets = True
                                 break
                 elif isinstance(assets, dict):
@@ -1717,17 +1717,17 @@ class TelegramBot:
                         if total > 0:
                             balance_text += f"**USDT:**\n"
                             balance_text += f"  可用: {available:.4f}\n"
-                            balance_text += f"  凍結: {frozen:.4f}\n"
-                            balance_text += f"  總計: {total:.4f}\n\n"
+                            balance_text += f"  冻结: {frozen:.4f}\n"
+                            balance_text += f"  总计: {total:.4f}\n\n"
                             found_assets = True
 
                 if not found_assets:
-                    balance_text += "暫無 USDT 資產或餘額為零\n\n"
+                    balance_text += "暂无 USDT 资产或余额为零\n\n"
                     balance_text += (
-                        f"📊 **原始API數據：**\n```\n{str(assets)[:300]}...\n```\n\n"
+                        f"📊 **原始API数据：**\n```\n{str(assets)[:300]}...\n```\n\n"
                     )
 
-                balance_text += "ℹ️ **說明：** 僅顯示 U 本位合約帳戶的 USDT 餘額"
+                balance_text += "ℹ️ **说明：** 仅显示 U 本位合约账户的 USDT 余额"
 
                 keyboard = [
                     [InlineKeyboardButton("🔄 刷新", callback_data="refresh_balance")],
@@ -1739,36 +1739,36 @@ class TelegramBot:
                     balance_text, reply_markup=reply_markup, parse_mode="Markdown"
                 )
             else:
-                await query.edit_message_text("❌ 獲取餘額失敗")
+                await query.edit_message_text("❌ 获取余额失败")
 
         except Exception as e:
-            await query.edit_message_text("❌ 查詢餘額時發生錯誤")
+            await query.edit_message_text("❌ 查询余额时发生错误")
 
     async def _handle_return_start_callback(self, query, user):
-        """處理返回開始按鈕"""
+        """处理返回开始按钮"""
         welcome_message = """
-🚀 **歡迎使用 Kaiyn Trading Bot！**
+🚀 **欢迎使用 Kaiyn Trading Bot！**
 
-這個機器人可以幫助您：
-• 針對 Bitget 專屬群的交易信號實現一鍵定損下單
+这个机器人可以帮助您：
+• 针对 Bitget 专属群的交易信号实现一键定损下单
 
-💡加入 Bitget 專屬群方法：
-1. 使用邀請碼 **"5nmb"** 註冊[Bitget交易所](https://partner.bitget.com/bg/JZQT5S)
-2. KYC 完成並入金後，私信群主或管理員處理
+💡加入 Bitget 专属群方法：
+1. 使用邀请码 **"5nmb"** 注册[Bitget交易所](https://partner.bitget.com/bg/JZQT5S)
+2. KYC 完成并入金后，私信群主或管理员处理
 
 📚 Resources:
 
-• 👁️‍🗨️ [Kaiyn Capital 公開討論群](https://t.me/kaiyncapital)
-• 🌏 [Kaiyn Capital 官方網站](https://kaiyn.org)
+• 👁️‍🗨️ [Kaiyn Capital 公开讨论群](https://t.me/kaiyncapital)
+• 🌏 [Kaiyn Capital 官方网站](https://kaiyn.org)
 
-輸入 `/help` 查看完整命令列表。
+输入 `/help` 查看完整命令列表。
         """
 
         keyboard = [
-            [InlineKeyboardButton("🔗 設置 API", callback_data="setup_api")],
-            [InlineKeyboardButton("📊 查看狀態", callback_data="check_status")],
-            [InlineKeyboardButton("💰 查看餘額", callback_data="check_balance")],
-            [InlineKeyboardButton("⚙️ 交易設置", callback_data="trading_settings")],
+            [InlineKeyboardButton("🔗 设置 API", callback_data="setup_api")],
+            [InlineKeyboardButton("📊 查看状态", callback_data="check_status")],
+            [InlineKeyboardButton("💰 查看余额", callback_data="check_balance")],
+            [InlineKeyboardButton("⚙️ 交易设置", callback_data="trading_settings")],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -1777,25 +1777,25 @@ class TelegramBot:
         )
 
     async def _handle_trading_settings_callback(self, query, user):
-        """處理交易設置按鈕"""
+        """处理交易设置按钮"""
         # 獲取用戶的 1R 設置
         risk_amount = getattr(user, "fixed_risk_amount", None)
-        risk_text = f"{risk_amount} USDT" if risk_amount else "未設置"
+        risk_text = f"{risk_amount} USDT" if risk_amount else "未设置"
 
         settings_text = f"""
-⚙️ **交易設置**
+⚙️ **交易设置**
 
-**當前設置：**
-• 固定風險金額(1R)：{risk_text}
+**当前设置：**
+• 固定风险金额(1R)：{risk_text}
 
-**風險管理：**
-固定風險金額(1R)用於計算每筆交易的開倉金額
+**风险管理：**
+固定风险金额(1R)用于计算每笔交易的开仓金额
         """
 
         keyboard = [
             [
                 InlineKeyboardButton(
-                    "💰 設置固定風險金額(1R)", callback_data="set_risk_amount"
+                    "💰 设置固定风险金额(1R)", callback_data="set_risk_amount"
                 )
             ],
             [InlineKeyboardButton("🏠 返回", callback_data="return_start")],
@@ -1807,9 +1807,9 @@ class TelegramBot:
         )
 
     async def _handle_place_order_callback(self, query, user, data):
-        """處理下單按鈕 - 發送私人消息流程"""
+        """处理下单按钮 - 发送私人消息流程"""
         # 先回應按鈕點擊
-        await query.answer("正在處理下單請求...")
+        await query.answer("正在处理下单请求...")
 
         # 解析信號數據
         try:
@@ -1829,14 +1829,14 @@ class TelegramBot:
                 entry_upper = float(parts[5])
                 stop_loss = float(parts[6])
             else:
-                await self._send_private_message(query, user, "❌ 交易信號數據格式錯誤")
+                await self._send_private_message(query, user, "❌ 交易信号数据格式错误")
                 return
 
             if order_mode not in {"market", "limit"} or direction not in {"long", "short"}:
-                await self._send_private_message(query, user, "❌ 交易信號數據格式錯誤")
+                await self._send_private_message(query, user, "❌ 交易信号数据格式错误")
                 return
         except (ValueError, IndexError) as e:
-            await self._send_private_message(query, user, "❌ 交易信號數據解析失敗")
+            await self._send_private_message(query, user, "❌ 交易信号数据解析失败")
             return
 
         # 檢查用戶設置
@@ -1847,9 +1847,9 @@ class TelegramBot:
             await self._send_private_message(
                 query,
                 user,
-                "❌ **無法下單**\n\n"
-                "您尚未連接 Bitget API。\n\n"
-                "請使用 `/setapi` 命令設置您的 API 金鑰。",
+                "❌ **无法下单**\n\n"
+                "您尚未连接 Bitget API。\n\n"
+                "请使用 `/setapi` 命令设置您的 API 密钥。",
             )
             return
 
@@ -1858,15 +1858,15 @@ class TelegramBot:
             await self._send_private_message(
                 query,
                 user,
-                "❌ **無法下單**\n\n"
-                "您尚未設定固定風險金額(1R)。\n\n"
-                "請使用 `/settings` 命令設置您的風險管理參數。",
+                "❌ **无法下单**\n\n"
+                "您尚未设定固定风险金额(1R)。\n\n"
+                "请使用 `/settings` 命令设置您的风险管理参数。",
             )
             return
 
         try:
             # 發送處理中消息到私人聊天
-            await self._send_private_message(query, user, "🔄 正在獲取當前市價...")
+            await self._send_private_message(query, user, "🔄 正在获取当前市价...")
 
             current_price = await self.trade_manager.get_market_price(symbol)
 
@@ -1890,14 +1890,14 @@ class TelegramBot:
                     limit_price = None
                     calculation_price = current_price
                     switch_notice = (
-                        "⚠️ 此掛單價已可能立即成交，已切換為市價下單確認。\n\n"
+                        "⚠️ 此挂单价已可能立即成交，已切换为市价下单确认。\n\n"
                     )
                 else:
                     calculation_price = limit_price
 
             if calculation_price <= 0:
                 await self._send_private_message(
-                    query, user, "❌ 進場價格錯誤，無法計算倉位"
+                    query, user, "❌ 进场价格错误，无法计算仓位"
                 )
                 return
 
@@ -1905,7 +1905,7 @@ class TelegramBot:
             stop_distance_pct = abs((calculation_price - stop_loss) / calculation_price)
             if stop_distance_pct <= 0:
                 await self._send_private_message(
-                    query, user, "❌ 止損價格設置錯誤，無法計算倉位"
+                    query, user, "❌ 止损价格设置错误，无法计算仓位"
                 )
                 return
 
@@ -1914,26 +1914,26 @@ class TelegramBot:
 
             # 顯示確認信息
             direction_text = "做多" if direction == "long" else "做空"
-            order_mode_text = "市價下單" if order_mode == "market" else "掛單"
+            order_mode_text = "市价下单" if order_mode == "market" else "挂单"
 
-            confirm_text = f"💰 **交易確認**\n\n"
+            confirm_text = f"💰 **交易确认**\n\n"
             if switch_notice:
                 confirm_text += switch_notice
-            confirm_text += f"**交易對：** {symbol}\n"
+            confirm_text += f"**交易对：** {symbol}\n"
             confirm_text += f"**方向：** {direction_text}\n"
-            confirm_text += f"**下單方式：** {order_mode_text}\n"
-            confirm_text += f"**當前價格：** ${current_price:,.4f}\n"
+            confirm_text += f"**下单方式：** {order_mode_text}\n"
+            confirm_text += f"**当前价格：** ${current_price:,.4f}\n"
             if order_mode == "limit":
-                confirm_text += f"**掛單價格：** ${limit_price:,.4f}\n"
-            confirm_text += f"**止損價格：** ${stop_loss:,.4f}\n"
-            confirm_text += f"**交易數量：** {quantity:.6f}\n"
-            confirm_text += f"**名義價值：** ${position_value:.2f}\n"
-            confirm_text += f"**風險金額(1R)：** ${risk_amount:.2f}\n"
-            confirm_text += f"**止損距離：** {stop_distance_pct*100:.2f}%\n\n"
+                confirm_text += f"**挂单价格：** ${limit_price:,.4f}\n"
+            confirm_text += f"**止损价格：** ${stop_loss:,.4f}\n"
+            confirm_text += f"**交易数量：** {quantity:.6f}\n"
+            confirm_text += f"**名义价值：** ${position_value:.2f}\n"
+            confirm_text += f"**风险金额(1R)：** ${risk_amount:.2f}\n"
+            confirm_text += f"**止损距离：** {stop_distance_pct*100:.2f}%\n\n"
             if order_mode == "limit":
-                confirm_text += "⚠️ 將送出 GTC 限價掛單，訂單送出不代表已成交"
+                confirm_text += "⚠️ 将送出 GTC 限价挂单，订单送出不代表已成交"
             else:
-                confirm_text += "⚠️ 將使用市價單進場"
+                confirm_text += "⚠️ 将使用市价单进场"
 
             pending_order = await self.pending_order_repo.create_pending_order(
                 user_id=user_data.id,
@@ -1958,7 +1958,7 @@ class TelegramBot:
             keyboard = [
                 [
                     InlineKeyboardButton(
-                        "✅ 確認下單",
+                        "✅ 确认下单",
                         callback_data=f"confirm_order_{pending_order.token}",
                     )
                 ],
@@ -1976,11 +1976,11 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Place order callback error: {e}")
             await self._send_private_message(
-                query, user, f"❌ 無法獲取 {symbol} 當前價格：{str(e)}"
+                query, user, f"❌ 无法获取 {symbol} 当前价格：{str(e)}"
             )
 
     async def _send_private_message(self, query, user, text, reply_markup=None):
-        """發送私人消息到用戶"""
+        """发送私人消息到用户"""
         try:
             await self.application.bot.send_message(
                 chat_id=user.telegram_id,
@@ -1992,12 +1992,12 @@ class TelegramBot:
             logger.error(f"Failed to send private message to {user.telegram_id}: {e}")
             # 如果發送私人消息失敗，回退到原來的方式
             try:
-                await query.answer(f"請查看私人聊天: {text[:50]}...")
+                await query.answer(f"请查看私人聊天: {text[:50]}...")
             except:
                 pass
 
     async def _handle_confirm_pending_order_callback(self, query, user, data):
-        """處理確認待處理訂單"""
+        """处理确认待处理订单"""
         try:
             token = data.removeprefix("confirm_order_")
             pending_order, status = await self.pending_order_repo.claim_pending_order(
@@ -2006,19 +2006,19 @@ class TelegramBot:
 
             if not pending_order:
                 await self._send_private_message(
-                    query, user, "❌ 找不到這筆待確認訂單，請重新點擊最新信號下單。"
+                    query, user, "❌ 找不到这笔待确认订单，请重新点击最新信号下单。"
                 )
                 return
 
             if status == "expired":
                 await self._send_private_message(
-                    query, user, "❌ 這筆待確認訂單已過期，請重新點擊信號下單。"
+                    query, user, "❌ 这笔待确认订单已过期，请重新点击信号下单。"
                 )
                 return
 
             if status != "processing":
                 await self._send_private_message(
-                    query, user, f"⚠️ 這筆待確認訂單目前狀態為 {status}，無法重複執行。"
+                    query, user, f"⚠️ 这笔待确认订单目前状态为 {status}，无法重复执行。"
                 )
                 return
 
@@ -2038,23 +2038,23 @@ class TelegramBot:
 
         except Exception as e:
             logger.error(f"Confirm pending order error: {e}")
-            await self._send_private_message(query, user, "❌ 確認下單時發生錯誤")
+            await self._send_private_message(query, user, "❌ 确认下单时发生错误")
 
     async def _handle_cancel_pending_order_callback(self, query, user, data):
-        """處理取消待確認訂單"""
+        """处理取消待确认订单"""
         token = data.removeprefix("cancel_order_")
         status = await self.pending_order_repo.cancel_pending_order(
             token, user.telegram_id
         )
 
         if status == "cancelled":
-            await query.answer("已取消下單")
-            await self._send_private_message(query, user, "✅ 已取消下單")
+            await query.answer("已取消下单")
+            await self._send_private_message(query, user, "✅ 已取消下单")
         elif status == "missing":
-            await self._send_private_message(query, user, "❌ 找不到這筆待確認訂單")
+            await self._send_private_message(query, user, "❌ 找不到这笔待确认订单")
         else:
             await self._send_private_message(
-                query, user, f"⚠️ 這筆待確認訂單目前狀態為 {status}，無法取消。"
+                query, user, f"⚠️ 这笔待确认订单目前状态为 {status}，无法取消。"
             )
 
     async def _execute_order(
@@ -2071,9 +2071,9 @@ class TelegramBot:
         limit_price=None,
         pending_order_token=None,
     ):
-        """執行訂單的核心邏輯"""
-        await query.answer("正在執行下單...")
-        await self._send_private_message(query, user, "🔄 **正在執行下單...**")
+        """执行订单的核心逻辑"""
+        await query.answer("正在执行下单...")
+        await self._send_private_message(query, user, "🔄 **正在执行下单...**")
         trade_record_id = None
 
         try:
@@ -2189,29 +2189,29 @@ class TelegramBot:
 
                 # 發送成功通知
                 success_text = (
-                    "✅ **掛單已送出**\n\n"
+                    "✅ **挂单已送出**\n\n"
                     if is_limit_order
-                    else "✅ **下單成功**\n\n"
+                    else "✅ **下单成功**\n\n"
                 )
-                success_text += f"**幣種：** {symbol}\n"
+                success_text += f"**币种：** {symbol}\n"
                 success_text += (
                     f"**方向：** {'做多' if direction == 'long' else '做空'}\n"
                 )
-                success_text += f"**下單方式：** {'掛單' if is_limit_order else '市價'}\n"
-                success_text += f"**倉位名義價值：** ${position_value:.2f}\n"
-                success_text += f"**止損：** ${stop_loss:,.4f}\n"
+                success_text += f"**下单方式：** {'挂单' if is_limit_order else '市价'}\n"
+                success_text += f"**仓位名义价值：** ${position_value:.2f}\n"
+                success_text += f"**止损：** ${stop_loss:,.4f}\n"
                 if is_limit_order:
-                    success_text += f"**掛單價格：** ${order_price:,.4f}\n"
-                    success_text += f"**當前價格：** ${current_price:,.4f}\n"
+                    success_text += f"**挂单价格：** ${order_price:,.4f}\n"
+                    success_text += f"**当前价格：** ${current_price:,.4f}\n"
                 else:
-                    success_text += f"**進場價格：** ${current_price:,.4f}\n"
+                    success_text += f"**进场价格：** ${current_price:,.4f}\n"
                 success_text += (
-                    f"**當前 1R 設置：** ${user_data.fixed_risk_amount:.2f}\n"
+                    f"**当前 1R 设置：** ${user_data.fixed_risk_amount:.2f}\n"
                 )
-                success_text += f"**訂單 ID：** {bitget_order_id[:16]}...\n\n"
-                success_text += "✅ 止損已同時設置"
+                success_text += f"**订单 ID：** {bitget_order_id[:16]}...\n\n"
+                success_text += "✅ 止损已同时设置"
                 if is_limit_order:
-                    success_text += "\n⚠️ 掛單成功代表訂單已送出，不代表已成交"
+                    success_text += "\n⚠️ 挂单成功代表订单已送出，不代表已成交"
 
                 await self._send_private_message(query, user, success_text)
 
@@ -2233,7 +2233,7 @@ class TelegramBot:
                 return True
 
             else:
-                error_msg = result.get("msg", "未知錯誤")
+                error_msg = result.get("msg", "未知错误")
                 # 更新交易記錄為失敗
                 await self.trade_repo.update_trade_result(
                     trade_record_id,
@@ -2245,7 +2245,7 @@ class TelegramBot:
                 await self._send_private_message(
                     query,
                     user,
-                    f"❌ **下單失敗**\n\n錯誤信息：{error_msg}\n\n請檢查交易對是否支持或API權限設置。",
+                    f"❌ **下单失败**\n\n错误信息：{error_msg}\n\n请检查交易对是否支持或API权限设置。",
                 )
 
         except Exception as e:
@@ -2264,12 +2264,12 @@ class TelegramBot:
             await self._send_private_message(
                 query,
                 user,
-                f"❌ **執行下單時發生錯誤**\n\n錯誤詳情：{str(e)}\n\n請檢查API設置或聯繫支援。",
+                f"❌ **执行下单时发生错误**\n\n错误详情：{str(e)}\n\n请检查API设置或联系支持。",
             )
             return False
 
     async def _handle_confirm_modify_api(self, query, user):
-        """處理確認修改 API"""
+        """处理确认修改 API"""
         # 清除可能存在的舊數據
         if user.telegram_id in self.user_sessions:
             del self.user_sessions[user.telegram_id]
@@ -2278,26 +2278,26 @@ class TelegramBot:
 
         await query.edit_message_text(
             "🔐 **修改 Bitget API**\n\n"
-            "請按順序提供您的新 API 資訊。\n\n"
+            "请按顺序提供您的新 API 信息。\n\n"
             "**第 1 步：API Key**\n"
-            "請發送您的 Bitget API Key",
+            "请发送您的 Bitget API Key",
             parse_mode="Markdown",
         )
         return WAITING_API_KEY
 
     async def _handle_confirm_change_risk(self, query, user):
-        """處理確認更改風險設置"""
+        """处理确认更改风险设置"""
         # 設置 session 狀態
         self.user_sessions[user.telegram_id] = {"step": "risk_amount"}
 
         await query.edit_message_text(
-            "💰 **設置每單固定止損金額，以進行定 R 開倉。**\n\n"
-            "請輸入定 R 金額 u（數字）：",
+            "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n"
+            "请输入定 R 金额 u（数字）：",
             parse_mode="Markdown",
         )
 
     async def _handle_confirm_trade_callback(self, query, user, data):
-        """處理交易確認執行"""
+        """处理交易确认执行"""
         parts = data.split("_")
         symbol = parts[2]
         side = parts[3]
@@ -2306,11 +2306,11 @@ class TelegramBot:
         price = parts[6] if parts[6] != "market" else None
 
         if not user.is_api_connected:
-            await query.edit_message_text("❌ API 未連接，無法執行交易")
+            await query.edit_message_text("❌ API 未连接，无法执行交易")
             return
 
         try:
-            await query.edit_message_text("🔄 **正在執行交易...**")
+            await query.edit_message_text("🔄 **正在执行交易...**")
 
             # 生成客戶端訂單 ID
             client_order_id = (
@@ -2367,10 +2367,10 @@ class TelegramBot:
                 )
 
                 success_text = f"✅ **交易已提交成功！**\n\n"
-                success_text += f"交易對：{symbol}\n"
-                success_text += f"方向：{'買入' if side == 'buy' else '賣出'}\n"
-                success_text += f"數量：{amount}\n"
-                success_text += f"訂單 ID：{bitget_order_id[:16]}...\n\n"
+                success_text += f"交易对：{symbol}\n"
+                success_text += f"方向：{'买入' if side == 'buy' else '卖出'}\n"
+                success_text += f"数量：{amount}\n"
+                success_text += f"订单 ID：{bitget_order_id[:16]}...\n\n"
 
                 await query.edit_message_text(success_text, parse_mode="Markdown")
 
@@ -2378,13 +2378,13 @@ class TelegramBot:
                 await self.notification_repo.create_notification(
                     user_id=user.id,
                     message_type="trade",
-                    title="交易執行成功",
-                    message=f"{symbol} {side.upper()} {amount} 訂單已提交",
+                    title="交易执行成功",
+                    message=f"{symbol} {side.upper()} {amount} 订单已提交",
                     extra_data={"order_id": bitget_order_id},
                 )
 
             else:
-                error_msg = result.get("msg", "未知錯誤")
+                error_msg = result.get("msg", "未知错误")
                 await self.trade_repo.update_trade_result(
                     trade_record.id,
                     bitget_order_id="",
@@ -2393,19 +2393,19 @@ class TelegramBot:
                 )
 
                 await query.edit_message_text(
-                    f"❌ **交易執行失敗**\n\n錯誤信息：{error_msg}",
+                    f"❌ **交易执行失败**\n\n错误信息：{error_msg}",
                     parse_mode="Markdown",
                 )
 
         except BitgetAPIError as e:
             logger.error(f"Bitget API error during trade: {e}")
             await query.edit_message_text(
-                f"❌ **API 錯誤**\n\n{e.message}", parse_mode="Markdown"
+                f"❌ **API 错误**\n\n{e.message}", parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Trade execution error: {e}")
             await query.edit_message_text(
-                "❌ **執行交易時發生錯誤**\n\n請稍後重試或聯繫支援。",
+                "❌ **执行交易时发生错误**\n\n请稍后重试或联系支持。",
                 parse_mode="Markdown",
             )
         finally:
@@ -2414,7 +2414,7 @@ class TelegramBot:
                 del self.user_sessions[user.telegram_id]
 
     async def _handle_cancel_trade_callback(self, query, user):
-        """處理取消交易"""
+        """处理取消交易"""
         if user.telegram_id in self.user_sessions:
             del self.user_sessions[user.telegram_id]
 
@@ -2422,11 +2422,11 @@ class TelegramBot:
 
     # 管理員功能
     async def admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """管理員命令處理器"""
+        """管理员命令处理器"""
         user = await self._get_or_create_user(update)
 
         if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您沒有管理員權限")
+            await update.message.reply_text("❌ 您没有管理员权限")
             return
 
         try:
@@ -2436,20 +2436,20 @@ class TelegramBot:
 
             channel_count = await self.channel_repo.count_active_channels()
 
-            admin_text = f"👑 **管理員面板**\n\n"
-            admin_text += f"📊 **系統統計**\n"
-            admin_text += f"• 活躍用戶：{active_users}\n"
-            admin_text += f"• 管理頻道：{channel_count}\n"
+            admin_text = f"👑 **管理员面板**\n\n"
+            admin_text += f"📊 **系统统计**\n"
+            admin_text += f"• 活跃用户：{active_users}\n"
+            admin_text += f"• 管理频道：{channel_count}\n"
             db_ok = await self.user_repo.db.health_check()
-            admin_text += f"• 系統狀態：{'正常' if db_ok else '異常'}\n\n"
+            admin_text += f"• 系统状态：{'正常' if db_ok else '异常'}\n\n"
             admin_text += f"🛠️ **管理功能**\n"
-            admin_text += f"• `/admin_users` - 查看用戶列表\n"
-            admin_text += f"• `/admin_channels` - 管理頻道/群組\n"
-            admin_text += f"• `/add_channel` - 添加頻道/群組\n"
-            admin_text += f"• `/admin_broadcast` - 廣播消息\n"
-            admin_text += f"• `/send_signal` - 發送交易信號\n"
-            admin_text += f"• `/send_to_channel` - 發送到指定頻道\n"
-            admin_text += f"• `/add_trader` - 添加交易員"
+            admin_text += f"• `/admin_users` - 查看用户列表\n"
+            admin_text += f"• `/admin_channels` - 管理频道/群组\n"
+            admin_text += f"• `/add_channel` - 添加频道/群组\n"
+            admin_text += f"• `/admin_broadcast` - 广播消息\n"
+            admin_text += f"• `/send_signal` - 发送交易信号\n"
+            admin_text += f"• `/send_to_channel` - 发送到指定频道\n"
+            admin_text += f"• `/add_trader` - 添加交易员"
 
             await update.message.reply_text(admin_text, parse_mode="Markdown")
 
@@ -2458,11 +2458,11 @@ class TelegramBot:
             import traceback
 
             traceback.print_exc()
-            await update.message.reply_text(f"❌ 獲取管理信息時發生錯誤: {str(e)}")
+            await update.message.reply_text(f"❌ 获取管理信息时发生错误: {str(e)}")
 
     # 錯誤處理器
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """全局錯誤處理器"""
+        """全局错误处理器"""
         logger.error(f"Update {update} caused error {context.error}")
 
         # 記錄錯誤
@@ -2500,14 +2500,14 @@ class TelegramBot:
             try:
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
-                    text="❌ 系統發生錯誤，請稍後重試。如問題持續，請聯繫管理員。",
+                    text="❌ 系统发生错误，请稍后重试。如问题持续，请联系管理员。",
                 )
             except Exception:
                 pass  # 忽略發送錯誤消息時的錯誤
 
     # 啟動和停止方法
     async def start(self):
-        """啟動機器人"""
+        """启动机器人"""
         try:
             # 驗證配置
             Config.validate()
@@ -2532,7 +2532,7 @@ class TelegramBot:
             raise
 
     async def stop(self):
-        """停止機器人"""
+        """停止机器人"""
         try:
             logger.info("Stopping Telegram bot...")
 
@@ -2552,12 +2552,12 @@ class TelegramBot:
 
 # 便捷函數
 def create_bot() -> TelegramBot:
-    """創建機器人實例"""
+    """创建机器人实例"""
     return TelegramBot()
 
 
 async def run_bot():
-    """運行機器人"""
+    """运行机器人"""
     bot = create_bot()
     try:
         await bot.start()
