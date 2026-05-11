@@ -1224,10 +1224,10 @@ class TelegramBot:
             await update.message.reply_text(
                 "📊 **发送交易信号 - 格式**\n\n"
                 "使用方法：\n"
-                "`/send_signal 交易对 方向 低进场价 高进场价 止损价 止盈价1 [止盈价2] [止盈价3] [止盈价4]`\n\n"
+                "`/send_signal 交易对 方向 低进场价 高进场价 止损价 止盈价1 [止盈价2] [止盈价3] [止盈价4] [备注文字]`\n\n"
                 "例如：\n"
                 "`/send_signal BTCUSDT long 115000 115500 114200 117500 110500 123500 130000`\n"
-                "`/send_signal ETHUSDT short 3200 3250 3300 3100 3000 2900`",
+                "`/send_signal ETHUSDT short 3200 3250 3300 3100 3000 2900 等待回踩后执行`",
                 parse_mode="Markdown",
             )
             return
@@ -1241,11 +1241,18 @@ class TelegramBot:
 
             # 收集止盈價格
             take_profits = []
+            remark_start_index = None
             for i in range(5, len(args)):
                 try:
                     take_profits.append(float(args[i]))
                 except ValueError:
+                    remark_start_index = i
                     break
+            remark_text = (
+                " ".join(args[remark_start_index:]).strip()
+                if remark_start_index is not None
+                else ""
+            )
 
             if direction not in ["long", "short"]:
                 await update.message.reply_text("❌ 交易方向必须是 long 或 short")
@@ -1258,6 +1265,7 @@ class TelegramBot:
                 "entry_range": {"lower": entry_lower, "upper": entry_upper},
                 "take_profit_levels": take_profits,
                 "stop_loss": stop_loss,
+                "remark": remark_text,
             }
 
             # 格式化顯示文本
@@ -1272,7 +1280,10 @@ class TelegramBot:
             signal_text += f"**Direction：** {direction_text}\n"
             signal_text += f"**Entry：** {int(entry_upper)}-{int(entry_lower)}\n"
             signal_text += f"**TP：** {tp_text}\n"
-            signal_text += f"**SL：** {int(stop_loss)}\n\n"
+            signal_text += f"**SL：** {int(stop_loss)}\n"
+            if remark_text:
+                signal_text += f"{self._escape_markdown(remark_text)}\n"
+            signal_text += "\n"
             signal_text += f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
             # 創建下單按鈕
