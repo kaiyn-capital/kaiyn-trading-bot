@@ -14,6 +14,7 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 - U 本位合約 USDT 餘額查詢
 - 固定風險金額 1R 設定
 - 交易信號支援市價下單與 GTC 限價掛單
+- 交易信號支援備註文字與 UTC+8 時間戳
 - 管理員與發單員權限管理
 - 頻道或群組管理與交易信號轉發
 - Pending order 寫入 PostgreSQL，Bot 重啟後仍可確認尚未過期的訂單
@@ -37,7 +38,10 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 ├── alembic/                 # Database migrations
 ├── app/
 │   ├── main.py              # CLI 入口、啟動流程、初始化工具
-│   ├── bot.py               # Telegram Bot 指令、按鈕、交易流程
+│   ├── bot.py               # Telegram Bot handler 註冊與 lifecycle
+│   ├── bot_keyboards.py     # Telegram inline keyboard builders
+│   ├── bot_messages.py      # Bot 訊息文字與格式化
+│   ├── order_flow.py        # 交易信號解析、下單預覽與執行流程
 │   ├── bitget_api.py        # Bitget API client 與交易管理器
 │   ├── config.py            # 環境變數設定與驗證
 │   ├── database.py          # PostgreSQL async repositories
@@ -141,8 +145,10 @@ docker compose logs -f bot
 重啟 Bot：
 
 ```bash
-./restart_bot.sh
+docker compose restart bot
 ```
+
+`restart_bot.sh` 僅保留作為舊版輔助腳本；正式本地測試與部署建議以 `docker compose` 指令為準。
 
 ## 長期維護
 
@@ -206,20 +212,29 @@ ls -lh backups
 ## 交易信號格式
 
 ```text
-/send_signal 交易對 方向 低進場價 高進場價 止損價 止盈價1 [止盈價2] [止盈價3] [止盈價4]
+/send_signal 交易對 方向 低進場價 高進場價 止損價 止盈價1 [止盈價2] [止盈價3] [止盈價4] [備註文字]
 ```
 
 範例：
 
 ```text
 /send_signal BTCUSDT long 115000 115500 114200 117500 120500 123500
-/send_signal ETHUSDT short 3200 3250 3300 3100 3000 2900
+/send_signal ETHUSDT short 3200 3250 3300 3100 3000 2900 等待回踩后执行
 ```
+
+格式規則：
+
+- `方向` 僅支援 `long` 或 `short`。
+- 止盈價從第 6 個參數開始解析；第一個無法解析為數字的參數與後續內容會合併為備註。
+- 備註會顯示在信號的 `SL` 下方。
+- 信號底部時間戳使用 UTC+8。
+
+信號按鈕與 Bot 介面文字目前使用簡體中文，例如「市价下单」、「挂单」、「确认下单」。
 
 ## 下單流程
 
 1. 管理員或發單員使用 `/send_signal` 發送交易信號。
-2. Bot 將信號轉發到已啟用的頻道或群組，並附上「市價下單」與「掛單」按鈕。
+2. Bot 將信號轉發到已啟用的頻道或群組，並附上「市价下单」與「挂单」按鈕。
 3. 使用者點擊任一下單方式後，Bot 會檢查 API 設定與固定風險金額 1R。
 4. Bot 取得 Bitget 當前市價，計算倉位名義價值與數量。
 5. Bot 將待確認訂單寫入 `pending_orders`，並發送確認/取消按鈕。
@@ -293,6 +308,7 @@ docker compose up -d maintenance db-backup
 - `/status`
 - `/settings`
 - `/admin`
-- 發送測試信號並確認信號上出現「市價下單」與「掛單」
+- 發送含備註的測試信號，確認備註顯示在 `SL` 下方且時間戳為 UTC+8
+- 確認信號上出現「市价下单」與「挂单」
 - 點擊兩種下單方式，確認 `pending_orders.order_mode` 與 `limit_price` 正確寫入
 - 重啟 Bot 後確認尚未過期的 pending order 仍可被確認

@@ -61,7 +61,6 @@ from .order_flow import (
 # 對話狀態
 WAITING_API_KEY, WAITING_SECRET_KEY, WAITING_PASSPHRASE = range(3)
 WAITING_TRADE_SYMBOL, WAITING_TRADE_AMOUNT, WAITING_TRADE_PRICE = range(10, 13)
-WAITING_RISK_AMOUNT = 20
 
 logger = logging.getLogger(__name__)
 
@@ -120,22 +119,6 @@ class TelegramBot:
             fallbacks=[],
         )
         self.application.add_handler(api_conv_handler)
-
-        # 1R 設置對話
-        risk_conv_handler = ConversationHandler(
-            entry_points=[
-                CallbackQueryHandler(self.set_risk_start, pattern="^set_risk_amount$")
-            ],
-            states={
-                WAITING_RISK_AMOUNT: [
-                    MessageHandler(
-                        filters.TEXT & ~filters.COMMAND, self.set_risk_amount
-                    )
-                ],
-            },
-            fallbacks=[],
-        )
-        self.application.add_handler(risk_conv_handler)
 
         # 管理員命令
         self.application.add_handler(CommandHandler("admin", self.admin_command))
@@ -677,12 +660,8 @@ class TelegramBot:
             parse_mode="Markdown",
         )
 
-    async def set_risk_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def _handle_set_risk_start_callback(self, query, user):
         """开始设置 1R 风险金额"""
-        query = update.callback_query
-        await query.answer()
-
-        user = await self._get_or_create_user(update)
         current_risk = getattr(user, "fixed_risk_amount", None)
 
         if current_risk is None:
@@ -713,7 +692,6 @@ class TelegramBot:
                 reply_markup=reply_markup,
                 parse_mode="Markdown",
             )
-            return ConversationHandler.END
 
     async def set_risk_amount(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """设置风险金额"""
@@ -740,7 +718,7 @@ class TelegramBot:
             if user.telegram_id in self.user_sessions:
                 del self.user_sessions[user.telegram_id]
 
-            return ConversationHandler.END
+            return
 
         except ValueError:
             await update.message.reply_text(
@@ -1233,6 +1211,8 @@ class TelegramBot:
                 await self._handle_balance_callback(query, user)
             elif data == "trading_settings":
                 await self._handle_trading_settings_callback(query, user)
+            elif data == "set_risk_amount":
+                await self._handle_set_risk_start_callback(query, user)
             elif data.startswith("place_order_"):
                 await self._handle_place_order_callback(query, user, data)
             elif data == "confirm_modify_api":
@@ -1244,6 +1224,7 @@ class TelegramBot:
                 await self._handle_confirm_change_risk(query, user)
             elif data == "cancel_change_risk":
                 await query.answer("已取消")
+                self.user_sessions.pop(user.telegram_id, None)
                 await query.edit_message_text("✅ 已取消更改风险设置")
             elif data == "return_start":
                 await self._handle_return_start_callback(query, user)
