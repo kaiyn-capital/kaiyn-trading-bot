@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 import uuid
 import re
@@ -41,6 +41,7 @@ WAITING_TRADE_SYMBOL, WAITING_TRADE_AMOUNT, WAITING_TRADE_PRICE = range(10, 13)
 WAITING_RISK_AMOUNT = 20
 
 logger = logging.getLogger(__name__)
+UTC_PLUS_8 = timezone(timedelta(hours=8))
 
 
 class TelegramBot:
@@ -1284,7 +1285,8 @@ class TelegramBot:
             if remark_text:
                 signal_text += f"{self._escape_markdown(remark_text)}\n"
             signal_text += "\n"
-            signal_text += f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            signal_time = datetime.now(UTC_PLUS_8).strftime("%Y-%m-%d %H:%M:%S")
+            signal_text += f"⏰ {signal_time} UTC+8"
 
             # 創建下單按鈕
             keyboard = [
