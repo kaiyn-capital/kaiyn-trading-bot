@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import uuid
 import re
@@ -34,6 +34,29 @@ from .bitget_api import (
 )
 from .encryption import create_encryption_manager
 from .models import User
+from .bot_keyboards import (
+    main_menu_keyboard,
+    pending_order_keyboard,
+    signal_order_keyboard,
+    status_actions_keyboard,
+    trading_settings_keyboard,
+)
+from .bot_messages import (
+    help_message,
+    order_preview_message,
+    order_success_message,
+    settings_message,
+    signal_message,
+    signal_sent_message,
+    signal_usage_message,
+    welcome_message,
+)
+from .order_flow import (
+    execute_order as execute_order_flow,
+    parse_order_callback_data,
+    parse_signal_args,
+    prepare_order_preview,
+)
 
 # 對話狀態
 WAITING_API_KEY, WAITING_SECRET_KEY, WAITING_PASSPHRASE = range(3)
@@ -41,7 +64,6 @@ WAITING_TRADE_SYMBOL, WAITING_TRADE_AMOUNT, WAITING_TRADE_PRICE = range(10, 13)
 WAITING_RISK_AMOUNT = 20
 
 logger = logging.getLogger(__name__)
-UTC_PLUS_8 = timezone(timedelta(hours=8))
 
 
 class TelegramBot:
@@ -188,36 +210,6 @@ class TelegramBot:
 
         return user
 
-    def _escape_markdown(self, text: str) -> str:
-        """转义 Markdown 特殊字符"""
-        if not text:
-            return text
-
-        # Telegram Markdown 需要轉義的字符
-        escape_chars = [
-            "_",
-            "*",
-            "[",
-            "]",
-            "(",
-            ")",
-            "~",
-            "`",
-            ">",
-            "#",
-            "+",
-            "-",
-            "=",
-            "|",
-            "{",
-            "}",
-            ".",
-            "!",
-        ]
-        for char in escape_chars:
-            text = text.replace(char, f"\\{char}")
-        return text
-
     async def _is_trader_or_admin(self, telegram_id: int) -> bool:
         """检查是否为管理员或发单员"""
         if Config.is_admin(telegram_id):
@@ -266,66 +258,13 @@ class TelegramBot:
         user = await self._get_or_create_user(update)
         await self._log_user_action(user, "start_command")
 
-        welcome_message = """
-🚀 **欢迎使用 Kaiyn Trading Bot！**
-
-这个机器人可以帮助您：
-• 针对 Bitget 专属群的交易信号实现一键定损下单
-
-💡加入 Bitget 专属群方法：
-1. 使用邀请码 **"5nmb"** 注册[Bitget交易所](https://partner.bitget.com/bg/JZQT5S)
-2. KYC 完成并入金后，私信群主或管理员处理
-
-📚 Resources:
-
-• 👁️‍🗨️ [Kaiyn Capital 公开讨论群](https://t.me/kaiyncapital)
-• 🌏 [Kaiyn Capital 官方网站](https://kaiyn.org)
-
-输入 `/help` 查看完整命令列表。
-        """
-
-        keyboard = [
-            [InlineKeyboardButton("🔗 设置 API", callback_data="setup_api")],
-            [InlineKeyboardButton("📊 查看状态", callback_data="check_status")],
-            [InlineKeyboardButton("💰 查看余额", callback_data="check_balance")],
-            [InlineKeyboardButton("⚙️ 交易设置", callback_data="trading_settings")],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
         await update.message.reply_text(
-            welcome_message, reply_markup=reply_markup, parse_mode="Markdown"
+            welcome_message(), reply_markup=main_menu_keyboard(), parse_mode="Markdown"
         )
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """帮助命令处理器"""
-        help_text = """
-📖 **命令说明**
-
-**基本命令：**
-• `/start` - 开始使用机器人
-• `/help` - 查看此帮助信息
-• `/status` - 查看 API 连接状态
-
-**API 管理：**
-• `/setapi` - 设置 Bitget API 密钥
-• 机器人会引导您依序输入，输入后会自动删除消息保护隐私
-
-**交易功能：**
-• `/settings` - 设置交易参数（1R 愿意承受止损金额）
-• `/balance` - 查看账户余额
-• 📊 **信号交易** - 当管理员发送交易信号时可一键下单
-
-**管理员功能：**（仅管理员可用）
-• `/admin` - 管理员面板
-
-
-**安全须知：**
-🔒 所有 API 信息都会加密存储
-🔒 输入的 API 密钥会自动删除保护隐私
-🔒 只给予交易权限，不要给予提币权限
-        """
-
-        await update.message.reply_text(help_text, parse_mode="Markdown")
+        await update.message.reply_text(help_message(), parse_mode="Markdown")
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """状态命令处理器"""
@@ -362,22 +301,10 @@ class TelegramBot:
 
                 status_text = f"""Bitget UID: {bitget_uid}\n✅ **API 连接状态：正常**"""
 
-                keyboard = [
-                    [
-                        InlineKeyboardButton(
-                            "💰 查看余额", callback_data="check_balance"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "⚙️ 交易设置", callback_data="trading_settings"
-                        )
-                    ],
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
                 await update.message.reply_text(
-                    status_text, reply_markup=reply_markup, parse_mode="Markdown"
+                    status_text,
+                    reply_markup=status_actions_keyboard(),
+                    parse_mode="Markdown",
                 )
             else:
                 await update.message.reply_text(
@@ -744,31 +671,10 @@ class TelegramBot:
         user = await self._get_or_create_user(update)
         await self._log_user_action(user, "settings_command")
 
-        # 獲取用戶的 1R 設置
-        risk_amount = getattr(user, "fixed_risk_amount", None)
-        risk_text = f"{risk_amount} USDT" if risk_amount else "未设置"
-
-        settings_text = f"""
-⚙️ **交易设置**
-
-**当前设置：**
-• 固定风险金额(1R)：{risk_text}
-
-**风险管理：**
-固定风险金额(1R)用于计算每笔交易的开仓金额
-        """
-
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "💰 设置固定风险金额(1R)", callback_data="set_risk_amount"
-                )
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
         await update.message.reply_text(
-            settings_text, reply_markup=reply_markup, parse_mode="Markdown"
+            settings_message(getattr(user, "fixed_risk_amount", None)),
+            reply_markup=trading_settings_keyboard(),
+            parse_mode="Markdown",
         )
 
     async def set_risk_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1222,86 +1128,25 @@ class TelegramBot:
         # 解析信號參數
         args = context.args
         if len(args) < 6:
-            await update.message.reply_text(
-                "📊 **发送交易信号 - 格式**\n\n"
-                "使用方法：\n"
-                "`/send_signal 交易对 方向 低进场价 高进场价 止损价 止盈价1 [止盈价2] [止盈价3] [止盈价4] [备注文字]`\n\n"
-                "例如：\n"
-                "`/send_signal BTCUSDT long 115000 115500 114200 117500 110500 123500 130000`\n"
-                "`/send_signal ETHUSDT short 3200 3250 3300 3100 3000 2900 等待回踩后执行`",
-                parse_mode="Markdown",
-            )
+            await update.message.reply_text(signal_usage_message(), parse_mode="Markdown")
             return
 
         try:
-            symbol = args[0].upper()
-            direction = args[1].lower()
-            entry_lower = float(args[2])
-            entry_upper = float(args[3])
-            stop_loss = float(args[4])
+            signal = parse_signal_args(args)
 
-            # 收集止盈價格
-            take_profits = []
-            remark_start_index = None
-            for i in range(5, len(args)):
-                try:
-                    take_profits.append(float(args[i]))
-                except ValueError:
-                    remark_start_index = i
-                    break
-            remark_text = (
-                " ".join(args[remark_start_index:]).strip()
-                if remark_start_index is not None
-                else ""
-            )
-
-            if direction not in ["long", "short"]:
+            if signal.direction not in ["long", "short"]:
                 await update.message.reply_text("❌ 交易方向必须是 long 或 short")
                 return
 
-            # 創建信號 JSON
-            signal_data = {
-                "symbol": symbol,
-                "direction": direction,
-                "entry_range": {"lower": entry_lower, "upper": entry_upper},
-                "take_profit_levels": take_profits,
-                "stop_loss": stop_loss,
-                "remark": remark_text,
-            }
-
-            # 格式化顯示文本
-            direction_text = "多 Long" if direction == "long" else "空 Short"
-            tp_text = "/".join([str(int(tp)) for tp in take_profits])
-
-            # 獲取發送者的 username
             sender_username = self._get_sender_username(update)
-
-            signal_text = f"🚨 **交易信号** by @{sender_username}\n\n"
-            signal_text += f"**Symbol：** {symbol}\n"
-            signal_text += f"**Direction：** {direction_text}\n"
-            signal_text += f"**Entry：** {int(entry_upper)}-{int(entry_lower)}\n"
-            signal_text += f"**TP：** {tp_text}\n"
-            signal_text += f"**SL：** {int(stop_loss)}\n"
-            if remark_text:
-                signal_text += f"{self._escape_markdown(remark_text)}\n"
-            signal_text += "\n"
-            signal_time = datetime.now(UTC_PLUS_8).strftime("%Y-%m-%d %H:%M:%S")
-            signal_text += f"⏰ {signal_time} UTC+8"
-
-            # 創建下單按鈕
-            keyboard = [
-                [
-                    InlineKeyboardButton(
-                        "💰 市价下单",
-                        callback_data=f"place_order_market_{symbol}_{direction}_{entry_lower:g}_{entry_upper:g}_{stop_loss:g}",
-                    ),
-                    InlineKeyboardButton(
-                        "📌 挂单",
-                        callback_data=f"place_order_limit_{symbol}_{direction}_{entry_lower:g}_{entry_upper:g}_{stop_loss:g}",
-                    )
-                ]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            signal_text = signal_message(signal, sender_username)
+            reply_markup = signal_order_keyboard(
+                signal.symbol,
+                signal.direction,
+                signal.entry_lower,
+                signal.entry_upper,
+                signal.stop_loss,
+            )
 
             # # 發送給用戶
             # active_users = self.user_repo.get_active_users()
@@ -1352,12 +1197,10 @@ class TelegramBot:
                 logger.error(f"Error getting channels: {e}")
 
             # 發送確認消息
-            confirm_text = f"✅ **交易信号已发送**\n\n"
-            # confirm_text += f"👥 發送給用戶：{sent_to_users} 位\n"
-            confirm_text += f"📺 发送到频道：{sent_to_channels} 个\n\n"
-            confirm_text += f"**信号详情：**\n{signal_text}"
-
-            await update.message.reply_text(confirm_text, parse_mode="Markdown")
+            await update.message.reply_text(
+                signal_sent_message(sent_to_channels, signal_text),
+                parse_mode="Markdown",
+            )
 
         except ValueError:
             await update.message.reply_text("❌ 价格格式错误，请输入有效数字")
@@ -1759,64 +1602,16 @@ class TelegramBot:
 
     async def _handle_return_start_callback(self, query, user):
         """处理返回开始按钮"""
-        welcome_message = """
-🚀 **欢迎使用 Kaiyn Trading Bot！**
-
-这个机器人可以帮助您：
-• 针对 Bitget 专属群的交易信号实现一键定损下单
-
-💡加入 Bitget 专属群方法：
-1. 使用邀请码 **"5nmb"** 注册[Bitget交易所](https://partner.bitget.com/bg/JZQT5S)
-2. KYC 完成并入金后，私信群主或管理员处理
-
-📚 Resources:
-
-• 👁️‍🗨️ [Kaiyn Capital 公开讨论群](https://t.me/kaiyncapital)
-• 🌏 [Kaiyn Capital 官方网站](https://kaiyn.org)
-
-输入 `/help` 查看完整命令列表。
-        """
-
-        keyboard = [
-            [InlineKeyboardButton("🔗 设置 API", callback_data="setup_api")],
-            [InlineKeyboardButton("📊 查看状态", callback_data="check_status")],
-            [InlineKeyboardButton("💰 查看余额", callback_data="check_balance")],
-            [InlineKeyboardButton("⚙️ 交易设置", callback_data="trading_settings")],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
         await query.edit_message_text(
-            welcome_message, reply_markup=reply_markup, parse_mode="Markdown"
+            welcome_message(), reply_markup=main_menu_keyboard(), parse_mode="Markdown"
         )
 
     async def _handle_trading_settings_callback(self, query, user):
         """处理交易设置按钮"""
-        # 獲取用戶的 1R 設置
-        risk_amount = getattr(user, "fixed_risk_amount", None)
-        risk_text = f"{risk_amount} USDT" if risk_amount else "未设置"
-
-        settings_text = f"""
-⚙️ **交易设置**
-
-**当前设置：**
-• 固定风险金额(1R)：{risk_text}
-
-**风险管理：**
-固定风险金额(1R)用于计算每笔交易的开仓金额
-        """
-
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "💰 设置固定风险金额(1R)", callback_data="set_risk_amount"
-                )
-            ],
-            [InlineKeyboardButton("🏠 返回", callback_data="return_start")],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
         await query.edit_message_text(
-            settings_text, reply_markup=reply_markup, parse_mode="Markdown"
+            settings_message(getattr(user, "fixed_risk_amount", None)),
+            reply_markup=trading_settings_keyboard(include_return=True),
+            parse_mode="Markdown",
         )
 
     async def _handle_place_order_callback(self, query, user, data):
@@ -1826,28 +1621,7 @@ class TelegramBot:
 
         # 解析信號數據
         try:
-            parts = data.split("_")
-            if len(parts) >= 8 and parts[2] in {"market", "limit"}:
-                order_mode = parts[2]
-                symbol = parts[3]
-                direction = parts[4]
-                entry_lower = float(parts[5])
-                entry_upper = float(parts[6])
-                stop_loss = float(parts[7])
-            elif len(parts) >= 7:
-                order_mode = "market"
-                symbol = parts[2]
-                direction = parts[3]
-                entry_lower = float(parts[4])
-                entry_upper = float(parts[5])
-                stop_loss = float(parts[6])
-            else:
-                await self._send_private_message(query, user, "❌ 交易信号数据格式错误")
-                return
-
-            if order_mode not in {"market", "limit"} or direction not in {"long", "short"}:
-                await self._send_private_message(query, user, "❌ 交易信号数据格式错误")
-                return
+            callback_data = parse_order_callback_data(data)
         except (ValueError, IndexError) as e:
             await self._send_private_message(query, user, "❌ 交易信号数据解析失败")
             return
@@ -1881,115 +1655,61 @@ class TelegramBot:
             # 發送處理中消息到私人聊天
             await self._send_private_message(query, user, "🔄 正在获取当前市价...")
 
-            current_price = await self.trade_manager.get_market_price(symbol)
+            current_price = await self.trade_manager.get_market_price(
+                callback_data.symbol
+            )
 
-            # 計算風險參數
-            risk_amount = user_data.fixed_risk_amount
-            entry_low = min(entry_lower, entry_upper)
-            entry_high = max(entry_lower, entry_upper)
-            requested_order_mode = order_mode
-            limit_price = None
-            calculation_price = current_price
-            switch_notice = None
-
-            if order_mode == "limit":
-                limit_price = entry_high if direction == "long" else entry_low
-                can_fill_immediately = (
-                    direction == "long" and limit_price >= current_price
-                ) or (direction == "short" and limit_price <= current_price)
-
-                if can_fill_immediately:
-                    order_mode = "market"
-                    limit_price = None
-                    calculation_price = current_price
-                    switch_notice = (
-                        "⚠️ 此挂单价已可能立即成交，已切换为市价下单确认。\n\n"
-                    )
-                else:
-                    calculation_price = limit_price
-
-            if calculation_price <= 0:
-                await self._send_private_message(
-                    query, user, "❌ 进场价格错误，无法计算仓位"
+            try:
+                preview = prepare_order_preview(
+                    callback_data, current_price, user_data.fixed_risk_amount
                 )
-                return
-
-            # 計算止損距離百分比與開倉名義價值
-            stop_distance_pct = abs((calculation_price - stop_loss) / calculation_price)
-            if stop_distance_pct <= 0:
+            except ValueError as e:
+                if "entry price" in str(e):
+                    await self._send_private_message(
+                        query, user, "❌ 进场价格错误，无法计算仓位"
+                    )
+                    return
                 await self._send_private_message(
                     query, user, "❌ 止损价格设置错误，无法计算仓位"
                 )
                 return
 
-            position_value = risk_amount / stop_distance_pct
-            quantity = position_value / calculation_price
-
-            # 顯示確認信息
-            direction_text = "做多" if direction == "long" else "做空"
-            order_mode_text = "市价下单" if order_mode == "market" else "挂单"
-
-            confirm_text = f"💰 **交易确认**\n\n"
-            if switch_notice:
-                confirm_text += switch_notice
-            confirm_text += f"**交易对：** {symbol}\n"
-            confirm_text += f"**方向：** {direction_text}\n"
-            confirm_text += f"**下单方式：** {order_mode_text}\n"
-            confirm_text += f"**当前价格：** ${current_price:,.4f}\n"
-            if order_mode == "limit":
-                confirm_text += f"**挂单价格：** ${limit_price:,.4f}\n"
-            confirm_text += f"**止损价格：** ${stop_loss:,.4f}\n"
-            confirm_text += f"**交易数量：** {quantity:.6f}\n"
-            confirm_text += f"**名义价值：** ${position_value:.2f}\n"
-            confirm_text += f"**风险金额(1R)：** ${risk_amount:.2f}\n"
-            confirm_text += f"**止损距离：** {stop_distance_pct*100:.2f}%\n\n"
-            if order_mode == "limit":
-                confirm_text += "⚠️ 将送出 GTC 限价挂单，订单送出不代表已成交"
-            else:
-                confirm_text += "⚠️ 将使用市价单进场"
-
             pending_order = await self.pending_order_repo.create_pending_order(
                 user_id=user_data.id,
                 telegram_id=user.telegram_id,
-                symbol=symbol,
-                direction=direction,
-                order_mode=order_mode,
-                limit_price=limit_price,
-                entry_lower=entry_low,
-                entry_upper=entry_high,
-                quantity=quantity,
-                stop_loss=stop_loss,
-                position_value=position_value,
-                current_price=current_price,
+                symbol=callback_data.symbol,
+                direction=callback_data.direction,
+                order_mode=preview.order_mode,
+                limit_price=preview.limit_price,
+                entry_lower=preview.entry_lower,
+                entry_upper=preview.entry_upper,
+                quantity=preview.quantity,
+                stop_loss=preview.stop_loss,
+                position_value=preview.position_value,
+                current_price=preview.current_price,
                 expires_at=datetime.utcnow() + timedelta(minutes=10),
             )
             logger.info(
-                f"Stored {order_mode} pending order {pending_order.token} for user "
-                f"{user.telegram_id}; requested_mode={requested_order_mode}"
+                f"Stored {preview.order_mode} pending order {pending_order.token} "
+                f"for user {user.telegram_id}; "
+                f"requested_mode={preview.requested_order_mode}"
             )
 
-            keyboard = [
-                [
-                    InlineKeyboardButton(
-                        "✅ 确认下单",
-                        callback_data=f"confirm_order_{pending_order.token}",
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "❌ 取消",
-                        callback_data=f"cancel_order_{pending_order.token}",
-                    )
-                ],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            await self._send_private_message(query, user, confirm_text, reply_markup)
+            await self._send_private_message(
+                query,
+                user,
+                order_preview_message(
+                    callback_data.symbol, callback_data.direction, preview
+                ),
+                pending_order_keyboard(pending_order.token),
+            )
 
         except Exception as e:
             logger.error(f"Place order callback error: {e}")
             await self._send_private_message(
-                query, user, f"❌ 无法获取 {symbol} 当前价格：{str(e)}"
+                query,
+                user,
+                f"❌ 无法获取 {callback_data.symbol} 当前价格：{str(e)}",
             )
 
     async def _send_private_message(self, query, user, text, reply_markup=None):
@@ -2087,7 +1807,6 @@ class TelegramBot:
         """执行订单的核心逻辑"""
         await query.answer("正在执行下单...")
         await self._send_private_message(query, user, "🔄 **正在执行下单...**")
-        trade_record_id = None
 
         try:
             # 獲取用戶數據（重新獲取以確保最新信息）
@@ -2105,11 +1824,6 @@ class TelegramBot:
             ):
                 raise RuntimeError("User API credentials are not configured")
 
-            # 生成客戶端訂單 ID
-            client_order_id = (
-                f"TG_{user.telegram_id}_{int(datetime.timestamp(datetime.now()))}"
-            )
-
             # 獲取用戶 API 憑證
             credentials = (
                 user_data.encrypted_api_key,
@@ -2117,160 +1831,62 @@ class TelegramBot:
                 user_data.encrypted_passphrase,
             )
 
-            order_mode = order_mode if order_mode in {"market", "limit"} else "market"
-            is_limit_order = order_mode == "limit"
-            order_type = "limit" if is_limit_order else "market"
-            order_price = limit_price if is_limit_order else None
-
-            if is_limit_order and not order_price:
-                raise RuntimeError("Limit order is missing limit_price")
-
-            side = "buy" if direction == "long" else "sell"
-
-            # 限制數量精度到6位小數以符合Bitget要求
-            quantity = round(quantity, 6)
-
             logger.info(
-                f"Executing {order_type} order for {symbol}, side: {side}, "
-                f"quantity: {quantity}, limit_price: {order_price}"
+                f"Executing {order_mode} order for {symbol}, direction: {direction}, "
+                f"quantity: {quantity}, limit_price: {limit_price}"
             )
 
-            # 先創建交易記錄
-            trade_record = await self.trade_repo.create_trade(
-                user_id=user_data.id,
+            result = await execute_order_flow(
+                user_data=user_data,
+                trade_repo=self.trade_repo,
+                trade_manager=self.trade_manager,
+                credentials=credentials,
+                telegram_id=user.telegram_id,
                 symbol=symbol,
-                side=side,
-                order_type=order_type,
+                direction=direction,
                 quantity=quantity,
-                price=order_price,
-                client_order_id=client_order_id,
+                stop_loss=stop_loss,
+                position_value=position_value,
+                order_mode=order_mode,
+                limit_price=limit_price,
             )
-            trade_record_id = trade_record.id
 
-            # 執行下單，添加必要的tradeSide參數
-            logger.info(
-                f"Placing {order_type} order: symbol={symbol}, side={side}, "
-                f"quantity={quantity}, stop_loss={stop_loss}, limit_price={order_price}"
+            if pending_order_token:
+                await self.pending_order_repo.mark_executed(
+                    pending_order_token, result.trade_id
+                )
+
+            await self._send_private_message(
+                query,
+                user,
+                order_success_message(
+                    result,
+                    direction,
+                    stop_loss,
+                    current_price,
+                    user_data.fixed_risk_amount,
+                ),
             )
-            if is_limit_order:
-                result = await self.trade_manager.place_limit_order(
-                    user_data.id,
-                    credentials,
-                    symbol,
-                    side,
-                    str(quantity),
-                    str(order_price),
-                    client_order_id,
-                    "USDT",
-                    "open",
-                    stop_loss,
-                    force="gtc",
-                )
-            else:
-                result = await self.trade_manager.place_market_order(
-                    user_data.id,
-                    credentials,
-                    symbol,
-                    side,
-                    str(quantity),
-                    client_order_id,
-                    "USDT",
-                    "open",
-                    stop_loss,
-                )
-            logger.info(f"place_{order_type}_order result: {result}")
 
-            if not result or result.get("code") != "00000":
-                error_msg = f"Order failed for {symbol}: {result.get('msg', 'Unknown error') if result else 'No response'}"
-                logger.error(error_msg)
-                raise Exception(error_msg)
-
-            if result.get("code") == "00000":
-                order_data = result.get("data", {})
-                bitget_order_id = order_data.get("orderId", "")
-
-                # 更新交易記錄
-                await self.trade_repo.update_trade_result(
-                    trade_record_id,
-                    bitget_order_id=bitget_order_id,
-                    status="pending" if is_limit_order else "filled",
-                )
-                if pending_order_token:
-                    await self.pending_order_repo.mark_executed(
-                        pending_order_token, trade_record_id
-                    )
-
-                # 發送成功通知
-                success_text = (
-                    "✅ **挂单已送出**\n\n"
-                    if is_limit_order
-                    else "✅ **下单成功**\n\n"
-                )
-                success_text += f"**币种：** {symbol}\n"
-                success_text += (
-                    f"**方向：** {'做多' if direction == 'long' else '做空'}\n"
-                )
-                success_text += f"**下单方式：** {'挂单' if is_limit_order else '市价'}\n"
-                success_text += f"**仓位名义价值：** ${position_value:.2f}\n"
-                success_text += f"**止损：** ${stop_loss:,.4f}\n"
-                if is_limit_order:
-                    success_text += f"**挂单价格：** ${order_price:,.4f}\n"
-                    success_text += f"**当前价格：** ${current_price:,.4f}\n"
-                else:
-                    success_text += f"**进场价格：** ${current_price:,.4f}\n"
-                success_text += (
-                    f"**当前 1R 设置：** ${user_data.fixed_risk_amount:.2f}\n"
-                )
-                success_text += f"**订单 ID：** {bitget_order_id[:16]}...\n\n"
-                success_text += "✅ 止损已同时设置"
-                if is_limit_order:
-                    success_text += "\n⚠️ 挂单成功代表订单已送出，不代表已成交"
-
-                await self._send_private_message(query, user, success_text)
-
-                # 記錄用戶操作
-                await self._log_user_action(
-                    user,
-                    "order_executed",
-                    {
-                        "symbol": symbol,
-                        "direction": direction,
-                        "quantity": quantity,
-                        "position_value": position_value,
-                        "bitget_order_id": bitget_order_id,
-                        "stop_loss": stop_loss,
-                        "order_mode": order_mode,
-                        "limit_price": order_price,
-                    },
-                )
-                return True
-
-            else:
-                error_msg = result.get("msg", "未知错误")
-                # 更新交易記錄為失敗
-                await self.trade_repo.update_trade_result(
-                    trade_record_id,
-                    bitget_order_id=None,  # 使用 None 而不是空字符串
-                    status="failed",
-                    error_message=error_msg,
-                )
-
-                await self._send_private_message(
-                    query,
-                    user,
-                    f"❌ **下单失败**\n\n错误信息：{error_msg}\n\n请检查交易对是否支持或API权限设置。",
-                )
+            # 記錄用戶操作
+            await self._log_user_action(
+                user,
+                "order_executed",
+                {
+                    "symbol": result.symbol,
+                    "direction": direction,
+                    "quantity": result.quantity,
+                    "position_value": result.position_value,
+                    "bitget_order_id": result.bitget_order_id,
+                    "stop_loss": stop_loss,
+                    "order_mode": result.order_type,
+                    "limit_price": result.limit_price,
+                },
+            )
+            return True
 
         except Exception as e:
             logger.error(f"Order execution error: {e}")
-            if trade_record_id is not None:
-                # 更新交易記錄為失敗
-                await self.trade_repo.update_trade_result(
-                    trade_record_id,
-                    bitget_order_id=None,  # 使用 None 而不是空字符串
-                    status="failed",
-                    error_message=str(e),
-                )
             if pending_order_token:
                 await self.pending_order_repo.mark_failed(pending_order_token, str(e))
 
