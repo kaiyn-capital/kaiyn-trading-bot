@@ -15,6 +15,7 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 - 固定風險金額 1R 設定
 - 交易信號支援市價下單與 GTC 限價掛單
 - 交易信號支援備註文字與 UTC+8 時間戳
+- 下單前檢查 Bitget 合約交易對狀態、最小下單量、最小名義價值、精度與單筆上限
 - 管理員與發單員權限管理
 - 頻道或群組管理與交易信號轉發
 - Pending order 寫入 PostgreSQL，Bot 重啟後仍可確認尚未過期的訂單
@@ -236,10 +237,12 @@ ls -lh backups
 1. 管理員或發單員使用 `/send_signal` 發送交易信號。
 2. Bot 將信號轉發到已啟用的頻道或群組，並附上「市价下单」與「挂单」按鈕。
 3. 使用者點擊任一下單方式後，Bot 會檢查 API 設定與固定風險金額 1R。
-4. Bot 取得 Bitget 當前市價，計算倉位名義價值與數量。
-5. Bot 將待確認訂單寫入 `pending_orders`，並發送確認/取消按鈕。
-6. 使用者確認後，Bot 使用 row lock 將 pending order 標為 `processing`，避免重複下單。
-7. Bitget 下單完成後，Bot 更新 `trades` 與 `pending_orders` 狀態。
+4. Bot 取得 Bitget 當前市價與 USDT-FUTURES 合約規則，計算倉位名義價值與數量。
+5. Bot 檢查交易對狀態、最小下單量、最小名義價值、數量/價格精度、單筆上限與止損方向。
+6. 驗證通過後，Bot 將待確認訂單寫入 `pending_orders`，並發送確認/取消按鈕。
+7. 使用者確認後，Bot 使用 row lock 將 pending order 標為 `processing`，避免重複下單。
+8. 送單前 Bot 會重新取得市價與合約規則再驗證一次；若規則已不符合，會標記為 `failed` 並提示重新點擊信號下單。
+9. Bitget 下單完成後，Bot 更新 `trades` 與 `pending_orders` 狀態。
 
 下單方式：
 
@@ -256,6 +259,15 @@ ls -lh backups
 ```
 
 市價下單的計算價格為目前市價；掛單的計算價格為掛單價。
+
+交易安全防呆：
+
+- 交易對必須存在於 Bitget `USDT-FUTURES` 且狀態為 `normal`。
+- 下單數量需符合 `minTradeNum`、`sizeMultiplier`、`volumePlace` 與單筆上限。
+- 掛單價格需符合 `pricePlace` 與 `priceEndStep`。
+- 下單名義價值需符合 `minTradeUSDT`。
+- Long 止損必須低於計算價格；Short 止損必須高於計算價格。
+- 本專案目前不額外設定 1R 全域上限，也不額外設定止損距離百分比上下限。
 
 ## Database
 

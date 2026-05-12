@@ -146,9 +146,11 @@ def order_preview_message(symbol: str, direction: str, preview: OrderPreview) ->
     text += f"**下单方式：** {order_mode_text}\n"
     text += f"**当前价格：** ${preview.current_price:,.4f}\n"
     if preview.order_mode == "limit":
-        text += f"**挂单价格：** ${preview.limit_price:,.4f}\n"
+        limit_price_text = preview.limit_price_text or f"{preview.limit_price:,.4f}"
+        text += f"**挂单价格：** ${limit_price_text}\n"
     text += f"**止损价格：** ${preview.stop_loss:,.4f}\n"
-    text += f"**交易数量：** {preview.quantity:.6f}\n"
+    quantity_text = preview.quantity_text or f"{preview.quantity:.6f}"
+    text += f"**交易数量：** {quantity_text}\n"
     text += f"**名义价值：** ${preview.position_value:.2f}\n"
     text += f"**风险金额(1R)：** ${preview.risk_amount:.2f}\n"
     text += f"**止损距离：** {preview.stop_distance_pct*100:.2f}%\n\n"

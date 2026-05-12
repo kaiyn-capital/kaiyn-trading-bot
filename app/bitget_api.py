@@ -269,6 +269,8 @@ class BitgetTradeManager:
     def __init__(self, encryption_manager: EncryptionManager):
         self.encryption_manager = encryption_manager
         self._clients = {}  # 用戶客戶端緩存
+        self._contracts_cache = {}
+        self._contracts_cache_ttl_seconds = 600
     
     def _get_client(self, user_id: int, encrypted_credentials: Tuple[str, str, str]) -> BitgetAPIClient:
         """獲取或創建 API 客戶端"""
@@ -430,8 +432,18 @@ class BitgetTradeManager:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.cancel_order(symbol, order_id, client_order_id)
     
-    async def get_trading_pairs(self, product_type: str = 'USDT-FUTURES') -> List[Dict]:
+    async def get_trading_pairs(
+        self, product_type: str = 'USDT-FUTURES', force_refresh: bool = False
+    ) -> List[Dict]:
         """獲取所有合約交易對"""
+        cached = self._contracts_cache.get(product_type)
+        if (
+            not force_refresh
+            and cached
+            and time.time() - cached["cached_at"] < self._contracts_cache_ttl_seconds
+        ):
+            return cached["data"]
+
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(f"{Config.BITGET_API_URL}/api/v2/mix/market/contracts?productType={product_type}")
@@ -439,13 +451,36 @@ class BitgetTradeManager:
                 data = response.json()
                 
                 if data.get('code') == '00000':
-                    return data.get('data', [])
+                    contracts = data.get('data', [])
+                    self._contracts_cache[product_type] = {
+                        "cached_at": time.time(),
+                        "data": contracts,
+                    }
+                    return contracts
                 else:
                     raise Exception("Failed to get futures trading pairs")
                     
             except Exception as e:
                 logger.error(f"Failed to get futures trading pairs: {e}")
                 raise
+
+    async def get_contract_rules(
+        self, symbol: str, product_type: str = 'USDT-FUTURES'
+    ) -> Dict:
+        """獲取指定合約交易對規則。"""
+        normalized_symbol = symbol.upper()
+        contracts = await self.get_trading_pairs(product_type)
+
+        for contract in contracts:
+            if contract.get('symbol') == normalized_symbol:
+                return contract
+
+        contracts = await self.get_trading_pairs(product_type, force_refresh=True)
+        for contract in contracts:
+            if contract.get('symbol') == normalized_symbol:
+                return contract
+
+        raise ValueError(f"交易对 {normalized_symbol} 不存在或不支持 U 本位合约")
     
     async def cleanup(self):
         """清理資源"""

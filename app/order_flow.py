@@ -1,5 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from typing import Optional, Sequence
 
 
@@ -38,6 +39,8 @@ class OrderPreview:
     risk_amount: float
     stop_distance_pct: float
     switch_notice: Optional[str] = None
+    quantity_text: Optional[str] = None
+    limit_price_text: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -51,6 +54,218 @@ class OrderExecutionResult:
     quantity: float
     position_value: float
     limit_price: Optional[float]
+
+
+@dataclass(frozen=True)
+class ContractRules:
+    symbol: str
+    product_type: str
+    symbol_status: str
+    min_trade_num: Decimal
+    min_trade_usdt: Decimal
+    size_multiplier: Decimal
+    volume_place: int
+    price_place: int
+    price_end_step: Decimal
+    max_market_order_qty: Decimal
+    max_order_qty: Decimal
+
+
+@dataclass(frozen=True)
+class OrderValidationResult:
+    is_valid: bool
+    error_message: Optional[str] = None
+    quantity: Optional[float] = None
+    quantity_text: Optional[str] = None
+    limit_price: Optional[float] = None
+    limit_price_text: Optional[str] = None
+    position_value: Optional[float] = None
+
+
+def _decimal_or_zero(value) -> Decimal:
+    if value is None or value == "":
+        return Decimal("0")
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return Decimal("0")
+
+
+def _int_or_zero(value) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _quantize_for_places(value: Decimal, places: int) -> Decimal:
+    if places <= 0:
+        return value.quantize(Decimal("1"), rounding=ROUND_DOWN)
+    return value.quantize(Decimal(1).scaleb(-places), rounding=ROUND_DOWN)
+
+
+def _floor_to_step(value: Decimal, step: Decimal) -> Decimal:
+    if step <= 0:
+        return value
+    return (value / step).to_integral_value(rounding=ROUND_DOWN) * step
+
+
+def _decimal_text(value: Decimal, places: Optional[int] = None) -> str:
+    if places is not None:
+        value = _quantize_for_places(value, places)
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _price_step(rules: ContractRules) -> Decimal:
+    if rules.price_end_step <= 0:
+        return Decimal(1).scaleb(-rules.price_place)
+    return rules.price_end_step * Decimal(1).scaleb(-rules.price_place)
+
+
+def parse_contract_rules(payload: dict) -> ContractRules:
+    return ContractRules(
+        symbol=str(payload.get("symbol", "")).upper(),
+        product_type=str(payload.get("productType") or "USDT-FUTURES").upper(),
+        symbol_status=str(payload.get("symbolStatus") or ""),
+        min_trade_num=_decimal_or_zero(payload.get("minTradeNum")),
+        min_trade_usdt=_decimal_or_zero(payload.get("minTradeUSDT")),
+        size_multiplier=_decimal_or_zero(payload.get("sizeMultiplier")),
+        volume_place=_int_or_zero(payload.get("volumePlace")),
+        price_place=_int_or_zero(payload.get("pricePlace")),
+        price_end_step=_decimal_or_zero(payload.get("priceEndStep")),
+        max_market_order_qty=_decimal_or_zero(payload.get("maxMarketOrderQty")),
+        max_order_qty=_decimal_or_zero(payload.get("maxOrderQty")),
+    )
+
+
+def validate_order_preview(
+    preview: OrderPreview,
+    rules: ContractRules,
+    direction: str,
+) -> OrderValidationResult:
+    if not rules.symbol or rules.product_type != "USDT-FUTURES":
+        return OrderValidationResult(False, "❌ 交易对不存在或不支持 U 本位合约")
+
+    if rules.symbol_status.lower() != "normal":
+        return OrderValidationResult(False, "❌ 交易对目前不可交易")
+
+    calculation_price = (
+        Decimal(str(preview.limit_price))
+        if preview.order_mode == "limit" and preview.limit_price is not None
+        else Decimal(str(preview.current_price))
+    )
+    stop_loss = Decimal(str(preview.stop_loss))
+
+    if calculation_price <= 0:
+        return OrderValidationResult(False, "❌ 进场价格错误，无法计算仓位")
+
+    if direction == "long" and stop_loss >= calculation_price:
+        return OrderValidationResult(False, "❌ 止损方向不合理：做多止损必须低于进场价")
+
+    if direction == "short" and stop_loss <= calculation_price:
+        return OrderValidationResult(False, "❌ 止损方向不合理：做空止损必须高于进场价")
+
+    quantity = Decimal(str(preview.quantity))
+    if quantity <= 0:
+        return OrderValidationResult(False, "❌ 下单数量错误，无法下单")
+
+    if rules.size_multiplier > 0:
+        quantity = _floor_to_step(quantity, rules.size_multiplier)
+    quantity = _quantize_for_places(quantity, rules.volume_place)
+    quantity_text = _decimal_text(quantity, rules.volume_place)
+
+    if quantity <= 0:
+        return OrderValidationResult(False, "❌ 下单数量低于交易所最小值")
+
+    if rules.min_trade_num > 0 and quantity < rules.min_trade_num:
+        return OrderValidationResult(
+            False,
+            f"❌ 下单数量低于交易所最小值：至少 {_decimal_text(rules.min_trade_num)}",
+        )
+
+    max_qty = (
+        rules.max_market_order_qty
+        if preview.order_mode == "market"
+        else rules.max_order_qty
+    )
+    if max_qty > 0 and quantity > max_qty:
+        return OrderValidationResult(
+            False,
+            f"❌ 下单数量超过交易所单笔上限：最多 {_decimal_text(max_qty)}",
+        )
+
+    limit_price = None
+    limit_price_text = None
+    if preview.order_mode == "limit":
+        if preview.limit_price is None or preview.limit_price <= 0:
+            return OrderValidationResult(False, "❌ 挂单价格错误，无法下单")
+
+        limit_price_decimal = Decimal(str(preview.limit_price))
+        limit_price_decimal = _floor_to_step(limit_price_decimal, _price_step(rules))
+        limit_price_decimal = _quantize_for_places(
+            limit_price_decimal, rules.price_place
+        )
+        if limit_price_decimal <= 0:
+            return OrderValidationResult(False, "❌ 挂单价格错误，无法下单")
+
+        if (
+            direction == "long"
+            and limit_price_decimal >= Decimal(str(preview.current_price))
+        ) or (
+            direction == "short"
+            and limit_price_decimal <= Decimal(str(preview.current_price))
+        ):
+            return OrderValidationResult(
+                False,
+                "❌ 挂单价已可能立即成交，请重新点击信号下单",
+            )
+
+        limit_price = float(limit_price_decimal)
+        limit_price_text = _decimal_text(limit_price_decimal, rules.price_place)
+        calculation_price = limit_price_decimal
+
+    position_value_decimal = quantity * calculation_price
+    if rules.min_trade_usdt > 0 and position_value_decimal < rules.min_trade_usdt:
+        return OrderValidationResult(
+            False,
+            f"❌ 下单名义价值低于交易所最小值：至少 {_decimal_text(rules.min_trade_usdt)} USDT",
+        )
+
+    return OrderValidationResult(
+        is_valid=True,
+        quantity=float(quantity),
+        quantity_text=quantity_text,
+        limit_price=limit_price,
+        limit_price_text=limit_price_text,
+        position_value=float(position_value_decimal),
+    )
+
+
+def apply_order_validation(
+    preview: OrderPreview, validation: OrderValidationResult
+) -> OrderPreview:
+    if not validation.is_valid:
+        return preview
+
+    return replace(
+        preview,
+        quantity=validation.quantity if validation.quantity is not None else preview.quantity,
+        quantity_text=validation.quantity_text,
+        limit_price=(
+            validation.limit_price
+            if preview.order_mode == "limit"
+            else preview.limit_price
+        ),
+        limit_price_text=validation.limit_price_text,
+        position_value=(
+            validation.position_value
+            if validation.position_value is not None
+            else preview.position_value
+        ),
+    )
 
 
 def parse_signal_args(args: Sequence[str]) -> SignalDraft:
@@ -188,6 +403,8 @@ async def execute_order(
     position_value: float,
     order_mode: str = "market",
     limit_price: Optional[float] = None,
+    quantity_text: Optional[str] = None,
+    limit_price_text: Optional[str] = None,
 ) -> OrderExecutionResult:
     order_mode = order_mode if order_mode in {"market", "limit"} else "market"
     is_limit_order = order_mode == "limit"
@@ -197,7 +414,11 @@ async def execute_order(
         raise RuntimeError("Limit order is missing limit_price")
 
     side = "buy" if direction == "long" else "sell"
-    quantity = round(quantity, 6)
+    quantity = float(quantity)
+    quantity_for_api = quantity_text or _decimal_text(Decimal(str(quantity)))
+    price_for_api = limit_price_text or (
+        _decimal_text(Decimal(str(order_price))) if order_price is not None else None
+    )
     client_order_id = f"TG_{telegram_id}_{int(datetime.timestamp(datetime.now()))}"
     trade_record_id = None
 
@@ -219,8 +440,8 @@ async def execute_order(
                 credentials,
                 symbol,
                 side,
-                str(quantity),
-                str(order_price),
+                quantity_for_api,
+                price_for_api,
                 client_order_id,
                 "USDT",
                 "open",
@@ -233,7 +454,7 @@ async def execute_order(
                 credentials,
                 symbol,
                 side,
-                str(quantity),
+                quantity_for_api,
                 client_order_id,
                 "USDT",
                 "open",

@@ -52,10 +52,14 @@ from .bot_messages import (
     welcome_message,
 )
 from .order_flow import (
+    OrderPreview,
+    apply_order_validation,
     execute_order as execute_order_flow,
+    parse_contract_rules,
     parse_order_callback_data,
     parse_signal_args,
     prepare_order_preview,
+    validate_order_preview,
 )
 
 # 對話狀態
@@ -1634,8 +1638,14 @@ class TelegramBot:
 
         try:
             # 發送處理中消息到私人聊天
-            await self._send_private_message(query, user, "🔄 正在获取当前市价...")
+            await self._send_private_message(
+                query, user, "🔄 正在获取当前市价与交易规则..."
+            )
 
+            contract_payload = await self.trade_manager.get_contract_rules(
+                callback_data.symbol
+            )
+            contract_rules = parse_contract_rules(contract_payload)
             current_price = await self.trade_manager.get_market_price(
                 callback_data.symbol
             )
@@ -1654,6 +1664,17 @@ class TelegramBot:
                     query, user, "❌ 止损价格设置错误，无法计算仓位"
                 )
                 return
+
+            validation = validate_order_preview(
+                preview, contract_rules, callback_data.direction
+            )
+            if not validation.is_valid:
+                await self._send_private_message(
+                    query, user, validation.error_message or "❌ 无法下单"
+                )
+                return
+
+            preview = apply_order_validation(preview, validation)
 
             pending_order = await self.pending_order_repo.create_pending_order(
                 user_id=user_data.id,
@@ -1690,7 +1711,7 @@ class TelegramBot:
             await self._send_private_message(
                 query,
                 user,
-                f"❌ 无法获取 {callback_data.symbol} 当前价格：{str(e)}",
+                f"❌ 无法获取 {callback_data.symbol} 当前价格或交易规则：{str(e)}",
             )
 
     async def _send_private_message(self, query, user, text, reply_markup=None):
@@ -1812,6 +1833,57 @@ class TelegramBot:
                 user_data.encrypted_passphrase,
             )
 
+            order_mode = order_mode if order_mode in {"market", "limit"} else "market"
+            contract_payload = await self.trade_manager.get_contract_rules(symbol)
+            contract_rules = parse_contract_rules(contract_payload)
+            current_price = await self.trade_manager.get_market_price(symbol)
+            calculation_price = (
+                limit_price
+                if order_mode == "limit" and limit_price is not None
+                else current_price
+            )
+            if calculation_price <= 0:
+                raise RuntimeError("Invalid calculation price")
+
+            stop_distance_pct = abs((calculation_price - stop_loss) / calculation_price)
+            if stop_distance_pct <= 0:
+                raise RuntimeError("Invalid stop distance")
+
+            validation_preview = OrderPreview(
+                requested_order_mode=order_mode,
+                order_mode=order_mode,
+                limit_price=limit_price,
+                entry_lower=calculation_price,
+                entry_upper=calculation_price,
+                quantity=quantity,
+                stop_loss=stop_loss,
+                position_value=position_value,
+                current_price=current_price,
+                risk_amount=user_data.fixed_risk_amount,
+                stop_distance_pct=stop_distance_pct,
+            )
+            validation = validate_order_preview(
+                validation_preview, contract_rules, direction
+            )
+            if not validation.is_valid:
+                error_message = validation.error_message or "❌ 订单已不符合交易所规则"
+                if pending_order_token:
+                    await self.pending_order_repo.mark_failed(
+                        pending_order_token, error_message
+                    )
+                await self._send_private_message(
+                    query,
+                    user,
+                    "❌ **订单已不符合交易所规则，请重新点击最新信号下单。**\n\n"
+                    f"原因：{error_message.replace('❌ ', '')}",
+                )
+                return False
+
+            quantity = validation.quantity or quantity
+            position_value = validation.position_value or position_value
+            if order_mode == "limit":
+                limit_price = validation.limit_price
+
             logger.info(
                 f"Executing {order_mode} order for {symbol}, direction: {direction}, "
                 f"quantity: {quantity}, limit_price: {limit_price}"
@@ -1830,6 +1902,8 @@ class TelegramBot:
                 position_value=position_value,
                 order_mode=order_mode,
                 limit_price=limit_price,
+                quantity_text=validation.quantity_text,
+                limit_price_text=validation.limit_price_text,
             )
 
             if pending_order_token:
