@@ -39,6 +39,7 @@ services:
         condition: service_healthy
     volumes:
       - ./logs:/app/logs
+      - ./backups:/app/backups:ro
     command: ["python", "-m", "app.main"]
     logging: *default-logging
 
@@ -46,6 +47,9 @@ services:
     image: *bot-image
     build: .
     restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://kaiyn:kaiyn@postgres:5432/kaiyn_trading_bot}
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
@@ -53,6 +57,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
     command:
       - sh
       - -c
@@ -87,12 +93,15 @@ services:
           timestamp=$$(date +%Y%m%d_%H%M%S)
           backup_name="kaiyn_trading_bot_$${timestamp}.sql"
           echo "$$(date) Starting PostgreSQL backup: $${backup_name}.gz"
-          if PGPASSWORD="$${POSTGRES_PASSWORD}" pg_dump -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -f "/backups/$${backup_name}"; then
-            gzip -f "/backups/$${backup_name}"
+          if PGPASSWORD="$${POSTGRES_PASSWORD}" pg_dump -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" -f "/backups/$${backup_name}" && gzip -f "/backups/$${backup_name}"; then
             find /backups -type f -name "kaiyn_trading_bot_*.sql.gz" -mtime +"$${RETENTION_DAYS:-30}" -delete
+            completed_at=$$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            printf '{"status":"success","timestamp":"%s","filename":"%s.gz"}\n' "$${completed_at}" "$${backup_name}" > /backups/backup_status.json
             echo "$$(date) PostgreSQL backup completed: $${backup_name}.gz"
           else
             rm -f "/backups/$${backup_name}" "/backups/$${backup_name}.gz"
+            failed_at=$$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            printf '{"status":"failed","timestamp":"%s","filename":"%s.gz","error":"pg_dump failed"}\n' "$${failed_at}" "$${backup_name}" > /backups/backup_status.json
             echo "$$(date) PostgreSQL backup failed"
           fi
           sleep "$${BACKUP_INTERVAL_SECONDS:-86400}"

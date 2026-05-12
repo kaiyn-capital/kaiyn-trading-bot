@@ -93,6 +93,13 @@ MAX_POSITION_SIZE=1000
 RETENTION_DAYS=30
 MAINTENANCE_INTERVAL_SECONDS=86400
 BACKUP_INTERVAL_SECONDS=86400
+ADMIN_NOTIFY_STARTUP_SUCCESS=True
+HEALTHCHECK_INTERVAL_SECONDS=300
+ADMIN_ALERT_COOLDOWN_SECONDS=1800
+BITGET_ALERT_FAILURE_THRESHOLD=3
+BITGET_ALERT_WINDOW_SECONDS=600
+BACKUP_STALE_HOURS=36
+MAINTENANCE_STALE_HOURS=36
 ```
 
 `DATABASE_URL` 必須使用 `postgresql+asyncpg://`。此專案不再支援 SQLite fallback。
@@ -177,6 +184,8 @@ docker compose restart bot
 - Bot 檔案日誌 `logs/app.log`：每日輪轉，保留 30 天。
 - PostgreSQL 累積紀錄：`system_logs`、`notification_logs`、`pending_orders`、`trades` 保留 30 天。
 - PostgreSQL 備份：每天建立 gzip SQL 備份到 `./backups`，保留 30 天。
+- 管理員告警：Bot 啟動、DB/backup/cleanup 異常、Bitget API 連續暫時異常會推送到 `TELEGRAM_ADMIN_IDS`。
+- 健康檢查：管理員可用 `/admin_health` 查看 DB、backup、cleanup、Bitget API 與近期錯誤狀態。
 
 手動 dry-run 檢查會清理多少資料：
 
@@ -197,6 +206,7 @@ docker compose ps
 docker compose logs maintenance
 docker compose logs db-backup
 ls -lh backups
+cat backups/backup_status.json
 ```
 
 ## Telegram 指令
@@ -213,6 +223,7 @@ ls -lh backups
 管理員：
 
 - `/admin`：管理員面板與系統統計。
+- `/admin_health`：查看系統健康狀態、備份、維護任務與近期錯誤。
 - `/admin_users`：查看活躍使用者列表。
 - `/admin_channels`：查看與管理頻道或群組。
 - `/add_channel @username 描述`：新增公開頻道或群組。
@@ -338,6 +349,7 @@ docker compose up -d maintenance db-backup
 - `/status`
 - `/settings`
 - `/admin`
+- `/admin_health`
 - 發送含備註的測試信號，確認備註顯示在 `SL` 下方且時間戳為 UTC+8
 - 確認信號上出現「市价下单」與「挂单」
 - 點擊兩種下單方式，確認 `pending_orders.order_mode` 與 `limit_price` 正確寫入

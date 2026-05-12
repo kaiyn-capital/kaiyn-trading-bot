@@ -481,6 +481,45 @@ class SystemLogRepository:
             await session.flush()
             return log_entry
 
+    async def get_latest_log(
+        self,
+        module: Optional[str] = None,
+        function: Optional[str] = None,
+        levels: Optional[list[str]] = None,
+    ) -> Optional[SystemLog]:
+        """Return the newest system log matching simple filters."""
+        async with self.db.get_session() as session:
+            query = select(SystemLog)
+            if module:
+                query = query.where(SystemLog.module == module)
+            if function:
+                query = query.where(SystemLog.function == function)
+            if levels:
+                query = query.where(SystemLog.level.in_(levels))
+            query = query.order_by(SystemLog.created_at.desc()).limit(1)
+            result = await session.execute(query)
+            return result.scalars().first()
+
+    async def get_recent_logs(
+        self,
+        levels: Optional[list[str]] = None,
+        module: Optional[str] = None,
+        since: Optional[datetime] = None,
+        limit: int = 10,
+    ) -> list[SystemLog]:
+        """Return recent system logs matching simple filters."""
+        async with self.db.get_session() as session:
+            query = select(SystemLog)
+            if levels:
+                query = query.where(SystemLog.level.in_(levels))
+            if module:
+                query = query.where(SystemLog.module == module)
+            if since:
+                query = query.where(SystemLog.created_at >= since)
+            query = query.order_by(SystemLog.created_at.desc()).limit(limit)
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
 
 async def cleanup_retention_records(retention_days: int, dry_run: bool = False) -> dict:
     """Delete retention-managed records older than the configured window."""

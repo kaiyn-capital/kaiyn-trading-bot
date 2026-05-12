@@ -15,8 +15,14 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from app.admin_alerts import send_direct_admin_alert
 from app.config import Config
-from app.database import init_database, health_check, cleanup_retention_records
+from app.database import (
+    cleanup_retention_records,
+    get_system_log_repo,
+    health_check,
+    init_database,
+)
 
 # 設置日誌
 def setup_logging():
@@ -62,12 +68,20 @@ async def check_requirements():
         # 檢查資料庫
         if not await health_check():
             logging.error("Database health check failed")
+            await send_direct_admin_alert(
+                "❌ Kaiyn Trading Bot 启动前 DB 健康检查失败。",
+                alert_key="startup_db_failure",
+            )
             return False
         
         return True
     
     except Exception as e:
         logging.error(f"Requirements check failed: {e}")
+        await send_direct_admin_alert(
+            f"❌ Kaiyn Trading Bot 启动前系统检查失败。\n\n错误：{e}",
+            alert_key="startup_requirements_failure",
+        )
         return False
 
 async def main():
@@ -100,6 +114,10 @@ async def main():
     
     except Exception as e:
         logger.error(f"❌ 啟動失敗: {e}")
+        await send_direct_admin_alert(
+            f"❌ Kaiyn Trading Bot 启动失败。\n\n错误：{e}",
+            alert_key="startup_failure",
+        )
         return 1
 
 async def run_cleanup_retention(dry_run: bool = False) -> int:
@@ -113,6 +131,10 @@ async def run_cleanup_retention(dry_run: bool = False) -> int:
 
         if not await health_check():
             print("❌ 資料庫連接失敗")
+            await send_direct_admin_alert(
+                "❌ Kaiyn Trading Bot maintenance cleanup 无法连接 DB。",
+                alert_key="maintenance_db_failure",
+            )
             return 1
 
         result = await cleanup_retention_records(
@@ -128,11 +150,36 @@ async def run_cleanup_retention(dry_run: bool = False) -> int:
             print(f"- {table_name}: {action} {count} 筆")
 
         logger.info(f"Retention cleanup result: {result}")
+        await get_system_log_repo().log(
+            level="INFO",
+            message=(
+                "Retention cleanup dry run completed"
+                if dry_run
+                else "Retention cleanup completed"
+            ),
+            module="maintenance",
+            function="run_cleanup_retention",
+            extra_data=result,
+        )
         return 0
 
     except Exception as e:
         logger.error(f"Retention cleanup failed: {e}")
         print(f"❌ Retention cleanup failed: {e}")
+        try:
+            await get_system_log_repo().log(
+                level="ERROR",
+                message=f"Retention cleanup failed: {e}",
+                module="maintenance",
+                function="run_cleanup_retention",
+                extra_data={"dry_run": dry_run, "error": str(e)},
+            )
+        except Exception as log_error:
+            logger.error(f"Failed to persist cleanup failure log: {log_error}")
+        await send_direct_admin_alert(
+            f"❌ Kaiyn Trading Bot maintenance cleanup 失败。\n\n错误：{e}",
+            alert_key="maintenance_cleanup_failed",
+        )
         return 1
 
 def generate_encryption_key():
@@ -173,6 +220,13 @@ MAX_POSITION_SIZE=1000
 RETENTION_DAYS=30
 MAINTENANCE_INTERVAL_SECONDS=86400
 BACKUP_INTERVAL_SECONDS=86400
+ADMIN_NOTIFY_STARTUP_SUCCESS=True
+HEALTHCHECK_INTERVAL_SECONDS=300
+ADMIN_ALERT_COOLDOWN_SECONDS=1800
+BITGET_ALERT_FAILURE_THRESHOLD=3
+BITGET_ALERT_WINDOW_SECONDS=600
+BACKUP_STALE_HOURS=36
+MAINTENANCE_STALE_HOURS=36
 """
     
     key = KeyGenerator.generate_key()

@@ -91,6 +91,9 @@ class FakeAdminHandler(AdminHandlersMixin):
             }
         }
         self.user = SimpleNamespace(telegram_id=123)
+        self.user_repo = SimpleNamespace(db=SimpleNamespace())
+        self.system_log_repo = SimpleNamespace()
+        self.started_at = None
 
     async def _get_or_create_user(self, update):
         return self.user
@@ -205,3 +208,32 @@ def test_clear_channel_topic_by_display_number(monkeypatch):
 
     assert channel_repo.topic_cleared_chat_id == "-1001"
     assert "指定话题已清除" in update.message.replies[-1]["text"]
+
+
+def test_admin_health_rejects_non_admin(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "999")
+    handler = FakeAdminHandler(FakeChannelRepo())
+    update = make_update("")
+
+    asyncio.run(handler.admin_health_command(update, make_context()))
+
+    assert update.message.replies[-1]["text"] == "❌ 您没有管理员权限"
+
+
+def test_admin_health_replies_report(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+
+    async def fake_build_admin_health_report(**kwargs):
+        return "🩺 **系统健康检查**\n\nDB：✅ 正常", {"db_ok": True}
+
+    monkeypatch.setattr(
+        "app.bot_admin_handlers.build_admin_health_report",
+        fake_build_admin_health_report,
+    )
+    handler = FakeAdminHandler(FakeChannelRepo())
+    update = make_update("")
+
+    asyncio.run(handler.admin_health_command(update, make_context()))
+
+    assert "系统健康检查" in update.message.replies[-1]["text"]
+    assert update.message.replies[-1]["kwargs"]["parse_mode"] == "Markdown"

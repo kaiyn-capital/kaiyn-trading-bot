@@ -3,6 +3,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 class Config:
     # Telegram Bot
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -36,6 +44,13 @@ class Config:
     RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "30"))
     MAINTENANCE_INTERVAL_SECONDS = int(os.getenv("MAINTENANCE_INTERVAL_SECONDS", "86400"))
     BACKUP_INTERVAL_SECONDS = int(os.getenv("BACKUP_INTERVAL_SECONDS", "86400"))
+    ADMIN_NOTIFY_STARTUP_SUCCESS = _env_bool("ADMIN_NOTIFY_STARTUP_SUCCESS", True)
+    HEALTHCHECK_INTERVAL_SECONDS = int(os.getenv("HEALTHCHECK_INTERVAL_SECONDS", "300"))
+    ADMIN_ALERT_COOLDOWN_SECONDS = int(os.getenv("ADMIN_ALERT_COOLDOWN_SECONDS", "1800"))
+    BITGET_ALERT_FAILURE_THRESHOLD = int(os.getenv("BITGET_ALERT_FAILURE_THRESHOLD", "3"))
+    BITGET_ALERT_WINDOW_SECONDS = int(os.getenv("BITGET_ALERT_WINDOW_SECONDS", "600"))
+    BACKUP_STALE_HOURS = int(os.getenv("BACKUP_STALE_HOURS", "36"))
+    MAINTENANCE_STALE_HOURS = int(os.getenv("MAINTENANCE_STALE_HOURS", "36"))
     
     # Trading Limits
     MAX_DAILY_TRADES = int(os.getenv("MAX_DAILY_TRADES", "10"))

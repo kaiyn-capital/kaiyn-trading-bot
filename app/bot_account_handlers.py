@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 class AccountHandlersMixin:
+    async def _record_bitget_failure_alert(
+        self, classified_error, source: str, details: dict | None = None
+    ):
+        return None
+
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start."""
         user = await self._get_or_create_user(update)
@@ -75,6 +80,9 @@ class AccountHandlersMixin:
         except Exception as e:
             logger.error(f"Status check failed: {e}")
             classified = classify_bitget_exception(e)
+            await self._record_bitget_failure_alert(
+                classified, "status_command", {"telegram_id": user.telegram_id}
+            )
             await update.message.reply_text(f"❌ {classified.user_message}")
 
     async def balance_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -127,6 +135,9 @@ class AccountHandlersMixin:
         except Exception as e:
             logger.error(f"Balance check failed: {e}")
             classified = classify_bitget_exception(e)
+            await self._record_bitget_failure_alert(
+                classified, "balance_command", {"telegram_id": user.telegram_id}
+            )
             await update.message.reply_text(f"❌ {classified.user_message}")
 
     async def set_api_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -293,6 +304,9 @@ class AccountHandlersMixin:
         except Exception as e:
             logger.error(f"API setup failed: {e}")
             classified = classify_bitget_exception(e)
+            await self._record_bitget_failure_alert(
+                classified, "set_passphrase", {"telegram_id": user.telegram_id}
+            )
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text=f"❌ {classified.user_message}",
@@ -464,6 +478,9 @@ class AccountHandlersMixin:
 
         except Exception as e:
             classified = classify_bitget_exception(e)
+            await self._record_bitget_failure_alert(
+                classified, "status_callback", {"telegram_id": user.telegram_id}
+            )
             await query.edit_message_text(f"❌ {classified.user_message}")
 
     async def _handle_balance_callback(self, query, user):
@@ -505,6 +522,9 @@ class AccountHandlersMixin:
 
         except Exception as e:
             classified = classify_bitget_exception(e)
+            await self._record_bitget_failure_alert(
+                classified, "balance_callback", {"telegram_id": user.telegram_id}
+            )
             await query.edit_message_text(f"❌ {classified.user_message}")
 
     async def _handle_return_start_callback(self, query, user):

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime
 from typing import Dict, Optional
 
 from telegram import BotCommand, Update
@@ -13,6 +14,7 @@ from telegram.ext import (
     filters,
 )
 
+from .admin_alerts import AdminAlertManager
 from .bitget_api import BitgetTradeManager
 from .bot_account_handlers import AccountHandlersMixin
 from .bot_admin_handlers import AdminHandlersMixin
@@ -28,6 +30,7 @@ from .database import (
     get_user_repo,
 )
 from .encryption import create_encryption_manager
+from .health import read_backup_health, read_maintenance_health
 from .models import User
 
 logger = logging.getLogger(__name__)
@@ -48,9 +51,14 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
         self.encryption_manager = create_encryption_manager(Config.ENCRYPTION_KEY)
         self.trade_manager = BitgetTradeManager(self.encryption_manager)
+        self.started_at: Optional[datetime] = None
+        self.health_monitor_task: Optional[asyncio.Task] = None
         self.user_sessions: Dict[int, Dict] = {}
 
         self.application = Application.builder().token(self.token).build()
+        self.alert_manager = AdminAlertManager(
+            self.application.bot, self.system_log_repo
+        )
         self._setup_handlers()
 
     def _setup_handlers(self):
@@ -79,6 +87,9 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         self.application.add_handler(api_conv_handler)
 
         self.application.add_handler(CommandHandler("admin", self.admin_command))
+        self.application.add_handler(
+            CommandHandler("admin_health", self.admin_health_command)
+        )
         self.application.add_handler(
             CommandHandler("admin_users", self.admin_users_command)
         )
@@ -191,6 +202,19 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 telegram_id=user.telegram_id,
                 extra_data=details or {},
             )
+
+    async def _record_bitget_failure_alert(
+        self, classified_error, source: str, details: Optional[Dict] = None
+    ):
+        """Record a classified Bitget failure and alert admins if needed."""
+        try:
+            await self.alert_manager.record_bitget_failure(
+                classified_error,
+                source=source,
+                context=details or {},
+            )
+        except Exception as exc:
+            logger.error(f"Failed to record Bitget alert: {exc}")
 
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Route all inline keyboard callbacks."""
@@ -307,15 +331,27 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             )
 
             logger.info("Telegram bot started successfully")
+            self.started_at = datetime.utcnow()
+            await self.alert_manager.alert_startup_success()
+            self.health_monitor_task = asyncio.create_task(
+                self._health_monitor_loop()
+            )
 
         except Exception as e:
             logger.error(f"Failed to start bot: {e}")
+            await self.alert_manager.alert_startup_failure(e)
             raise
 
     async def stop(self):
         """Stop the Telegram bot."""
         try:
             logger.info("Stopping Telegram bot...")
+            if self.health_monitor_task:
+                self.health_monitor_task.cancel()
+                try:
+                    await self.health_monitor_task
+                except asyncio.CancelledError:
+                    pass
 
             await self.application.updater.stop()
             await self.application.stop()
@@ -328,6 +364,33 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
         except Exception as e:
             logger.error(f"Error stopping bot: {e}")
+
+    async def _health_monitor_loop(self):
+        """Run lightweight periodic health checks."""
+        while True:
+            await asyncio.sleep(Config.HEALTHCHECK_INTERVAL_SECONDS)
+            await self._run_health_monitor_once()
+
+    async def _run_health_monitor_once(self):
+        """Check service health and send admin alerts for important failures."""
+        try:
+            db_ok = await self.user_repo.db.health_check()
+            if not db_ok:
+                await self.alert_manager.alert_db_failure("health_monitor")
+                return
+
+            backup_health = read_backup_health()
+            if backup_health.is_problem:
+                await self.alert_manager.alert_backup_problem(backup_health.message)
+
+            maintenance_health = await read_maintenance_health(self.system_log_repo)
+            if maintenance_health.is_problem:
+                await self.alert_manager.alert_maintenance_problem(
+                    maintenance_health.message
+                )
+        except Exception as exc:
+            logger.error(f"Health monitor failed: {exc}")
+            await self.alert_manager.alert_db_failure("health_monitor", exc)
 
 
 def create_bot() -> TelegramBot:

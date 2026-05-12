@@ -6,6 +6,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from .config import Config
+from .health import build_admin_health_report
 
 logger = logging.getLogger(__name__)
 
@@ -487,6 +488,7 @@ class AdminHandlersMixin:
             admin_text += f"• `/send_to_channel` - 发送到指定频道\n"
             admin_text += f"• `/set_channel_topic` - 设置频道指定话题\n"
             admin_text += f"• `/clear_channel_topic` - 清除频道指定话题\n"
+            admin_text += f"• `/admin_health` - 查看系统健康状态\n"
             admin_text += f"• `/add_trader` - 添加交易员"
 
             await update.message.reply_text(admin_text, parse_mode="Markdown")
@@ -495,6 +497,27 @@ class AdminHandlersMixin:
             logger.error(f"Admin command error: {e}")
             traceback.print_exc()
             await update.message.reply_text(f"❌ 获取管理信息时发生错误: {str(e)}")
+
+    async def admin_health_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Show health details for admins."""
+        user = await self._get_or_create_user(update)
+
+        if not Config.is_admin(user.telegram_id):
+            await update.message.reply_text("❌ 您没有管理员权限")
+            return
+
+        try:
+            report, _status = await build_admin_health_report(
+                db_manager=self.user_repo.db,
+                system_log_repo=self.system_log_repo,
+                started_at=getattr(self, "started_at", None),
+            )
+            await update.message.reply_text(report, parse_mode="Markdown")
+        except Exception as e:
+            logger.error(f"Admin health command error: {e}")
+            await update.message.reply_text(f"❌ 获取健康状态时发生错误: {str(e)}")
 
     async def _handle_add_new_channel_callback(self, query, user):
         await query.edit_message_text(

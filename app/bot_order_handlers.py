@@ -28,6 +28,11 @@ logger = logging.getLogger(__name__)
 
 
 class OrderHandlersMixin:
+    async def _record_bitget_failure_alert(
+        self, classified_error, source: str, details: dict | None = None
+    ):
+        return None
+
     async def send_signal_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
@@ -212,6 +217,15 @@ class OrderHandlersMixin:
         except Exception as e:
             classified = classify_bitget_exception(e)
             logger.error(f"Place order callback error: {classified.storage_message()}")
+            await self._record_bitget_failure_alert(
+                classified,
+                "_handle_place_order_callback",
+                {
+                    "telegram_id": user.telegram_id,
+                    "symbol": callback_data.symbol,
+                    "order_mode": callback_data.order_mode,
+                },
+            )
             await self._send_private_message(
                 query,
                 user,
@@ -444,6 +458,17 @@ class OrderHandlersMixin:
         except Exception as e:
             classified = classify_bitget_exception(e)
             logger.error(f"Order execution error: {classified.storage_message()}")
+            await self._record_bitget_failure_alert(
+                classified,
+                "_execute_order",
+                {
+                    "telegram_id": user.telegram_id,
+                    "symbol": symbol,
+                    "direction": direction,
+                    "order_mode": order_mode,
+                    "pending_order_token": pending_order_token,
+                },
+            )
             if pending_order_token:
                 await self.pending_order_repo.mark_failed(
                     pending_order_token, classified.storage_message()
