@@ -604,6 +604,36 @@ class ChannelRepository:
                 return False
 
             channel.is_active = False
+            channel.updated_at = datetime.utcnow()
+            return True
+
+    async def reactivate_channel(
+        self,
+        chat_id: str,
+        chat_type: str,
+        title: str,
+        username: Optional[str],
+        added_by_user_id: int,
+        description: Optional[str] = None,
+    ) -> bool:
+        """Reactivate a soft-deleted channel and refresh its metadata."""
+        async with self.db.get_session() as session:
+            result = await session.execute(
+                select(ChannelGroup).where(ChannelGroup.chat_id == chat_id)
+            )
+            channel = result.scalar_one_or_none()
+            if not channel:
+                return False
+
+            channel.chat_type = chat_type
+            channel.title = title
+            channel.username = username
+            channel.added_by_user_id = added_by_user_id
+            channel.description = description
+            channel.is_active = True
+            channel.auto_forward_signals = True
+            channel.forward_with_buttons = True
+            channel.updated_at = datetime.utcnow()
             return True
 
     async def count_active_channels(self) -> int:
