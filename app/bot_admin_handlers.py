@@ -320,6 +320,103 @@ class AdminHandlersMixin:
                 f"错误详情：{str(e)}"
             )
 
+    async def set_channel_topic_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Set a default Telegram topic for signal forwarding."""
+        user = await self._get_or_create_user(update)
+
+        if not Config.is_admin(user.telegram_id):
+            await update.message.reply_text("❌ 您没有管理员权限")
+            return
+
+        if len(context.args) < 2:
+            await update.message.reply_text(
+                "📌 **设置频道指定话题**\n\n"
+                "使用方法：\n"
+                "`/set_channel_topic 频道编号 topic_id [话题名称]`\n\n"
+                "例如：\n"
+                "`/set_channel_topic 1 12345 交易信号`",
+                parse_mode="Markdown",
+            )
+            return
+
+        try:
+            channel_index = int(context.args[0])
+            message_thread_id = int(context.args[1])
+            if channel_index <= 0 or message_thread_id <= 0:
+                raise ValueError
+        except ValueError:
+            await update.message.reply_text("❌ 频道编号和 topic_id 必须是正整数")
+            return
+
+        thread_title = " ".join(context.args[2:]).strip() or None
+        channel = await self._get_active_channel_by_number(channel_index)
+        if not channel:
+            await update.message.reply_text("❌ 无效的频道编号，请先使用 /admin_channels 查看列表")
+            return
+
+        success = await self.channel_repo.update_channel_topic(
+            channel["chat_id"], message_thread_id, thread_title
+        )
+        if not success:
+            await update.message.reply_text("❌ 设置指定话题失败，请稍后重试")
+            return
+
+        display_title = thread_title or str(message_thread_id)
+        await update.message.reply_text(
+            f"✅ <b>指定话题已设置</b>\n\n"
+            f"<b>频道：</b> {self._escape_html(str(channel['title'] or 'Unknown'))}\n"
+            f"<b>Topic ID：</b> <code>{message_thread_id}</code>\n"
+            f"<b>话题名称：</b> {self._escape_html(display_title)}",
+            parse_mode="HTML",
+        )
+
+    async def clear_channel_topic_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Clear a default Telegram topic for signal forwarding."""
+        user = await self._get_or_create_user(update)
+
+        if not Config.is_admin(user.telegram_id):
+            await update.message.reply_text("❌ 您没有管理员权限")
+            return
+
+        if len(context.args) != 1:
+            await update.message.reply_text(
+                "📌 **清除频道指定话题**\n\n"
+                "使用方法：\n"
+                "`/clear_channel_topic 频道编号`\n\n"
+                "例如：\n"
+                "`/clear_channel_topic 1`",
+                parse_mode="Markdown",
+            )
+            return
+
+        try:
+            channel_index = int(context.args[0])
+            if channel_index <= 0:
+                raise ValueError
+        except ValueError:
+            await update.message.reply_text("❌ 频道编号必须是正整数")
+            return
+
+        channel = await self._get_active_channel_by_number(channel_index)
+        if not channel:
+            await update.message.reply_text("❌ 无效的频道编号，请先使用 /admin_channels 查看列表")
+            return
+
+        success = await self.channel_repo.clear_channel_topic(channel["chat_id"])
+        if not success:
+            await update.message.reply_text("❌ 清除指定话题失败，请稍后重试")
+            return
+
+        await update.message.reply_text(
+            f"✅ <b>指定话题已清除</b>\n\n"
+            f"<b>频道：</b> {self._escape_html(str(channel['title'] or 'Unknown'))}",
+            parse_mode="HTML",
+        )
+
     async def send_to_channel_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
@@ -388,6 +485,8 @@ class AdminHandlersMixin:
             admin_text += f"• `/admin_broadcast` - 广播消息\n"
             admin_text += f"• `/send_signal` - 发送交易信号\n"
             admin_text += f"• `/send_to_channel` - 发送到指定频道\n"
+            admin_text += f"• `/set_channel_topic` - 设置频道指定话题\n"
+            admin_text += f"• `/clear_channel_topic` - 清除频道指定话题\n"
             admin_text += f"• `/add_trader` - 添加交易员"
 
             await update.message.reply_text(admin_text, parse_mode="Markdown")
@@ -511,10 +610,23 @@ class AdminHandlersMixin:
             channels_text += f"   ID: `{channel['chat_id']}`\n"
             if username:
                 channels_text += f"   用户名: @{username}\n"
-            channels_text += f"   自动转发: {'开启' if channel['auto_forward_signals'] else '关闭'}\n\n"
+            channels_text += f"   自动转发: {'开启' if channel['auto_forward_signals'] else '关闭'}\n"
+            channels_text += f"   指定话题: {self._format_channel_topic(channel)}\n\n"
 
         channels_text_html = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", channels_text)
         return re.sub(r"`(.*?)`", r"<code>\1</code>", channels_text_html)
 
     def _escape_html(self, text: str) -> str:
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    async def _get_active_channel_by_number(self, channel_number: int):
+        channels = await self.channel_repo.get_active_channels()
+        if channel_number < 1 or channel_number > len(channels):
+            return None
+        return channels[channel_number - 1]
+
+    def _format_channel_topic(self, channel) -> str:
+        message_thread_id = channel.get("message_thread_id")
+        if not message_thread_id:
+            return "未设置"
+        return self._escape_html(str(channel.get("thread_title") or message_thread_id))

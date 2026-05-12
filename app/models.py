@@ -209,6 +209,8 @@ class ChannelGroup(Base):
     is_active = Column(Boolean, default=True)
     auto_forward_signals = Column(Boolean, default=True)  # 自動轉發交易信號
     forward_with_buttons = Column(Boolean, default=True)  # 轉發時包含交易按鈕
+    message_thread_id = Column(Integer, nullable=True)  # Telegram forum topic ID
+    thread_title = Column(String, nullable=True)  # 管理員填寫的話題備註名稱
 
     # 管理信息
     added_by_user_id = Column(Integer, nullable=False)  # 添加此頻道的管理員 ID

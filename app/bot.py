@@ -98,6 +98,12 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             CommandHandler("send_to_channel", self.send_to_channel_command)
         )
         self.application.add_handler(
+            CommandHandler("set_channel_topic", self.set_channel_topic_command)
+        )
+        self.application.add_handler(
+            CommandHandler("clear_channel_topic", self.clear_channel_topic_command)
+        )
+        self.application.add_handler(
             CommandHandler("add_trader", self.add_trader_command)
         )
 

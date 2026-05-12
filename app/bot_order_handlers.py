@@ -70,17 +70,25 @@ class OrderHandlersMixin:
                             if channel_data["forward_with_buttons"]
                             else None
                         )
+                        send_kwargs = {}
+                        if channel_data.get("message_thread_id"):
+                            send_kwargs["message_thread_id"] = channel_data[
+                                "message_thread_id"
+                            ]
 
                         await context.bot.send_message(
                             chat_id=channel_data["chat_id"],
                             text=signal_text,
                             reply_markup=channel_markup,
                             parse_mode="Markdown",
+                            **send_kwargs,
                         )
                         sent_to_channels += 1
                     except Exception as e:
                         logger.warning(
-                            f"Failed to send signal to channel {channel_data['chat_id']}: {e}"
+                            "Failed to send signal to channel "
+                            f"{channel_data['chat_id']} "
+                            f"thread={channel_data.get('message_thread_id')}: {e}"
                         )
 
             except Exception as e:

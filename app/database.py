@@ -530,6 +530,8 @@ class ChannelRepository:
         username: Optional[str],
         added_by_user_id: int,
         description: Optional[str] = None,
+        message_thread_id: Optional[int] = None,
+        thread_title: Optional[str] = None,
     ) -> ChannelGroup:
         """創建頻道記錄"""
         async with self.db.get_session() as session:
@@ -540,6 +542,8 @@ class ChannelRepository:
                 username=username,
                 added_by_user_id=added_by_user_id,
                 description=description,
+                message_thread_id=message_thread_id,
+                thread_title=thread_title,
             )
             session.add(channel)
             await session.flush()
@@ -615,6 +619,8 @@ class ChannelRepository:
         username: Optional[str],
         added_by_user_id: int,
         description: Optional[str] = None,
+        message_thread_id: Optional[int] = None,
+        thread_title: Optional[str] = None,
     ) -> bool:
         """Reactivate a soft-deleted channel and refresh its metadata."""
         async with self.db.get_session() as session:
@@ -630,9 +636,49 @@ class ChannelRepository:
             channel.username = username
             channel.added_by_user_id = added_by_user_id
             channel.description = description
+            channel.message_thread_id = message_thread_id
+            channel.thread_title = thread_title
             channel.is_active = True
             channel.auto_forward_signals = True
             channel.forward_with_buttons = True
+            channel.updated_at = datetime.utcnow()
+            return True
+
+    async def update_channel_topic(
+        self, chat_id: str, message_thread_id: int, thread_title: Optional[str] = None
+    ) -> bool:
+        """Set the default Telegram topic for signal forwarding."""
+        async with self.db.get_session() as session:
+            result = await session.execute(
+                select(ChannelGroup).where(
+                    ChannelGroup.chat_id == chat_id,
+                    ChannelGroup.is_active == True,
+                )
+            )
+            channel = result.scalar_one_or_none()
+            if not channel:
+                return False
+
+            channel.message_thread_id = message_thread_id
+            channel.thread_title = thread_title
+            channel.updated_at = datetime.utcnow()
+            return True
+
+    async def clear_channel_topic(self, chat_id: str) -> bool:
+        """Clear the default Telegram topic for signal forwarding."""
+        async with self.db.get_session() as session:
+            result = await session.execute(
+                select(ChannelGroup).where(
+                    ChannelGroup.chat_id == chat_id,
+                    ChannelGroup.is_active == True,
+                )
+            )
+            channel = result.scalar_one_or_none()
+            if not channel:
+                return False
+
+            channel.message_thread_id = None
+            channel.thread_title = None
             channel.updated_at = datetime.utcnow()
             return True
 
@@ -681,6 +727,8 @@ def channel_to_dict(channel: ChannelGroup) -> dict:
         "is_active": channel.is_active,
         "auto_forward_signals": channel.auto_forward_signals,
         "forward_with_buttons": channel.forward_with_buttons,
+        "message_thread_id": channel.message_thread_id,
+        "thread_title": channel.thread_title,
         "added_by_user_id": channel.added_by_user_id,
         "description": channel.description,
         "created_at": channel.created_at,
