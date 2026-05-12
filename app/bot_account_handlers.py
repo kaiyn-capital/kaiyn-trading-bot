@@ -3,7 +3,7 @@ import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler
 
-from .bitget_api import BitgetAPIError
+from .bitget_errors import classify_bitget_exception
 from .bot_keyboards import (
     main_menu_keyboard,
     status_actions_keyboard,
@@ -74,7 +74,8 @@ class AccountHandlersMixin:
 
         except Exception as e:
             logger.error(f"Status check failed: {e}")
-            await update.message.reply_text("❌ 检查状态时发生错误，请稍后再试。")
+            classified = classify_bitget_exception(e)
+            await update.message.reply_text(f"❌ {classified.user_message}")
 
     async def balance_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /balance."""
@@ -123,12 +124,10 @@ class AccountHandlersMixin:
             else:
                 await update.message.reply_text("❌ 获取余额失败，请检查 API 设置。")
 
-        except BitgetAPIError as e:
-            logger.error(f"Bitget API error: {e}")
-            await update.message.reply_text(f"❌ API 错误: {e.message}")
         except Exception as e:
             logger.error(f"Balance check failed: {e}")
-            await update.message.reply_text("❌ 查询余额时发生错误，请稍后再试。")
+            classified = classify_bitget_exception(e)
+            await update.message.reply_text(f"❌ {classified.user_message}")
 
     async def set_api_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Start API setup."""
@@ -293,9 +292,10 @@ class AccountHandlersMixin:
 
         except Exception as e:
             logger.error(f"API setup failed: {e}")
+            classified = classify_bitget_exception(e)
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text="❌ 设置过程中发生错误，请稍后重试。",
+                text=f"❌ {classified.user_message}",
             )
 
         finally:
@@ -462,8 +462,9 @@ class AccountHandlersMixin:
                     f"❌ **API 连接失败**\n\n{message}", parse_mode="Markdown"
                 )
 
-        except Exception:
-            await query.edit_message_text("❌ 检查状态时发生错误")
+        except Exception as e:
+            classified = classify_bitget_exception(e)
+            await query.edit_message_text(f"❌ {classified.user_message}")
 
     async def _handle_balance_callback(self, query, user):
         """Handle balance callback."""
@@ -502,8 +503,9 @@ class AccountHandlersMixin:
             else:
                 await query.edit_message_text("❌ 获取余额失败")
 
-        except Exception:
-            await query.edit_message_text("❌ 查询余额时发生错误")
+        except Exception as e:
+            classified = classify_bitget_exception(e)
+            await query.edit_message_text(f"❌ {classified.user_message}")
 
     async def _handle_return_start_callback(self, query, user):
         """Handle return-to-start callback."""

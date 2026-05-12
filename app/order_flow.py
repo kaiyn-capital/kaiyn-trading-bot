@@ -3,6 +3,8 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from typing import Optional, Sequence
 
+from .bitget_errors import classify_bitget_exception
+
 
 @dataclass(frozen=True)
 class SignalDraft:
@@ -491,11 +493,12 @@ async def execute_order(
         )
 
     except Exception as exc:
+        classified = classify_bitget_exception(exc)
         if trade_record_id is not None:
             await trade_repo.update_trade_result(
                 trade_record_id,
                 bitget_order_id=None,
                 status="failed",
-                error_message=str(exc),
+                error_message=classified.storage_message(),
             )
         raise

@@ -10,6 +10,7 @@ import logging
 
 from .config import Config
 from .encryption import EncryptionManager
+from .bitget_errors import classify_bitget_exception
 
 logger = logging.getLogger(__name__)
 
@@ -83,26 +84,38 @@ class BitgetAPIClient:
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
             
-            # 不要直接raise_for_status，而是先解析響應體獲取Bitget錯誤碼
             try:
                 result = response.json()
-            except Exception as json_error:
-                # 如果無法解析JSON，則拋出HTTP錯誤
-                response.raise_for_status()
-                raise json_error
+            except Exception:
+                raise BitgetAPIError(
+                    code=str(response.status_code),
+                    message=f"Invalid JSON response from Bitget HTTP {response.status_code}",
+                    data={"response": response.text[:1000]},
+                    http_status=response.status_code,
+                    endpoint=endpoint,
+                    method=method,
+                )
             
-            # 檢查 API 回應狀態
             if result.get('code') != '00000':
-                # 這裡直接拋出包含真實Bitget錯誤碼的異常
                 raise BitgetAPIError(
                     code=result.get('code'),
                     message=result.get('msg', 'Unknown error'),
-                    data=result
+                    data=result,
+                    http_status=response.status_code,
+                    endpoint=endpoint,
+                    method=method,
                 )
             
-            # 如果code是'00000'但HTTP狀態碼不是200，也檢查一下
             if response.status_code >= 400:
                 logger.warning(f"HTTP {response.status_code} but Bitget code is 00000: {result}")
+                raise BitgetAPIError(
+                    code=str(response.status_code),
+                    message=f"HTTP {response.status_code}",
+                    data=result,
+                    http_status=response.status_code,
+                    endpoint=endpoint,
+                    method=method,
+                )
             
             return result
             
@@ -117,7 +130,10 @@ class BitgetAPIClient:
                     raise BitgetAPIError(
                         code=error_data.get('code'),
                         message=error_data.get('msg', 'Unknown error'),
-                        data=error_data
+                        data=error_data,
+                        http_status=e.response.status_code,
+                        endpoint=endpoint,
+                        method=method,
                     )
             except BitgetAPIError:
                 # 重新拋出 BitgetAPIError
@@ -130,7 +146,28 @@ class BitgetAPIClient:
             raise BitgetAPIError(
                 code=str(e.response.status_code),
                 message=f"HTTP {e.response.status_code}",
-                data={'response': e.response.text}
+                data={'response': e.response.text},
+                http_status=e.response.status_code,
+                endpoint=endpoint,
+                method=method,
+            )
+        except httpx.TimeoutException as e:
+            logger.error(f"Bitget request timeout: {method} {endpoint}: {e}")
+            raise BitgetAPIError(
+                code="timeout",
+                message="Bitget request timeout",
+                data={"error": str(e)},
+                endpoint=endpoint,
+                method=method,
+            )
+        except httpx.RequestError as e:
+            logger.error(f"Bitget network request error: {method} {endpoint}: {e}")
+            raise BitgetAPIError(
+                code="network_error",
+                message="Bitget network request error",
+                data={"error": str(e)},
+                endpoint=endpoint,
+                method=method,
             )
         except Exception as e:
             logger.error(f"Request error: {e}")
@@ -257,10 +294,21 @@ class BitgetAPIClient:
 class BitgetAPIError(Exception):
     """Bitget API 錯誤"""
     
-    def __init__(self, code: str, message: str, data: Dict = None):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        data: Dict = None,
+        http_status: int = None,
+        endpoint: str = None,
+        method: str = None,
+    ):
         self.code = code
         self.message = message
         self.data = data or {}
+        self.http_status = http_status
+        self.endpoint = endpoint
+        self.method = method
         super().__init__(f"Bitget API Error [{code}]: {message}")
 
 class BitgetTradeManager:
@@ -282,19 +330,12 @@ class BitgetTradeManager:
     
     async def test_api_connection(self, encrypted_credentials: Tuple[str, str, str]) -> Tuple[bool, str]:
         """測試 API 連接"""
+        client = None
         try:
             api_key, secret_key, passphrase = self.encryption_manager.decrypt_api_credentials(*encrypted_credentials)
             client = BitgetAPIClient(api_key, secret_key, passphrase)
             
-            # 使用更簡單的API端點測試連接
-            try:
-                # 先嘗試獲取合約帳戶資產
-                result = await client.get_account_assets()
-            except Exception:
-                # 如果合約API失敗，嘗試獲取合約交易對（公開API）
-                result = await client.get_symbols()
-            
-            await client.close()
+            result = await client.get_account_assets()
             
             if result.get('code') == '00000':
                 return True, "API 連接成功"
@@ -302,10 +343,15 @@ class BitgetTradeManager:
                 return False, f"API 錯誤: {result.get('msg', 'Unknown error')}"
                 
         except BitgetAPIError as e:
-            return False, f"API 錯誤: {e.message}"
+            classified = classify_bitget_exception(e)
+            return False, classified.user_message
         except Exception as e:
             logger.error(f"API 連接測試失敗: {e}")
-            return False, f"連接失敗: {str(e)}"
+            classified = classify_bitget_exception(e)
+            return False, classified.user_message
+        finally:
+            if client:
+                await client.close()
     
     async def get_account_balance(self, user_id: int, encrypted_credentials: Tuple[str, str, str]) -> Dict:
         """獲取帳戶餘額"""
@@ -357,20 +403,58 @@ class BitgetTradeManager:
                         # 如果沒找到指定symbol，拋出錯誤
                         error_msg = f"Symbol {symbol} not found in Bitget futures contracts"
                         logger.error(error_msg)
-                        raise Exception(error_msg)
+                        raise BitgetAPIError(
+                            code="symbol_not_found",
+                            message=error_msg,
+                            data={"symbol": symbol},
+                            endpoint="/api/v2/mix/market/tickers",
+                            method="GET",
+                        )
                     else:
                         error_msg = f"API returned error: {data}"
                         logger.error(error_msg)
-                        raise Exception(error_msg)
+                        raise BitgetAPIError(
+                            code=data.get("code"),
+                            message=data.get("msg", error_msg),
+                            data=data,
+                            http_status=response.status_code,
+                            endpoint="/api/v2/mix/market/tickers",
+                            method="GET",
+                        )
                 else:
                     error_msg = f"HTTP {response.status_code}: {response.text}"
                     logger.error(error_msg)
-                    raise Exception(error_msg)
+                    raise BitgetAPIError(
+                        code=str(response.status_code),
+                        message=error_msg,
+                        data={"response": response.text[:1000]},
+                        http_status=response.status_code,
+                        endpoint="/api/v2/mix/market/tickers",
+                        method="GET",
+                    )
                     
             except httpx.TimeoutException as e:
                 error_msg = f"Request timeout for {symbol}: {e}"
                 logger.error(error_msg)
-                raise Exception(error_msg)
+                raise BitgetAPIError(
+                    code="timeout",
+                    message=error_msg,
+                    data={"symbol": symbol},
+                    endpoint="/api/v2/mix/market/tickers",
+                    method="GET",
+                )
+            except httpx.RequestError as e:
+                error_msg = f"Network error for {symbol}: {e}"
+                logger.error(error_msg)
+                raise BitgetAPIError(
+                    code="network_error",
+                    message=error_msg,
+                    data={"symbol": symbol},
+                    endpoint="/api/v2/mix/market/tickers",
+                    method="GET",
+                )
+            except BitgetAPIError:
+                raise
             except Exception as e:
                 error_msg = f"Failed to get futures market price for {symbol}: {e}"
                 logger.error(error_msg)
@@ -458,8 +542,33 @@ class BitgetTradeManager:
                     }
                     return contracts
                 else:
-                    raise Exception("Failed to get futures trading pairs")
+                    raise BitgetAPIError(
+                        code=data.get("code"),
+                        message=data.get("msg", "Failed to get futures trading pairs"),
+                        data=data,
+                        http_status=response.status_code,
+                        endpoint="/api/v2/mix/market/contracts",
+                        method="GET",
+                    )
                     
+            except httpx.TimeoutException as e:
+                logger.error(f"Timeout getting futures trading pairs: {e}")
+                raise BitgetAPIError(
+                    code="timeout",
+                    message="Bitget request timeout",
+                    data={"product_type": product_type},
+                    endpoint="/api/v2/mix/market/contracts",
+                    method="GET",
+                )
+            except httpx.RequestError as e:
+                logger.error(f"Network error getting futures trading pairs: {e}")
+                raise BitgetAPIError(
+                    code="network_error",
+                    message="Bitget network request error",
+                    data={"product_type": product_type},
+                    endpoint="/api/v2/mix/market/contracts",
+                    method="GET",
+                )
             except Exception as e:
                 logger.error(f"Failed to get futures trading pairs: {e}")
                 raise

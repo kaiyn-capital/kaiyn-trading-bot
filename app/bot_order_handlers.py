@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from .bitget_errors import classify_bitget_exception
 from .bot_keyboards import pending_order_keyboard, signal_order_keyboard
 from .bot_messages import (
     order_preview_message,
@@ -209,11 +210,13 @@ class OrderHandlersMixin:
             )
 
         except Exception as e:
-            logger.error(f"Place order callback error: {e}")
+            classified = classify_bitget_exception(e)
+            logger.error(f"Place order callback error: {classified.storage_message()}")
             await self._send_private_message(
                 query,
                 user,
-                f"❌ 无法获取 {callback_data.symbol} 当前价格或交易规则：{str(e)}",
+                f"❌ 无法获取 {callback_data.symbol} 当前价格或交易规则。\n\n"
+                f"{classified.user_message}",
             )
 
     async def _send_private_message(self, query, user, text, reply_markup=None):
@@ -439,13 +442,38 @@ class OrderHandlersMixin:
             return True
 
         except Exception as e:
-            logger.error(f"Order execution error: {e}")
+            classified = classify_bitget_exception(e)
+            logger.error(f"Order execution error: {classified.storage_message()}")
             if pending_order_token:
-                await self.pending_order_repo.mark_failed(pending_order_token, str(e))
+                await self.pending_order_repo.mark_failed(
+                    pending_order_token, classified.storage_message()
+                )
+
+            try:
+                await self.system_log_repo.log(
+                    level="ERROR",
+                    message="Bitget order execution failed",
+                    module="telegram_bot",
+                    function="_execute_order",
+                    user_id=getattr(user, "id", None),
+                    telegram_id=user.telegram_id,
+                    extra_data={
+                        "symbol": symbol,
+                        "direction": direction,
+                        "quantity": quantity,
+                        "position_value": position_value,
+                        "order_mode": order_mode,
+                        "limit_price": limit_price,
+                        "pending_order_token": pending_order_token,
+                        "classified_error": classified.to_log_data(),
+                    },
+                )
+            except Exception as log_error:
+                logger.error(f"Failed to log Bitget order error: {log_error}")
 
             await self._send_private_message(
                 query,
                 user,
-                f"❌ **执行下单时发生错误**\n\n错误详情：{str(e)}\n\n请检查API设置或联系支持。",
+                f"❌ **下单失败**\n\n{classified.user_message}",
             )
             return False

@@ -1,17 +1,5 @@
 import asyncio
-import sys
 from types import SimpleNamespace
-
-# Keep this handler test independent from the local cryptography wheel.
-class FakeBitgetAPIError(Exception):
-    def __init__(self, message=""):
-        super().__init__(message)
-        self.message = message
-
-
-sys.modules.setdefault(
-    "app.bitget_api", SimpleNamespace(BitgetAPIError=FakeBitgetAPIError)
-)
 
 from app.bot_account_handlers import AccountHandlersMixin
 from app.bot_states import WAITING_API_KEY, WAITING_PASSPHRASE, WAITING_SECRET_KEY
