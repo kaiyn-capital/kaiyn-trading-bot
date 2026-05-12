@@ -18,5 +18,14 @@ dependencies = [
     "python-dotenv==1.0.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+]
+
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

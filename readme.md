@@ -97,6 +97,22 @@ BACKUP_INTERVAL_SECONDS=86400
 
 `DATABASE_URL` 必須使用 `postgresql+asyncpg://`。此專案不再支援 SQLite fallback。
 
+## 本地開發與測試
+
+安裝開發測試依賴：
+
+```bash
+pip install -e ".[dev]"
+```
+
+執行純邏輯測試：
+
+```bash
+python3 -m pytest
+```
+
+目前測試範圍限於純函式與交易防呆，不會連線 Telegram、不會呼叫 Bitget 真實 API，也不需要 PostgreSQL。
+
 ## 本地與部署流程
 
 本地測試與 VPS 部署使用同一套 Docker Compose 流程。
@@ -304,6 +320,8 @@ Pending order 狀態：
 本輪不做壓測或大量模擬測試。基本驗證流程：
 
 ```bash
+python3 -m pytest
+python3 -m py_compile app/*.py alembic/env.py alembic/versions/*.py
 docker compose build
 docker compose up -d postgres
 docker compose run --rm bot alembic upgrade head

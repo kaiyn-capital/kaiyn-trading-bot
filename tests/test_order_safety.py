@@ -121,14 +121,3 @@ def test_limit_order_cannot_be_immediately_executable():
         current_price=80000,
     )
     assert_invalid(preview, make_rules(), "long")
-
-
-def run_all():
-    for name, func in sorted(globals().items()):
-        if name.startswith("test_"):
-            func()
-
-
-if __name__ == "__main__":
-    run_all()
-    print("order safety tests passed")

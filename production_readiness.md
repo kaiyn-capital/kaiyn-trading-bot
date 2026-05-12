@@ -105,14 +105,19 @@
 
 第五優先。不做壓測，但要補最容易出錯的核心邏輯測試。
 
-建議補強：
+已建立 pytest 輕量測試框架，範圍限於純邏輯，不打 Telegram、不打 Bitget、不需要 DB。
+
+已補強：
 
 - `/send_signal` 參數解析測試，包含備註文字。
 - Long/Short 掛單價格選擇測試。
 - 掛單價可能立即成交時切換市價確認的測試。
 - 1R 倉位計算測試。
-- pending order claim/cancel/expired 狀態轉換測試。
 - 交易安全防呆規則測試。
+
+後續可補強：
+
+- pending order claim/cancel/expired 狀態轉換測試。
 
 完成標準：
 
@@ -149,6 +154,7 @@
 每輪完成後至少跑：
 
 ```bash
+python3 -m pytest
 python3 -m py_compile app/*.py alembic/env.py alembic/versions/*.py
 git diff --check
 docker compose build bot
