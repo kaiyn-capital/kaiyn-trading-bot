@@ -72,9 +72,7 @@ class FakeUserRepo:
         self.set_trader_calls = []
 
     async def set_trader_status(self, telegram_id, is_trader):
-        self.set_trader_calls.append(
-            {"telegram_id": telegram_id, "is_trader": is_trader}
-        )
+        self.set_trader_calls.append({"telegram_id": telegram_id, "is_trader": is_trader})
         return self.set_trader_result
 
 
@@ -129,9 +127,7 @@ class FakeAdminHandler(AdminHandlersMixin):
         return self.user
 
     async def _audit_action(self, user, action, details=None):
-        self.audit_events.append(
-            {"telegram_id": user.telegram_id, "action": action, "details": details or {}}
-        )
+        self.audit_events.append({"telegram_id": user.telegram_id, "action": action, "details": details or {}})
 
     def _get_sender_username(self, update):
         return "admin"
@@ -208,11 +204,7 @@ def test_set_channel_topic_by_display_number(monkeypatch):
     handler = FakeAdminHandler(channel_repo)
     update = make_update("")
 
-    asyncio.run(
-        handler.set_channel_topic_command(
-            update, make_context_with_args(["1", "456", "交易信号"])
-        )
-    )
+    asyncio.run(handler.set_channel_topic_command(update, make_context_with_args(["1", "456", "交易信号"])))
 
     assert channel_repo.topic_updated == {
         "chat_id": "-1001",
@@ -230,11 +222,7 @@ def test_set_channel_topic_rejects_invalid_topic_id(monkeypatch):
     handler = FakeAdminHandler(channel_repo)
     update = make_update("")
 
-    asyncio.run(
-        handler.set_channel_topic_command(
-            update, make_context_with_args(["1", "not-a-number"])
-        )
-    )
+    asyncio.run(handler.set_channel_topic_command(update, make_context_with_args(["1", "not-a-number"])))
 
     assert channel_repo.topic_updated is None
     assert update.message.replies[-1]["text"] == "❌ 频道编号和 topic_id 必须是正整数"
@@ -248,9 +236,7 @@ def test_clear_channel_topic_by_display_number(monkeypatch):
     handler = FakeAdminHandler(channel_repo)
     update = make_update("")
 
-    asyncio.run(
-        handler.clear_channel_topic_command(update, make_context_with_args(["1"]))
-    )
+    asyncio.run(handler.clear_channel_topic_command(update, make_context_with_args(["1"])))
 
     assert channel_repo.topic_cleared_chat_id == "-1001"
     assert "指定话题已清除" in update.message.replies[-1]["text"]

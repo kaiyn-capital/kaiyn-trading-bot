@@ -10,9 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class AdminMessagingMixin:
-    async def admin_broadcast_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def admin_broadcast_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Broadcast a message to managed channels."""
         user = await self._get_or_create_user(update)
 
@@ -34,9 +32,7 @@ class AdminMessagingMixin:
             channels = await self.channel_repo.get_active_channels()
             sent_to_channels = 0
             failed_channels = 0
-            status_msg = await update.message.reply_text(
-                f"📤 开始广播给 {len(channels)} 个频道/群组..."
-            )
+            status_msg = await update.message.reply_text(f"📤 开始广播给 {len(channels)} 个频道/群组...")
 
             sender_username = self._get_sender_username(update)
 
@@ -49,15 +45,11 @@ class AdminMessagingMixin:
                     )
                     sent_to_channels += 1
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to send broadcast to channel {channel['chat_id']}: {e}"
-                    )
+                    logger.warning(f"Failed to send broadcast to channel {channel['chat_id']}: {e}")
                     failed_channels += 1
 
             await status_msg.edit_text(
-                f"✅ **广播完成**\n\n"
-                f"成功发送：{sent_to_channels} 个频道/群组\n"
-                f"发送失败：{failed_channels} 个频道/群组",
+                f"✅ **广播完成**\n\n成功发送：{sent_to_channels} 个频道/群组\n发送失败：{failed_channels} 个频道/群组",
                 parse_mode="Markdown",
             )
             await emit_audit_event(
@@ -87,9 +79,7 @@ class AdminMessagingMixin:
             )
             await update.message.reply_text("❌ 广播时发生错误")
 
-    async def send_to_channel_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def send_to_channel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Send a message to a specific channel."""
         user = await self._get_or_create_user(update)
 
@@ -130,9 +120,7 @@ class AdminMessagingMixin:
                 },
             )
             await update.message.reply_text(
-                f"✅ **消息已发送**\n\n"
-                f"目标频道：{chat_identifier}\n"
-                f"消息 ID：{sent_message.message_id}",
+                f"✅ **消息已发送**\n\n目标频道：{chat_identifier}\n消息 ID：{sent_message.message_id}",
                 parse_mode="Markdown",
             )
 
@@ -149,4 +137,4 @@ class AdminMessagingMixin:
                     "message": summarize_message_text(message_text),
                 },
             )
-            await update.message.reply_text(f"❌ 发送失败\n\n" f"错误：{str(e)}")
+            await update.message.reply_text(f"❌ 发送失败\n\n错误：{str(e)}")

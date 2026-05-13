@@ -164,10 +164,7 @@ def test_execute_order_handler_marks_pending_failed_and_sends_user_message():
 
     assert result is False
     assert handler.pending_order_repo.failed[-1]["token"] == "tok_123"
-    assert (
-        "category=exchange_rejected"
-        in handler.pending_order_repo.failed[-1]["error_message"]
-    )
+    assert "category=exchange_rejected" in handler.pending_order_repo.failed[-1]["error_message"]
     assert "交易所拒绝下单" in handler.private_messages[-1]
     logged_error = handler.system_log_repo.logs[-1]["extra_data"]["classified_error"]
     assert logged_error["category"] == "exchange_rejected"

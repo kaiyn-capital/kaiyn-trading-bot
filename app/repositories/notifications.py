@@ -22,9 +22,7 @@ class NotificationRepository:
     ) -> NotificationLog:
         """創建通知記錄"""
         async with self.db.get_session() as session:
-            notification = NotificationLog(
-                user_id=user_id, message_type=message_type, title=title, message=message
-            )
+            notification = NotificationLog(user_id=user_id, message_type=message_type, title=title, message=message)
 
             if extra_data:
                 notification.set_extra_data(extra_data)
@@ -49,8 +47,6 @@ class NotificationRepository:
         """獲取未發送的通知"""
         async with self.db.get_session() as session:
             result = await session.execute(
-                select(NotificationLog)
-                .where(NotificationLog.is_sent == False)
-                .order_by(NotificationLog.created_at)
+                select(NotificationLog).where(NotificationLog.is_sent.is_(False)).order_by(NotificationLog.created_at)
             )
             return list(result.scalars().all())

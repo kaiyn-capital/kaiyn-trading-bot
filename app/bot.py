@@ -58,9 +58,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         self.user_sessions: Dict[int, Dict] = {}
 
         self.application = Application.builder().token(self.token).build()
-        self.alert_manager = AdminAlertManager(
-            self.application.bot, self.system_log_repo
-        )
+        self.alert_manager = AdminAlertManager(self.application.bot, self.system_log_repo)
         self._setup_handlers()
 
     def _setup_handlers(self):
@@ -74,60 +72,30 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         api_conv_handler = ConversationHandler(
             entry_points=[CommandHandler("setapi", self.set_api_start)],
             states={
-                WAITING_API_KEY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_api_key)
-                ],
-                WAITING_SECRET_KEY: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_secret_key)
-                ],
-                WAITING_PASSPHRASE: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_passphrase)
-                ],
+                WAITING_API_KEY: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_api_key)],
+                WAITING_SECRET_KEY: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_secret_key)],
+                WAITING_PASSPHRASE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_passphrase)],
             },
             fallbacks=[],
         )
         self.application.add_handler(api_conv_handler)
 
         self.application.add_handler(CommandHandler("admin", self.admin_command))
-        self.application.add_handler(
-            CommandHandler("admin_health", self.admin_health_command)
-        )
-        self.application.add_handler(
-            CommandHandler("admin_audit", self.admin_audit_command)
-        )
-        self.application.add_handler(
-            CommandHandler("admin_users", self.admin_users_command)
-        )
-        self.application.add_handler(
-            CommandHandler("admin_broadcast", self.admin_broadcast_command)
-        )
-        self.application.add_handler(
-            CommandHandler("admin_channels", self.admin_channels_command)
-        )
-        self.application.add_handler(
-            CommandHandler("add_channel", self.add_channel_command)
-        )
-        self.application.add_handler(
-            CommandHandler("send_signal", self.send_signal_command)
-        )
-        self.application.add_handler(
-            CommandHandler("send_to_channel", self.send_to_channel_command)
-        )
-        self.application.add_handler(
-            CommandHandler("set_channel_topic", self.set_channel_topic_command)
-        )
-        self.application.add_handler(
-            CommandHandler("clear_channel_topic", self.clear_channel_topic_command)
-        )
-        self.application.add_handler(
-            CommandHandler("add_trader", self.add_trader_command)
-        )
+        self.application.add_handler(CommandHandler("admin_health", self.admin_health_command))
+        self.application.add_handler(CommandHandler("admin_audit", self.admin_audit_command))
+        self.application.add_handler(CommandHandler("admin_users", self.admin_users_command))
+        self.application.add_handler(CommandHandler("admin_broadcast", self.admin_broadcast_command))
+        self.application.add_handler(CommandHandler("admin_channels", self.admin_channels_command))
+        self.application.add_handler(CommandHandler("add_channel", self.add_channel_command))
+        self.application.add_handler(CommandHandler("send_signal", self.send_signal_command))
+        self.application.add_handler(CommandHandler("send_to_channel", self.send_to_channel_command))
+        self.application.add_handler(CommandHandler("set_channel_topic", self.set_channel_topic_command))
+        self.application.add_handler(CommandHandler("clear_channel_topic", self.clear_channel_topic_command))
+        self.application.add_handler(CommandHandler("add_trader", self.add_trader_command))
 
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
         self.application.add_handler(
-            MessageHandler(
-                filters.TEXT & ~filters.COMMAND, self.handle_global_message, block=False
-            )
+            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_global_message, block=False)
         )
         self.application.add_error_handler(self.error_handler)
 
@@ -185,9 +153,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             return update.effective_user.first_name or "Unknown"
         return "Unknown"
 
-    async def _log_user_action(
-        self, user: User, action: str, details: Optional[Dict] = None
-    ):
+    async def _log_user_action(self, user: User, action: str, details: Optional[Dict] = None):
         """Persist an audit-style user action log."""
         try:
             await self.system_log_repo.log(
@@ -208,18 +174,14 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 extra_data=details or {},
             )
 
-    async def _audit_action(
-        self, user: User, action: str, details: Optional[Dict] = None
-    ):
+    async def _audit_action(self, user: User, action: str, details: Optional[Dict] = None):
         """Persist an operator audit event."""
         try:
             await record_audit_event(self.system_log_repo, user, action, details or {})
         except Exception as e:
             logger.error(f"Failed to record audit event {action}: {e}")
 
-    async def _record_bitget_failure_alert(
-        self, classified_error, source: str, details: Optional[Dict] = None
-    ):
+    async def _record_bitget_failure_alert(self, classified_error, source: str, details: Optional[Dict] = None):
         """Record a classified Bitget failure and alert admins if needed."""
         try:
             await self.alert_manager.record_bitget_failure(
@@ -314,11 +276,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 function="error_handler",
                 user_id=user_id,
                 telegram_id=telegram_id,
-                stack_trace=(
-                    str(context.error.__traceback__)
-                    if context.error.__traceback__
-                    else None
-                ),
+                stack_trace=(str(context.error.__traceback__) if context.error.__traceback__ else None),
             )
         except Exception as e:
             logger.error(f"Failed to log error: {e}")
@@ -351,9 +309,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             logger.info("Telegram bot started successfully")
             self.started_at = datetime.utcnow()
             await self.alert_manager.alert_startup_success()
-            self.health_monitor_task = asyncio.create_task(
-                self._health_monitor_loop()
-            )
+            self.health_monitor_task = asyncio.create_task(self._health_monitor_loop())
 
         except Exception as e:
             logger.error(f"Failed to start bot: {e}")
@@ -403,9 +359,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
             maintenance_health = await read_maintenance_health(self.system_log_repo)
             if maintenance_health.is_problem:
-                await self.alert_manager.alert_maintenance_problem(
-                    maintenance_health.message
-                )
+                await self.alert_manager.alert_maintenance_problem(maintenance_health.message)
         except Exception as exc:
             logger.error(f"Health monitor failed: {exc}")
             await self.alert_manager.alert_db_failure("health_monitor", exc)

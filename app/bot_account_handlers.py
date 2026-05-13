@@ -17,9 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class AccountHandlersMixin:
-    async def _record_bitget_failure_alert(
-        self, classified_error, source: str, details: dict | None = None
-    ):
+    async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
         return None
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -27,9 +25,7 @@ class AccountHandlersMixin:
         user = await self._get_or_create_user(update)
         await self._log_user_action(user, "start_command")
 
-        await update.message.reply_text(
-            welcome_message(), reply_markup=main_menu_keyboard(), parse_mode="Markdown"
-        )
+        await update.message.reply_text(welcome_message(), reply_markup=main_menu_keyboard(), parse_mode="Markdown")
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help."""
@@ -59,9 +55,7 @@ class AccountHandlersMixin:
                 user.encrypted_secret_key,
                 user.encrypted_passphrase,
             )
-            is_connected, message = await self.trade_manager.test_api_connection(
-                credentials
-            )
+            is_connected, message = await self.trade_manager.test_api_connection(credentials)
 
             if is_connected:
                 bitget_uid = await self.trade_manager.get_user_uid(credentials)
@@ -81,9 +75,7 @@ class AccountHandlersMixin:
         except Exception as e:
             logger.error(f"Status check failed: {e}")
             classified = classify_bitget_exception(e)
-            await self._record_bitget_failure_alert(
-                classified, "status_command", {"telegram_id": user.telegram_id}
-            )
+            await self._record_bitget_failure_alert(classified, "status_command", {"telegram_id": user.telegram_id})
             await update.message.reply_text(f"❌ {classified.user_message}")
 
     async def balance_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -92,9 +84,7 @@ class AccountHandlersMixin:
         await self._log_user_action(user, "balance_command")
 
         if not user.is_api_connected:
-            await update.message.reply_text(
-                "❌ 请先设置 API 连接。使用 `/setapi` 命令。"
-            )
+            await update.message.reply_text("❌ 请先设置 API 连接。使用 `/setapi` 命令。")
             return
 
         try:
@@ -109,9 +99,7 @@ class AccountHandlersMixin:
                 user.id,
                 user.telegram_id,
             )
-            balance_data = await self.trade_manager.get_account_balance(
-                user.id, credentials
-            )
+            balance_data = await self.trade_manager.get_account_balance(user.id, credentials)
             logger.info(
                 "Account balance summary: user_id=%s telegram_id=%s summary=%s",
                 user.id,
@@ -121,32 +109,22 @@ class AccountHandlersMixin:
 
             if balance_data.get("code") == "00000" and balance_data.get("data"):
                 assets = balance_data["data"]
-                balance_text = self._format_usdt_balance_text(
-                    assets, raw_limit=500, compact=True
-                )
+                balance_text = self._format_usdt_balance_text(assets, raw_limit=500, compact=True)
 
                 keyboard = [
-                    [
-                        InlineKeyboardButton(
-                            "🔄 刷新余额", callback_data="refresh_balance"
-                        )
-                    ],
+                    [InlineKeyboardButton("🔄 刷新余额", callback_data="refresh_balance")],
                     [InlineKeyboardButton("🏠 返回", callback_data="return_start")],
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
-                await update.message.reply_text(
-                    balance_text, reply_markup=reply_markup, parse_mode="Markdown"
-                )
+                await update.message.reply_text(balance_text, reply_markup=reply_markup, parse_mode="Markdown")
             else:
                 await update.message.reply_text("❌ 获取余额失败，请检查 API 设置。")
 
         except Exception as e:
             logger.error(f"Balance check failed: {e}")
             classified = classify_bitget_exception(e)
-            await self._record_bitget_failure_alert(
-                classified, "balance_command", {"telegram_id": user.telegram_id}
-            )
+            await self._record_bitget_failure_alert(classified, "balance_command", {"telegram_id": user.telegram_id})
             await update.message.reply_text(f"❌ {classified.user_message}")
 
     async def set_api_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -156,19 +134,13 @@ class AccountHandlersMixin:
 
         if user.is_api_connected and user.encrypted_api_key:
             keyboard = [
-                [
-                    InlineKeyboardButton(
-                        "✅ 确认修改", callback_data="confirm_modify_api"
-                    )
-                ],
+                [InlineKeyboardButton("✅ 确认修改", callback_data="confirm_modify_api")],
                 [InlineKeyboardButton("❌ 取消", callback_data="cancel_modify_api")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await update.message.reply_text(
-                "🔐 **API 设置**\n\n"
-                "您已经设置完成 Bitget API 连接。\n\n"
-                "是否要修改现有的 API 设置？",
+                "🔐 **API 设置**\n\n您已经设置完成 Bitget API 连接。\n\n是否要修改现有的 API 设置？",
                 reply_markup=reply_markup,
                 parse_mode="Markdown",
             )
@@ -211,9 +183,7 @@ class AccountHandlersMixin:
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="✅ API Key 已保存\n\n"
-            "**第 2 步：Secret Key**\n"
-            "请发送您的 Secret Key",
+            text="✅ API Key 已保存\n\n**第 2 步：Secret Key**\n请发送您的 Secret Key",
         )
 
         return WAITING_SECRET_KEY
@@ -241,9 +211,7 @@ class AccountHandlersMixin:
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="✅ Secret Key 已保存\n\n"
-            "**第 3 步：Passphrase**\n"
-            "请发送您的 Passphrase",
+            text="✅ Secret Key 已保存\n\n**第 3 步：Passphrase**\n请发送您的 Passphrase",
         )
 
         return WAITING_PASSPHRASE
@@ -277,16 +245,10 @@ class AccountHandlersMixin:
             return ConversationHandler.END
 
         try:
-            test_msg = await context.bot.send_message(
-                chat_id=update.effective_chat.id, text="🔄 正在测试 API 连接..."
-            )
+            test_msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="🔄 正在测试 API 连接...")
 
-            credentials = self.encryption_manager.encrypt_api_credentials(
-                api_key, secret_key, passphrase
-            )
-            is_connected, message = await self.trade_manager.test_api_connection(
-                credentials
-            )
+            credentials = self.encryption_manager.encrypt_api_credentials(api_key, secret_key, passphrase)
+            is_connected, message = await self.trade_manager.test_api_connection(credentials)
 
             if is_connected:
                 await self.user_repo.update_user_api_credentials(
@@ -304,18 +266,14 @@ class AccountHandlersMixin:
                 )
             else:
                 await test_msg.edit_text(
-                    f"❌ **API 连接测试失败**\n\n"
-                    f"错误信息: {message}\n\n"
-                    "请检查您的 API 凭证是否正确，然后重新设置。",
+                    f"❌ **API 连接测试失败**\n\n错误信息: {message}\n\n请检查您的 API 凭证是否正确，然后重新设置。",
                     parse_mode="Markdown",
                 )
 
         except Exception as e:
             logger.error(f"API setup failed: {e}")
             classified = classify_bitget_exception(e)
-            await self._record_bitget_failure_alert(
-                classified, "set_passphrase", {"telegram_id": user.telegram_id}
-            )
+            await self._record_bitget_failure_alert(classified, "set_passphrase", {"telegram_id": user.telegram_id})
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text=f"❌ {classified.user_message}",
@@ -326,9 +284,7 @@ class AccountHandlersMixin:
 
         return ConversationHandler.END
 
-    async def settings_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def settings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /settings."""
         user = await self._get_or_create_user(update)
         await self._log_user_action(user, "settings_command")
@@ -347,24 +303,18 @@ class AccountHandlersMixin:
             self.user_sessions[user.telegram_id] = {"step": "risk_amount"}
 
             await query.edit_message_text(
-                "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n"
-                "请输入定 R 金额 u（数字）：",
+                "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n请输入定 R 金额 u（数字）：",
                 parse_mode="Markdown",
             )
         else:
             keyboard = [
-                [
-                    InlineKeyboardButton(
-                        "✅ 确认更改", callback_data="confirm_change_risk"
-                    )
-                ],
+                [InlineKeyboardButton("✅ 确认更改", callback_data="confirm_change_risk")],
                 [InlineKeyboardButton("❌ 取消", callback_data="cancel_change_risk")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await query.edit_message_text(
-                f"💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n"
-                f"您目前已设置定损为 {current_risk} USDT，要更改吗？",
+                f"💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n您目前已设置定损为 {current_risk} USDT，要更改吗？",
                 reply_markup=reply_markup,
                 parse_mode="Markdown",
             )
@@ -382,9 +332,7 @@ class AccountHandlersMixin:
             success = await self.user_repo.update_user_risk_amount(user.id, amount)
 
             if success:
-                await update.message.reply_text(
-                    f"✅ **已设置定 R 止损为 {amount} USDT**", parse_mode="Markdown"
-                )
+                await update.message.reply_text(f"✅ **已设置定 R 止损为 {amount} USDT**", parse_mode="Markdown")
             else:
                 await update.message.reply_text("❌ 设置失败，请重试")
 
@@ -392,14 +340,10 @@ class AccountHandlersMixin:
             return
 
         except ValueError:
-            await update.message.reply_text(
-                "❌ 输入格式不正确，请输入有效数字：\n\n" "例如：50 或 100.5"
-            )
+            await update.message.reply_text("❌ 输入格式不正确，请输入有效数字：\n\n例如：50 或 100.5")
             return
 
-    async def handle_global_message(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def handle_global_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Route plain text messages for active setup sessions."""
         user = await self._get_or_create_user(update)
 
@@ -427,19 +371,13 @@ class AccountHandlersMixin:
         """Handle setup API callback."""
         if user.is_api_connected and user.encrypted_api_key:
             keyboard = [
-                [
-                    InlineKeyboardButton(
-                        "✅ 确认修改", callback_data="confirm_modify_api"
-                    )
-                ],
+                [InlineKeyboardButton("✅ 确认修改", callback_data="confirm_modify_api")],
                 [InlineKeyboardButton("❌ 取消", callback_data="cancel_modify_api")],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await query.edit_message_text(
-                "🔐 **API 设置**\n\n"
-                "您已经设置完成 Bitget API 连接。\n\n"
-                "是否要修改现有的 API 设置？",
+                "🔐 **API 设置**\n\n您已经设置完成 Bitget API 连接。\n\n是否要修改现有的 API 设置？",
                 reply_markup=reply_markup,
                 parse_mode="Markdown",
             )
@@ -472,24 +410,18 @@ class AccountHandlersMixin:
                 user.encrypted_secret_key,
                 user.encrypted_passphrase,
             )
-            is_connected, message = await self.trade_manager.test_api_connection(
-                credentials
-            )
+            is_connected, message = await self.trade_manager.test_api_connection(credentials)
 
             if is_connected:
                 bitget_uid = await self.trade_manager.get_user_uid(credentials)
                 status_text = f"Bitget UID: {bitget_uid}\n✅ **API 连接状态：正常**"
                 await query.edit_message_text(status_text, parse_mode="Markdown")
             else:
-                await query.edit_message_text(
-                    f"❌ **API 连接失败**\n\n{message}", parse_mode="Markdown"
-                )
+                await query.edit_message_text(f"❌ **API 连接失败**\n\n{message}", parse_mode="Markdown")
 
         except Exception as e:
             classified = classify_bitget_exception(e)
-            await self._record_bitget_failure_alert(
-                classified, "status_callback", {"telegram_id": user.telegram_id}
-            )
+            await self._record_bitget_failure_alert(classified, "status_callback", {"telegram_id": user.telegram_id})
             await query.edit_message_text(f"❌ {classified.user_message}")
 
     async def _handle_balance_callback(self, query, user):
@@ -506,9 +438,7 @@ class AccountHandlersMixin:
                 user.encrypted_secret_key,
                 user.encrypted_passphrase,
             )
-            balance_data = await self.trade_manager.get_account_balance(
-                user.id, credentials
-            )
+            balance_data = await self.trade_manager.get_account_balance(user.id, credentials)
             logger.info(
                 "Account balance refresh summary: user_id=%s telegram_id=%s summary=%s",
                 user.id,
@@ -518,9 +448,7 @@ class AccountHandlersMixin:
 
             if balance_data.get("code") == "00000" and balance_data.get("data"):
                 assets = balance_data["data"]
-                balance_text = self._format_usdt_balance_text(
-                    assets, raw_limit=300, compact=False
-                )
+                balance_text = self._format_usdt_balance_text(assets, raw_limit=300, compact=False)
 
                 keyboard = [
                     [InlineKeyboardButton("🔄 刷新", callback_data="refresh_balance")],
@@ -528,24 +456,18 @@ class AccountHandlersMixin:
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
-                await query.edit_message_text(
-                    balance_text, reply_markup=reply_markup, parse_mode="Markdown"
-                )
+                await query.edit_message_text(balance_text, reply_markup=reply_markup, parse_mode="Markdown")
             else:
                 await query.edit_message_text("❌ 获取余额失败")
 
         except Exception as e:
             classified = classify_bitget_exception(e)
-            await self._record_bitget_failure_alert(
-                classified, "balance_callback", {"telegram_id": user.telegram_id}
-            )
+            await self._record_bitget_failure_alert(classified, "balance_callback", {"telegram_id": user.telegram_id})
             await query.edit_message_text(f"❌ {classified.user_message}")
 
     async def _handle_return_start_callback(self, query, user):
         """Handle return-to-start callback."""
-        await query.edit_message_text(
-            welcome_message(), reply_markup=main_menu_keyboard(), parse_mode="Markdown"
-        )
+        await query.edit_message_text(welcome_message(), reply_markup=main_menu_keyboard(), parse_mode="Markdown")
 
     async def _handle_trading_settings_callback(self, query, user):
         """Handle trading settings callback."""
@@ -574,8 +496,7 @@ class AccountHandlersMixin:
         self.user_sessions[user.telegram_id] = {"step": "risk_amount"}
 
         await query.edit_message_text(
-            "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n"
-            "请输入定 R 金额 u（数字）：",
+            "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n请输入定 R 金额 u（数字）：",
             parse_mode="Markdown",
         )
 
@@ -586,26 +507,14 @@ class AccountHandlersMixin:
 
         if isinstance(assets, list):
             for asset in assets:
-                coin = (
-                    asset.get("coin")
-                    or asset.get("marginCoin")
-                    or asset.get("currency", "")
-                )
+                coin = asset.get("coin") or asset.get("marginCoin") or asset.get("currency", "")
                 if coin == "USDT":
-                    available = float(
-                        asset.get("available")
-                        or asset.get("availableBalance")
-                        or asset.get("equity", 0)
-                    )
-                    frozen = float(
-                        asset.get("frozen")
-                        or asset.get("locked")
-                        or asset.get("freezeBalance", 0)
-                    )
+                    available = float(asset.get("available") or asset.get("availableBalance") or asset.get("equity", 0))
+                    frozen = float(asset.get("frozen") or asset.get("locked") or asset.get("freezeBalance", 0))
                     total = available + frozen
 
                     if total > 0:
-                        balance_text += f"**USDT:**\n"
+                        balance_text += "**USDT:**\n"
                         balance_text += f"  可用: {available:.4f}\n"
                         balance_text += f"  冻结: {frozen:.4f}\n"
                         balance_text += f"  总计: {total:.4f}\n\n"
@@ -615,32 +524,22 @@ class AccountHandlersMixin:
             if "USDT" in assets:
                 usdt_data = assets["USDT"]
                 available = float(
-                    usdt_data.get("available")
-                    or usdt_data.get("availableBalance")
-                    or usdt_data.get("equity", 0)
+                    usdt_data.get("available") or usdt_data.get("availableBalance") or usdt_data.get("equity", 0)
                 )
-                frozen = float(
-                    usdt_data.get("frozen")
-                    or usdt_data.get("locked")
-                    or usdt_data.get("freezeBalance", 0)
-                )
+                frozen = float(usdt_data.get("frozen") or usdt_data.get("locked") or usdt_data.get("freezeBalance", 0))
                 total = available + frozen
 
                 if total > 0:
-                    balance_text += f"**USDT:**\n"
+                    balance_text += "**USDT:**\n"
                     balance_text += f"  可用: {available:.4f}\n"
                     balance_text += f"  冻结: {frozen:.4f}\n"
                     balance_text += f"  总计: {total:.4f}\n\n"
                     found_assets = True
 
         if not found_assets:
-            empty_text = (
-                "暂无 USDT 资产或余额为零" if compact else "暂无 USDT 资产或余额为零"
-            )
+            empty_text = "暂无 USDT 资产或余额为零" if compact else "暂无 USDT 资产或余额为零"
             balance_text += f"{empty_text}\n\n"
-            balance_text += (
-                f"📊 **原始API数据：**\n```\n{str(assets)[:raw_limit]}...\n```\n\n"
-            )
+            balance_text += f"📊 **原始API数据：**\n```\n{str(assets)[:raw_limit]}...\n```\n\n"
 
         if compact:
             balance_text += "ℹ️ **说明：** 仅显示 U 本位合约账户的 USDT 余额"

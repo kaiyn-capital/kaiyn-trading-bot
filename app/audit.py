@@ -44,9 +44,7 @@ def _json_safe(value: Any) -> Any:
     return str(value)
 
 
-async def emit_audit_event(
-    owner: Any, user: Any, action: str, details: dict[str, Any] | None = None
-) -> None:
+async def emit_audit_event(owner: Any, user: Any, action: str, details: dict[str, Any] | None = None) -> None:
     """Call the bot audit hook when available; tests can omit it safely."""
     audit_method = getattr(owner, "_audit_action", None)
     if not callable(audit_method):

@@ -101,11 +101,7 @@ def test_confirm_pending_order_missing_token():
     repo = FakeConfirmPendingOrderRepo(claim_result=(None, "missing"))
     handler = FakeConfirmOrderHandler(repo)
 
-    asyncio.run(
-        handler._handle_confirm_pending_order_callback(
-            FakeQuery(), make_user(), "confirm_order_tok_missing"
-        )
-    )
+    asyncio.run(handler._handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_missing"))
 
     assert repo.claims == [{"token": "tok_missing", "telegram_id": 123456}]
     assert not handler.executions
@@ -116,16 +112,10 @@ def test_confirm_pending_order_missing_token():
 
 
 def test_confirm_pending_order_expired_token():
-    repo = FakeConfirmPendingOrderRepo(
-        claim_result=(make_pending_order(), "expired")
-    )
+    repo = FakeConfirmPendingOrderRepo(claim_result=(make_pending_order(), "expired"))
     handler = FakeConfirmOrderHandler(repo)
 
-    asyncio.run(
-        handler._handle_confirm_pending_order_callback(
-            FakeQuery(), make_user(), "confirm_order_tok_expired"
-        )
-    )
+    asyncio.run(handler._handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_expired"))
 
     assert not handler.executions
     assert "已过期" in handler.private_messages[-1]
@@ -137,11 +127,7 @@ def test_confirm_pending_order_non_processing_status_does_not_execute(status):
     repo = FakeConfirmPendingOrderRepo(claim_result=(make_pending_order(), status))
     handler = FakeConfirmOrderHandler(repo)
 
-    asyncio.run(
-        handler._handle_confirm_pending_order_callback(
-            FakeQuery(), make_user(), "confirm_order_tok_status"
-        )
-    )
+    asyncio.run(handler._handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_status"))
 
     assert not handler.executions
     assert f"状态为 {status}" in handler.private_messages[-1]
@@ -149,16 +135,10 @@ def test_confirm_pending_order_non_processing_status_does_not_execute(status):
 
 
 def test_confirm_pending_order_processing_executes_with_full_pending_data():
-    repo = FakeConfirmPendingOrderRepo(
-        claim_result=(make_pending_order(), "processing")
-    )
+    repo = FakeConfirmPendingOrderRepo(claim_result=(make_pending_order(), "processing"))
     handler = FakeConfirmOrderHandler(repo)
 
-    asyncio.run(
-        handler._handle_confirm_pending_order_callback(
-            FakeQuery(), make_user(), "confirm_order_tok_ready"
-        )
-    )
+    asyncio.run(handler._handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_ready"))
 
     assert handler.executions == [
         {
@@ -183,11 +163,7 @@ def test_cancel_pending_order_cancelled_status():
     handler = FakeConfirmOrderHandler(repo)
     query = FakeQuery()
 
-    asyncio.run(
-        handler._handle_cancel_pending_order_callback(
-            query, make_user(), "cancel_order_tok_cancel"
-        )
-    )
+    asyncio.run(handler._handle_cancel_pending_order_callback(query, make_user(), "cancel_order_tok_cancel"))
 
     assert repo.cancellations == [{"token": "tok_cancel", "telegram_id": 123456}]
     assert query.answers == ["已取消下单"]
@@ -200,11 +176,7 @@ def test_cancel_pending_order_missing_status():
     repo = FakeConfirmPendingOrderRepo(cancel_status="missing")
     handler = FakeConfirmOrderHandler(repo)
 
-    asyncio.run(
-        handler._handle_cancel_pending_order_callback(
-            FakeQuery(), make_user(), "cancel_order_tok_missing"
-        )
-    )
+    asyncio.run(handler._handle_cancel_pending_order_callback(FakeQuery(), make_user(), "cancel_order_tok_missing"))
 
     assert "找不到这笔待确认订单" in handler.private_messages[-1]
     assert handler.audit_events[-1]["details"]["status"] == "missing"
@@ -214,11 +186,7 @@ def test_cancel_pending_order_non_pending_status():
     repo = FakeConfirmPendingOrderRepo(cancel_status="processing")
     handler = FakeConfirmOrderHandler(repo)
 
-    asyncio.run(
-        handler._handle_cancel_pending_order_callback(
-            FakeQuery(), make_user(), "cancel_order_tok_processing"
-        )
-    )
+    asyncio.run(handler._handle_cancel_pending_order_callback(FakeQuery(), make_user(), "cancel_order_tok_processing"))
 
     assert "状态为 processing，无法取消" in handler.private_messages[-1]
     assert handler.audit_events[-1]["details"]["status"] == "processing"
@@ -311,9 +279,7 @@ def test_execute_order_marks_pending_failed_when_second_validation_fails():
 
     assert result is False
     assert handler.pending_order_repo.failed[-1]["token"] == "tok_validation"
-    assert "下单数量低于交易所最小值" in (
-        handler.pending_order_repo.failed[-1]["error_message"]
-    )
+    assert "下单数量低于交易所最小值" in (handler.pending_order_repo.failed[-1]["error_message"])
     assert "订单已不符合交易所规则" in handler.private_messages[-1]
     assert "下单数量低于交易所最小值" in handler.private_messages[-1]
     assert handler.audit_events[-1]["action"] == "order_validation_failed"

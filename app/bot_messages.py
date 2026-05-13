@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 
 from .order_flow import OrderExecutionResult, OrderPreview, SignalDraft
 
-
 UTC_PLUS_8 = timezone(timedelta(hours=8))
 
 
@@ -127,11 +126,7 @@ def signal_message(signal: SignalDraft, sender_username: str) -> str:
 
 
 def signal_sent_message(sent_to_channels: int, signal_text: str) -> str:
-    return (
-        "✅ **交易信号已发送**\n\n"
-        f"📺 发送到频道：{sent_to_channels} 个\n\n"
-        f"**信号详情：**\n{signal_text}"
-    )
+    return f"✅ **交易信号已发送**\n\n📺 发送到频道：{sent_to_channels} 个\n\n**信号详情：**\n{signal_text}"
 
 
 def order_preview_message(symbol: str, direction: str, preview: OrderPreview) -> str:
@@ -153,7 +148,7 @@ def order_preview_message(symbol: str, direction: str, preview: OrderPreview) ->
     text += f"**交易数量：** {quantity_text}\n"
     text += f"**名义价值：** ${preview.position_value:.2f}\n"
     text += f"**风险金额(1R)：** ${preview.risk_amount:.2f}\n"
-    text += f"**止损距离：** {preview.stop_distance_pct*100:.2f}%\n\n"
+    text += f"**止损距离：** {preview.stop_distance_pct * 100:.2f}%\n\n"
     if preview.order_mode == "limit":
         text += "⚠️ 将送出 GTC 限价挂单，订单送出不代表已成交"
     else:

@@ -22,13 +22,7 @@ def status_actions_keyboard() -> InlineKeyboardMarkup:
 
 
 def trading_settings_keyboard(include_return: bool = False) -> InlineKeyboardMarkup:
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                "💰 设置固定风险金额(1R)", callback_data="set_risk_amount"
-            )
-        ]
-    ]
+    keyboard = [[InlineKeyboardButton("💰 设置固定风险金额(1R)", callback_data="set_risk_amount")]]
 
     if include_return:
         keyboard.append([InlineKeyboardButton("🏠 返回", callback_data="return_start")])
@@ -49,15 +43,13 @@ def signal_order_keyboard(
                 InlineKeyboardButton(
                     "💰 市价下单",
                     callback_data=(
-                        f"place_order_market_{symbol}_{direction}_"
-                        f"{entry_lower:g}_{entry_upper:g}_{stop_loss:g}"
+                        f"place_order_market_{symbol}_{direction}_{entry_lower:g}_{entry_upper:g}_{stop_loss:g}"
                     ),
                 ),
                 InlineKeyboardButton(
                     "📌 挂单",
                     callback_data=(
-                        f"place_order_limit_{symbol}_{direction}_"
-                        f"{entry_lower:g}_{entry_upper:g}_{stop_loss:g}"
+                        f"place_order_limit_{symbol}_{direction}_{entry_lower:g}_{entry_upper:g}_{stop_loss:g}"
                     ),
                 ),
             ]
@@ -75,6 +67,4 @@ def pending_order_keyboard(token: str) -> InlineKeyboardMarkup:
 
 
 def return_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("🏠 返回", callback_data="return_start")]]
-    )
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 返回", callback_data="return_start")]])

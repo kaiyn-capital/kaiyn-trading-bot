@@ -71,10 +71,7 @@ class TradeRepository:
         """獲取用戶交易歷史"""
         async with self.db.get_session() as session:
             result = await session.execute(
-                select(Trade)
-                .where(Trade.user_id == user_id)
-                .order_by(Trade.created_at.desc())
-                .limit(limit)
+                select(Trade).where(Trade.user_id == user_id).order_by(Trade.created_at.desc()).limit(limit)
             )
             return list(result.scalars().all())
 
@@ -83,8 +80,6 @@ class TradeRepository:
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         async with self.db.get_session() as session:
             result = await session.execute(
-                select(func.count())
-                .select_from(Trade)
-                .where(Trade.user_id == user_id, Trade.created_at >= today)
+                select(func.count()).select_from(Trade).where(Trade.user_id == user_id, Trade.created_at >= today)
             )
             return int(result.scalar_one())

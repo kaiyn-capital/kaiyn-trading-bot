@@ -202,11 +202,7 @@ class AdminAlertManager:
         category = classified_error.category.value
         now = _utcnow()
         window_start = now - timedelta(seconds=Config.BITGET_ALERT_WINDOW_SECONDS)
-        failures = [
-            timestamp
-            for timestamp in self.bitget_failures.get(category, [])
-            if timestamp >= window_start
-        ]
+        failures = [timestamp for timestamp in self.bitget_failures.get(category, []) if timestamp >= window_start]
         failures.append(now)
         self.bitget_failures[category] = failures
 

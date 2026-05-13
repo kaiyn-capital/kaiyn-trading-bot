@@ -1,11 +1,12 @@
+import base64
+import logging
+import os
+from typing import Optional
+
 from cryptography.fernet import Fernet
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.backends import default_backend
-import base64
-import os
-import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +69,7 @@ class EncryptionManager:
             logger.error(f"Decryption failed: {e}")
             raise
 
-    def encrypt_api_credentials(
-        self, api_key: str, secret_key: str, passphrase: str
-    ) -> tuple:
+    def encrypt_api_credentials(self, api_key: str, secret_key: str, passphrase: str) -> tuple:
         """
         加密 API 憑證
 
@@ -182,9 +181,7 @@ def test_encryption():
     test_passphrase = "test_passphrase_789"
 
     # 加密
-    encrypted_credentials = manager.encrypt_api_credentials(
-        test_api_key, test_secret, test_passphrase
-    )
+    encrypted_credentials = manager.encrypt_api_credentials(test_api_key, test_secret, test_passphrase)
     print("Encrypted credentials:", encrypted_credentials)
 
     # 解密

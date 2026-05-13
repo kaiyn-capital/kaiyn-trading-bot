@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class AdminCoreMixin:
-    async def add_trader_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def add_trader_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Add a signal sender."""
         user = await self._get_or_create_user(update)
 
@@ -24,11 +22,7 @@ class AdminCoreMixin:
 
         if not context.args:
             await update.message.reply_text(
-                "👥 **添加发单员**\n\n"
-                "使用方法：\n"
-                "`/add_trader Telegram_ID`\n\n"
-                "例如：\n"
-                "`/add_trader 123456789`",
+                "👥 **添加发单员**\n\n使用方法：\n`/add_trader Telegram_ID`\n\n例如：\n`/add_trader 123456789`",
                 parse_mode="Markdown",
             )
             return
@@ -81,9 +75,7 @@ class AdminCoreMixin:
             )
             await update.message.reply_text("❌ 添加发单员失败")
 
-    async def admin_users_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def admin_users_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """List active users for admins."""
         user = await self._get_or_create_user(update)
 
@@ -103,7 +95,9 @@ class AdminCoreMixin:
                 created_at = u.get("created_at")
 
                 users_text += f"{api_status} {first_name} (@{username})\n"
-                users_text += f"   ID: {telegram_id} | 注册: {created_at.strftime('%m-%d') if created_at else 'N/A'}\n\n"
+                users_text += (
+                    f"   ID: {telegram_id} | 注册: {created_at.strftime('%m-%d') if created_at else 'N/A'}\n\n"
+                )
 
             if len(users_data) > 20:
                 users_text += f"... 还有 {len(users_data) - 20} 位用户"
@@ -129,23 +123,23 @@ class AdminCoreMixin:
             channel_count = await self.channel_repo.count_active_channels()
             db_ok = await self.user_repo.db.health_check()
 
-            admin_text = f"👑 **管理员面板**\n\n"
-            admin_text += f"📊 **系统统计**\n"
+            admin_text = "👑 **管理员面板**\n\n"
+            admin_text += "📊 **系统统计**\n"
             admin_text += f"• 活跃用户：{active_users}\n"
             admin_text += f"• 管理频道：{channel_count}\n"
             admin_text += f"• 系统状态：{'正常' if db_ok else '异常'}\n\n"
-            admin_text += f"🛠️ **管理功能**\n"
-            admin_text += f"• `/admin_users` - 查看用户列表\n"
-            admin_text += f"• `/admin_channels` - 管理频道/群组\n"
-            admin_text += f"• `/add_channel` - 添加频道/群组\n"
-            admin_text += f"• `/admin_broadcast` - 广播消息\n"
-            admin_text += f"• `/send_signal` - 发送交易信号\n"
-            admin_text += f"• `/send_to_channel` - 发送到指定频道\n"
-            admin_text += f"• `/set_channel_topic` - 设置频道指定话题\n"
-            admin_text += f"• `/clear_channel_topic` - 清除频道指定话题\n"
-            admin_text += f"• `/admin_health` - 查看系统健康状态\n"
-            admin_text += f"• `/admin_audit` - 查看近期操作审计\n"
-            admin_text += f"• `/add_trader` - 添加交易员"
+            admin_text += "🛠️ **管理功能**\n"
+            admin_text += "• `/admin_users` - 查看用户列表\n"
+            admin_text += "• `/admin_channels` - 管理频道/群组\n"
+            admin_text += "• `/add_channel` - 添加频道/群组\n"
+            admin_text += "• `/admin_broadcast` - 广播消息\n"
+            admin_text += "• `/send_signal` - 发送交易信号\n"
+            admin_text += "• `/send_to_channel` - 发送到指定频道\n"
+            admin_text += "• `/set_channel_topic` - 设置频道指定话题\n"
+            admin_text += "• `/clear_channel_topic` - 清除频道指定话题\n"
+            admin_text += "• `/admin_health` - 查看系统健康状态\n"
+            admin_text += "• `/admin_audit` - 查看近期操作审计\n"
+            admin_text += "• `/add_trader` - 添加交易员"
 
             await update.message.reply_text(admin_text, parse_mode="Markdown")
 

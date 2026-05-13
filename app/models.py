@@ -1,17 +1,17 @@
+import json
+from datetime import datetime
+
 from sqlalchemy import (
+    Boolean,
     Column,
-    Integer,
-    String,
     DateTime,
     Float,
-    Boolean,
-    Text,
     ForeignKey,
+    Integer,
+    String,
+    Text,
 )
-from sqlalchemy.orm import relationship
-from sqlalchemy.orm import declarative_base
-from datetime import datetime
-import json
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
@@ -44,7 +44,7 @@ class User(Base):
     default_trade_amount = Column(Float, default=100.0)  # 預設交易金額
     auto_stop_loss = Column(Boolean, default=True)  # 是否自動設置止損
     fixed_risk_amount = Column(Float, nullable=True)  # 固定風險金額(1R)
-    
+
     # 發單員權限
     is_trader = Column(Boolean, default=False)  # 是否為發單員
 

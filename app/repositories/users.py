@@ -20,9 +20,7 @@ class UserRepository:
     ) -> User:
         """創建新用戶"""
         async with self.db.get_session() as session:
-            result = await session.execute(
-                select(User).where(User.telegram_id == telegram_id)
-            )
+            result = await session.execute(select(User).where(User.telegram_id == telegram_id))
             existing_user = result.scalar_one_or_none()
             if existing_user:
                 return existing_user
@@ -40,9 +38,7 @@ class UserRepository:
     async def get_user_by_telegram_id(self, telegram_id: int) -> Optional[User]:
         """根據 Telegram ID 獲取用戶"""
         async with self.db.get_session() as session:
-            result = await session.execute(
-                select(User).where(User.telegram_id == telegram_id)
-            )
+            result = await session.execute(select(User).where(User.telegram_id == telegram_id))
             return result.scalar_one_or_none()
 
     async def update_user_api_credentials(
@@ -77,9 +73,7 @@ class UserRepository:
     async def set_trader_status(self, telegram_id: int, is_trader: bool = True) -> bool:
         """設置用戶發單員狀態"""
         async with self.db.get_session() as session:
-            result = await session.execute(
-                select(User).where(User.telegram_id == telegram_id)
-            )
+            result = await session.execute(select(User).where(User.telegram_id == telegram_id))
             user = result.scalar_one_or_none()
             if not user:
                 return False
@@ -93,8 +87,8 @@ class UserRepository:
             result = await session.execute(
                 select(User.id).where(
                     User.telegram_id == telegram_id,
-                    User.is_trader == True,
-                    User.is_active == True,
+                    User.is_trader.is_(True),
+                    User.is_active.is_(True),
                 )
             )
             return result.scalar_one_or_none() is not None
@@ -102,9 +96,7 @@ class UserRepository:
     async def get_active_users(self) -> list[dict]:
         """獲取所有活躍用戶（返回字典格式避免 Session 問題）"""
         async with self.db.get_session() as session:
-            result = await session.execute(
-                select(User).where(User.is_active == True).order_by(User.created_at)
-            )
+            result = await session.execute(select(User).where(User.is_active.is_(True)).order_by(User.created_at))
             users = result.scalars().all()
             return [user_to_dict(user) for user in users]
 

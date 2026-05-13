@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class AdminChannelsMixin:
-    async def delete_channel_by_number(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def delete_channel_by_number(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Delete a channel by its displayed number."""
         user = await self._get_or_create_user(update)
 
@@ -27,11 +25,7 @@ class AdminChannelsMixin:
             session_data = self.user_sessions.get(user.telegram_id, {})
             channels_data = session_data.get("channels_data", [])
 
-            if (
-                not channels_data
-                or channel_number < 1
-                or channel_number > len(channels_data)
-            ):
+            if not channels_data or channel_number < 1 or channel_number > len(channels_data):
                 await emit_audit_event(
                     self,
                     user,
@@ -46,9 +40,7 @@ class AdminChannelsMixin:
                 return
 
             channel_to_delete = channels_data[channel_number - 1]
-            deleted = await self.channel_repo.deactivate_channel(
-                channel_to_delete["chat_id"]
-            )
+            deleted = await self.channel_repo.deactivate_channel(channel_to_delete["chat_id"])
             if deleted:
                 await emit_audit_event(
                     self,
@@ -62,9 +54,7 @@ class AdminChannelsMixin:
                     },
                 )
                 await update.message.reply_text(
-                    f"✅ 频道已删除\n\n"
-                    f"频道名称：{channel_to_delete['title']}\n"
-                    f"已从管理列表中移除。"
+                    f"✅ 频道已删除\n\n频道名称：{channel_to_delete['title']}\n已从管理列表中移除。"
                 )
             else:
                 await emit_audit_event(
@@ -101,9 +91,7 @@ class AdminChannelsMixin:
             )
             await update.message.reply_text("❌ 删除频道失败")
 
-    async def admin_channels_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def admin_channels_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """List managed channels."""
         user = await self._get_or_create_user(update)
 
@@ -116,9 +104,7 @@ class AdminChannelsMixin:
 
             if not channels:
                 await update.message.reply_text(
-                    "📺 **频道/群组管理**\n\n"
-                    "目前没有管理的频道或群组。\n\n"
-                    "使用 `/add_channel` 添加频道或群组。",
+                    "📺 **频道/群组管理**\n\n目前没有管理的频道或群组。\n\n使用 `/add_channel` 添加频道或群组。",
                     parse_mode="Markdown",
                 )
                 return
@@ -135,9 +121,7 @@ class AdminChannelsMixin:
             traceback.print_exc()
             await update.message.reply_text(f"❌ 获取频道列表时发生错误: {str(e)}")
 
-    async def add_channel_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def add_channel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Add a managed channel or group."""
         user = await self._get_or_create_user(update)
 
@@ -165,9 +149,7 @@ class AdminChannelsMixin:
 
         try:
             chat_info = await context.bot.get_chat(chat_identifier)
-            bot_member = await context.bot.get_chat_member(
-                chat_identifier, context.bot.id
-            )
+            bot_member = await context.bot.get_chat_member(chat_identifier, context.bot.id)
             if bot_member.status not in ["administrator", "creator"]:
                 await emit_audit_event(
                     self,
@@ -182,8 +164,7 @@ class AdminChannelsMixin:
                     },
                 )
                 await update.message.reply_text(
-                    "❌ 机器人在该频道/群组中不是管理员\n\n"
-                    "请确保机器人有管理员权限后再试。"
+                    "❌ 机器人在该频道/群组中不是管理员\n\n请确保机器人有管理员权限后再试。"
                 )
                 return
 
@@ -200,9 +181,7 @@ class AdminChannelsMixin:
                         "chat_type": chat_info.type.value,
                     },
                 )
-                await update.message.reply_text(
-                    f"⚠️ 频道/群组 {chat_info.title} 已经在管理列表中"
-                )
+                await update.message.reply_text(f"⚠️ 频道/群组 {chat_info.title} 已经在管理列表中")
                 return
 
             if existing and not existing.is_active:
@@ -303,9 +282,7 @@ class AdminChannelsMixin:
                 f"错误详情：{str(e)}"
             )
 
-    async def set_channel_topic_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def set_channel_topic_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Set a default Telegram topic for signal forwarding."""
         user = await self._get_or_create_user(update)
 
@@ -357,9 +334,7 @@ class AdminChannelsMixin:
             await update.message.reply_text("❌ 无效的频道编号，请先使用 /admin_channels 查看列表")
             return
 
-        success = await self.channel_repo.update_channel_topic(
-            channel["chat_id"], message_thread_id, thread_title
-        )
+        success = await self.channel_repo.update_channel_topic(channel["chat_id"], message_thread_id, thread_title)
         if not success:
             await emit_audit_event(
                 self,
@@ -400,9 +375,7 @@ class AdminChannelsMixin:
             parse_mode="HTML",
         )
 
-    async def clear_channel_topic_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def clear_channel_topic_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Clear a default Telegram topic for signal forwarding."""
         user = await self._get_or_create_user(update)
 
@@ -479,8 +452,7 @@ class AdminChannelsMixin:
             },
         )
         await update.message.reply_text(
-            f"✅ <b>指定话题已清除</b>\n\n"
-            f"<b>频道：</b> {self._escape_html(str(channel['title'] or 'Unknown'))}",
+            f"✅ <b>指定话题已清除</b>\n\n<b>频道：</b> {self._escape_html(str(channel['title'] or 'Unknown'))}",
             parse_mode="HTML",
         )
 
@@ -500,9 +472,7 @@ class AdminChannelsMixin:
 
             if not channels:
                 await query.edit_message_text(
-                    "📺 **管理频道**\n\n"
-                    "目前没有任何频道。\n\n"
-                    "使用 `/add_channel` 添加频道。",
+                    "📺 **管理频道**\n\n目前没有任何频道。\n\n使用 `/add_channel` 添加频道。",
                     parse_mode="Markdown",
                 )
                 return
@@ -533,21 +503,15 @@ class AdminChannelsMixin:
 
             self.user_sessions[user.telegram_id] = {"channels_data": channels_data}
 
-            await query.edit_message_text(
-                manage_text, reply_markup=reply_markup, parse_mode="HTML"
-            )
+            await query.edit_message_text(manage_text, reply_markup=reply_markup, parse_mode="HTML")
 
         except Exception as e:
             logger.error(f"Manage channels error: {e}")
-            await query.edit_message_text(
-                "❌ 获取频道列表失败\n\n"
-                f"错误详情: {str(e)}\n\n"
-                "请检查数据库连接状态。"
-            )
+            await query.edit_message_text(f"❌ 获取频道列表失败\n\n错误详情: {str(e)}\n\n请检查数据库连接状态。")
 
     async def _handle_delete_channel_start_callback(self, query, user):
         await query.edit_message_text(
-            "🗑️ **删除频道**\n\n" "请输入要删除的频道编号：",
+            "🗑️ **删除频道**\n\n请输入要删除的频道编号：",
             parse_mode="Markdown",
         )
         if user.telegram_id in self.user_sessions:
@@ -561,9 +525,7 @@ class AdminChannelsMixin:
 
             if not channels:
                 await query.edit_message_text(
-                    "📺 **频道/群组管理**\n\n"
-                    "目前没有管理的频道或群组。\n\n"
-                    "使用 `/add_channel` 添加频道或群组。",
+                    "📺 **频道/群组管理**\n\n目前没有管理的频道或群组。\n\n使用 `/add_channel` 添加频道或群组。",
                     parse_mode="Markdown",
                 )
                 return

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, replace
 from datetime import datetime
-from decimal import Decimal, InvalidOperation, ROUND_DOWN
+from decimal import ROUND_DOWN, Decimal, InvalidOperation
 from typing import Optional, Sequence
 
 from .bitget_errors import classify_bitget_exception
@@ -188,11 +188,7 @@ def validate_order_preview(
             f"❌ 下单数量低于交易所最小值：至少 {_decimal_text(rules.min_trade_num)}",
         )
 
-    max_qty = (
-        rules.max_market_order_qty
-        if preview.order_mode == "market"
-        else rules.max_order_qty
-    )
+    max_qty = rules.max_market_order_qty if preview.order_mode == "market" else rules.max_order_qty
     if max_qty > 0 and quantity > max_qty:
         return OrderValidationResult(
             False,
@@ -207,18 +203,12 @@ def validate_order_preview(
 
         limit_price_decimal = Decimal(str(preview.limit_price))
         limit_price_decimal = _floor_to_step(limit_price_decimal, _price_step(rules))
-        limit_price_decimal = _quantize_for_places(
-            limit_price_decimal, rules.price_place
-        )
+        limit_price_decimal = _quantize_for_places(limit_price_decimal, rules.price_place)
         if limit_price_decimal <= 0:
             return OrderValidationResult(False, "❌ 挂单价格错误，无法下单")
 
-        if (
-            direction == "long"
-            and limit_price_decimal >= Decimal(str(preview.current_price))
-        ) or (
-            direction == "short"
-            and limit_price_decimal <= Decimal(str(preview.current_price))
+        if (direction == "long" and limit_price_decimal >= Decimal(str(preview.current_price))) or (
+            direction == "short" and limit_price_decimal <= Decimal(str(preview.current_price))
         ):
             return OrderValidationResult(
                 False,
@@ -246,9 +236,7 @@ def validate_order_preview(
     )
 
 
-def apply_order_validation(
-    preview: OrderPreview, validation: OrderValidationResult
-) -> OrderPreview:
+def apply_order_validation(preview: OrderPreview, validation: OrderValidationResult) -> OrderPreview:
     if not validation.is_valid:
         return preview
 
@@ -256,17 +244,9 @@ def apply_order_validation(
         preview,
         quantity=validation.quantity if validation.quantity is not None else preview.quantity,
         quantity_text=validation.quantity_text,
-        limit_price=(
-            validation.limit_price
-            if preview.order_mode == "limit"
-            else preview.limit_price
-        ),
+        limit_price=(validation.limit_price if preview.order_mode == "limit" else preview.limit_price),
         limit_price_text=validation.limit_price_text,
-        position_value=(
-            validation.position_value
-            if validation.position_value is not None
-            else preview.position_value
-        ),
+        position_value=(validation.position_value if validation.position_value is not None else preview.position_value),
     )
 
 
@@ -289,11 +269,7 @@ def parse_signal_args(args: Sequence[str]) -> SignalDraft:
             remark_start_index = index
             break
 
-    remark = (
-        " ".join(args[remark_start_index:]).strip()
-        if remark_start_index is not None
-        else ""
-    )
+    remark = " ".join(args[remark_start_index:]).strip() if remark_start_index is not None else ""
 
     return SignalDraft(
         symbol=symbol,
@@ -352,9 +328,9 @@ def prepare_order_preview(
 
     if order_mode == "limit":
         limit_price = entry_high if callback_data.direction == "long" else entry_low
-        can_fill_immediately = (
-            callback_data.direction == "long" and limit_price >= current_price
-        ) or (callback_data.direction == "short" and limit_price <= current_price)
+        can_fill_immediately = (callback_data.direction == "long" and limit_price >= current_price) or (
+            callback_data.direction == "short" and limit_price <= current_price
+        )
 
         if can_fill_immediately:
             order_mode = "market"
@@ -367,9 +343,7 @@ def prepare_order_preview(
     if calculation_price <= 0:
         raise ValueError("entry price must be greater than 0")
 
-    stop_distance_pct = abs(
-        (calculation_price - callback_data.stop_loss) / calculation_price
-    )
+    stop_distance_pct = abs((calculation_price - callback_data.stop_loss) / calculation_price)
     if stop_distance_pct <= 0:
         raise ValueError("stop distance must be greater than 0")
 
@@ -418,9 +392,7 @@ async def execute_order(
     side = "buy" if direction == "long" else "sell"
     quantity = float(quantity)
     quantity_for_api = quantity_text or _decimal_text(Decimal(str(quantity)))
-    price_for_api = limit_price_text or (
-        _decimal_text(Decimal(str(order_price))) if order_price is not None else None
-    )
+    price_for_api = limit_price_text or (_decimal_text(Decimal(str(order_price))) if order_price is not None else None)
     client_order_id = f"TG_{telegram_id}_{int(datetime.timestamp(datetime.now()))}"
     trade_record_id = None
 
@@ -464,10 +436,7 @@ async def execute_order(
             )
 
         if not result or result.get("code") != "00000":
-            error_msg = (
-                f"Order failed for {symbol}: "
-                f"{result.get('msg', 'Unknown error') if result else 'No response'}"
-            )
+            error_msg = f"Order failed for {symbol}: {result.get('msg', 'Unknown error') if result else 'No response'}"
             raise RuntimeError(error_msg)
 
         order_data = result.get("data", {})

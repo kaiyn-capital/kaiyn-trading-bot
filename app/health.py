@@ -6,7 +6,6 @@ from typing import Optional
 
 from .config import Config
 
-
 BACKUPS_DIR = Path("backups")
 BACKUP_STATUS_FILE = "backup_status.json"
 
@@ -237,10 +236,7 @@ def _count_bitget_categories(logs: list) -> dict[str, int]:
     for log in logs:
         try:
             extra_data = log.get_extra_data()
-            category = (
-                extra_data.get("classified_error", {}).get("category")
-                or extra_data.get("category")
-            )
+            category = extra_data.get("classified_error", {}).get("category") or extra_data.get("category")
         except Exception:
             category = None
         if category:
@@ -251,9 +247,7 @@ def _count_bitget_categories(logs: list) -> dict[str, int]:
 def _format_bitget_counts(counts: dict[str, int]) -> str:
     if not counts:
         return "✅ 近 24 小时无系统级 API 异常"
-    return "⚠️ " + " / ".join(
-        f"{category}: {count}" for category, count in sorted(counts.items())
-    )
+    return "⚠️ " + " / ".join(f"{category}: {count}" for category, count in sorted(counts.items()))
 
 
 def _format_recent_errors(errors: list) -> str:

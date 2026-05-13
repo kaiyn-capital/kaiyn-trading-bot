@@ -11,9 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class AdminMonitoringMixin:
-    async def admin_audit_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def admin_audit_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show recent operator audit events for admins."""
         user = await self._get_or_create_user(update)
 
@@ -31,25 +29,20 @@ class AdminMonitoringMixin:
             return
 
         try:
-            logs = await self.system_log_repo.get_recent_logs(
-                levels=["INFO"], module=AUDIT_MODULE, limit=limit
-            )
+            logs = await self.system_log_repo.get_recent_logs(levels=["INFO"], module=AUDIT_MODULE, limit=limit)
             if not logs:
                 await update.message.reply_text("📋 近期没有操作审计记录")
                 return
 
             lines = [format_audit_log_entry(log_entry) for log_entry in logs]
             await update.message.reply_text(
-                "📋 近期操作审计\n\n"
-                + "\n".join(f"{index}. {line}" for index, line in enumerate(lines, 1))
+                "📋 近期操作审计\n\n" + "\n".join(f"{index}. {line}" for index, line in enumerate(lines, 1))
             )
         except Exception as e:
             logger.error(f"Admin audit command error: {e}")
             await update.message.reply_text(f"❌ 获取操作审计时发生错误: {str(e)}")
 
-    async def admin_health_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def admin_health_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show health details for admins."""
         user = await self._get_or_create_user(update)
 

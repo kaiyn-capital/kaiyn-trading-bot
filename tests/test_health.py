@@ -98,9 +98,7 @@ def test_maintenance_health_reports_stale_success():
         created_at=now - timedelta(hours=48),
     )
 
-    result = asyncio.run(
-        read_maintenance_health(FakeSystemLogRepo(latest), stale_hours=36, now=now)
-    )
+    result = asyncio.run(read_maintenance_health(FakeSystemLogRepo(latest), stale_hours=36, now=now))
 
     assert result.status == "stale"
 

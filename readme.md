@@ -139,6 +139,20 @@ Python 套件只維護 `pyproject.toml`，沒有 `requirements.txt`。Runtime �
 docker compose build test
 ```
 
+執行 lint 與格式檢查：
+
+```bash
+docker compose run --rm test ruff check .
+docker compose run --rm test ruff format --check .
+```
+
+手動格式化：
+
+```bash
+docker compose run --rm test ruff check --fix .
+docker compose run --rm test ruff format .
+```
+
 執行預設測試：
 
 ```bash
@@ -447,9 +461,11 @@ Pending order 狀態：
 
 ```bash
 docker compose build test
+docker compose run --rm test ruff check .
+docker compose run --rm test ruff format --check .
 docker compose run --rm test python -m pytest
 docker compose run --rm test python -m pytest --run-db
-docker compose run --rm test python -m py_compile app/*.py alembic/env.py alembic/versions/*.py tests/*.py
+docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
 git diff --check
 docker compose build
 docker compose up -d postgres

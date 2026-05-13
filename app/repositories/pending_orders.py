@@ -1,5 +1,5 @@
-from datetime import datetime
 import secrets
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import select
@@ -33,9 +33,7 @@ class PendingOrderRepository:
         async with self.db.get_session() as session:
             for _ in range(5):
                 token = secrets.token_urlsafe(8)
-                existing = await session.execute(
-                    select(PendingOrder.id).where(PendingOrder.token == token)
-                )
+                existing = await session.execute(select(PendingOrder.id).where(PendingOrder.token == token))
                 if existing.scalar_one_or_none() is None:
                     break
             else:
@@ -61,9 +59,7 @@ class PendingOrderRepository:
             await session.flush()
             return pending_order
 
-    async def claim_pending_order(
-        self, token: str, telegram_id: int
-    ) -> tuple[Optional[PendingOrder], str]:
+    async def claim_pending_order(self, token: str, telegram_id: int) -> tuple[Optional[PendingOrder], str]:
         """Atomically claim a pending order for execution."""
         async with self.db.get_session() as session:
             result = await session.execute(
@@ -127,9 +123,7 @@ class PendingOrderRepository:
         error_message: Optional[str] = None,
     ) -> bool:
         async with self.db.get_session() as session:
-            result = await session.execute(
-                select(PendingOrder).where(PendingOrder.token == token)
-            )
+            result = await session.execute(select(PendingOrder).where(PendingOrder.token == token))
             pending_order = result.scalar_one_or_none()
             if not pending_order:
                 return False

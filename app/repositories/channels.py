@@ -43,9 +43,7 @@ class ChannelRepository:
         """獲取活躍的頻道"""
         async with self.db.get_session() as session:
             result = await session.execute(
-                select(ChannelGroup)
-                .where(ChannelGroup.is_active == True)
-                .order_by(ChannelGroup.created_at)
+                select(ChannelGroup).where(ChannelGroup.is_active.is_(True)).order_by(ChannelGroup.created_at)
             )
             return [channel_to_dict(channel) for channel in result.scalars().all()]
 
@@ -54,8 +52,8 @@ class ChannelRepository:
         async with self.db.get_session() as session:
             result = await session.execute(
                 select(ChannelGroup).where(
-                    ChannelGroup.is_active == True,
-                    ChannelGroup.auto_forward_signals == True,
+                    ChannelGroup.is_active.is_(True),
+                    ChannelGroup.auto_forward_signals.is_(True),
                 )
             )
             return [channel_to_dict(channel) for channel in result.scalars().all()]
@@ -63,9 +61,7 @@ class ChannelRepository:
     async def get_channel_by_chat_id(self, chat_id: str) -> Optional[ChannelGroup]:
         """根據聊天ID獲取頻道"""
         async with self.db.get_session() as session:
-            result = await session.execute(
-                select(ChannelGroup).where(ChannelGroup.chat_id == chat_id)
-            )
+            result = await session.execute(select(ChannelGroup).where(ChannelGroup.chat_id == chat_id))
             return result.scalar_one_or_none()
 
     async def update_channel_settings(
@@ -73,9 +69,7 @@ class ChannelRepository:
     ) -> bool:
         """更新頻道設置"""
         async with self.db.get_session() as session:
-            result = await session.execute(
-                select(ChannelGroup).where(ChannelGroup.chat_id == chat_id)
-            )
+            result = await session.execute(select(ChannelGroup).where(ChannelGroup.chat_id == chat_id))
             channel = result.scalar_one_or_none()
             if not channel:
                 return False
@@ -90,9 +84,7 @@ class ChannelRepository:
     async def deactivate_channel(self, chat_id: str) -> bool:
         """Soft-delete a channel."""
         async with self.db.get_session() as session:
-            result = await session.execute(
-                select(ChannelGroup).where(ChannelGroup.chat_id == chat_id)
-            )
+            result = await session.execute(select(ChannelGroup).where(ChannelGroup.chat_id == chat_id))
             channel = result.scalar_one_or_none()
             if not channel:
                 return False
@@ -114,9 +106,7 @@ class ChannelRepository:
     ) -> bool:
         """Reactivate a soft-deleted channel and refresh its metadata."""
         async with self.db.get_session() as session:
-            result = await session.execute(
-                select(ChannelGroup).where(ChannelGroup.chat_id == chat_id)
-            )
+            result = await session.execute(select(ChannelGroup).where(ChannelGroup.chat_id == chat_id))
             channel = result.scalar_one_or_none()
             if not channel:
                 return False
@@ -142,7 +132,7 @@ class ChannelRepository:
             result = await session.execute(
                 select(ChannelGroup).where(
                     ChannelGroup.chat_id == chat_id,
-                    ChannelGroup.is_active == True,
+                    ChannelGroup.is_active.is_(True),
                 )
             )
             channel = result.scalar_one_or_none()
@@ -160,7 +150,7 @@ class ChannelRepository:
             result = await session.execute(
                 select(ChannelGroup).where(
                     ChannelGroup.chat_id == chat_id,
-                    ChannelGroup.is_active == True,
+                    ChannelGroup.is_active.is_(True),
                 )
             )
             channel = result.scalar_one_or_none()
@@ -176,9 +166,7 @@ class ChannelRepository:
         """Count active channels."""
         async with self.db.get_session() as session:
             result = await session.execute(
-                select(func.count())
-                .select_from(ChannelGroup)
-                .where(ChannelGroup.is_active == True)
+                select(func.count()).select_from(ChannelGroup).where(ChannelGroup.is_active.is_(True))
             )
             return int(result.scalar_one())
 

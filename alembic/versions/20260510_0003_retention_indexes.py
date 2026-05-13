@@ -9,7 +9,6 @@ from typing import Sequence, Union
 
 from alembic import op
 
-
 revision: str = "20260510_0003"
 down_revision: Union[str, None] = "20260510_0002"
 branch_labels: Union[str, Sequence[str], None] = None
@@ -17,9 +16,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_index(
-        "ix_pending_orders_created_at", "pending_orders", ["created_at"], unique=False
-    )
+    op.create_index("ix_pending_orders_created_at", "pending_orders", ["created_at"], unique=False)
     op.create_index("ix_trades_created_at", "trades", ["created_at"], unique=False)
     op.create_index(
         "ix_notification_logs_created_at",
@@ -27,9 +24,7 @@ def upgrade() -> None:
         ["created_at"],
         unique=False,
     )
-    op.create_index(
-        "ix_system_logs_created_at", "system_logs", ["created_at"], unique=False
-    )
+    op.create_index("ix_system_logs_created_at", "system_logs", ["created_at"], unique=False)
 
 
 def downgrade() -> None:

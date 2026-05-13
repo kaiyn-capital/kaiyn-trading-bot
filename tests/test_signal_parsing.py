@@ -4,9 +4,7 @@ from app.order_flow import parse_signal_args
 
 
 def test_parse_signal_with_multiple_take_profits_and_remark():
-    signal = parse_signal_args(
-        "BTCUSDT short 80200 81000 81700 77777 75000 等待回踩后执行".split()
-    )
+    signal = parse_signal_args("BTCUSDT short 80200 81000 81700 77777 75000 等待回踩后执行".split())
 
     assert signal.symbol == "BTCUSDT"
     assert signal.direction == "short"
@@ -18,9 +16,7 @@ def test_parse_signal_with_multiple_take_profits_and_remark():
 
 
 def test_parse_signal_without_remark():
-    signal = parse_signal_args(
-        "ETHUSDT long 3200 3250 3150 3400 3500 3600".split()
-    )
+    signal = parse_signal_args("ETHUSDT long 3200 3250 3150 3400 3500 3600".split())
 
     assert signal.symbol == "ETHUSDT"
     assert signal.direction == "long"

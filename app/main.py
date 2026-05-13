@@ -7,7 +7,6 @@ Bitget Telegram Trading Bot
 import asyncio
 import logging
 import sys
-import os
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
@@ -24,20 +23,21 @@ from app.database import (
     init_database,
 )
 
+
 # 設置日誌
 def setup_logging():
     """配置日誌系統"""
-    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     log_level = getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO)
-    Path('logs').mkdir(exist_ok=True)
+    Path("logs").mkdir(exist_ok=True)
     file_handler = TimedRotatingFileHandler(
-        'logs/app.log',
-        when='midnight',
+        "logs/app.log",
+        when="midnight",
         interval=1,
         backupCount=Config.RETENTION_DAYS,
-        encoding='utf-8',
+        encoding="utf-8",
     )
-    
+
     # 基本配置
     logging.basicConfig(
         level=log_level,
@@ -48,11 +48,12 @@ def setup_logging():
         ],
         force=True,
     )
-    
+
     # 設置第三方庫日誌級別
-    logging.getLogger('httpx').setLevel(logging.WARNING)
-    logging.getLogger('telegram').setLevel(logging.WARNING)
-    logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("telegram").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
 
 async def check_requirements():
     """檢查必要的依賴和配置"""
@@ -60,11 +61,11 @@ async def check_requirements():
         # 檢查配置
         Config.validate()
         init_database()
-        
+
         # 檢查必要目錄
-        log_dir = Path('logs')
+        log_dir = Path("logs")
         log_dir.mkdir(exist_ok=True)
-        
+
         # 檢查資料庫
         if not await health_check():
             logging.error("Database health check failed")
@@ -73,9 +74,9 @@ async def check_requirements():
                 alert_key="startup_db_failure",
             )
             return False
-        
+
         return True
-    
+
     except Exception as e:
         logging.error(f"Requirements check failed: {e}")
         await send_direct_admin_alert(
@@ -84,20 +85,21 @@ async def check_requirements():
         )
         return False
 
+
 async def main():
     """主函數"""
     print("�� 啟動 Bitget Telegram 交易機器人...")
-    
+
     # 設置日誌
     setup_logging()
     logger = logging.getLogger(__name__)
-    
+
     try:
         # 檢查運行要求
         if not await check_requirements():
             logger.error("❌ 系統檢查失敗，無法啟動")
             return 1
-        
+
         logger.info("資料庫連線檢查完成")
 
         # 啟動機器人
@@ -105,13 +107,13 @@ async def main():
         from app.bot import run_bot
 
         await run_bot()
-        
+
         return 0
-        
+
     except KeyboardInterrupt:
         logger.info("👋 收到中斷信號，正在關閉...")
         return 0
-    
+
     except Exception as e:
         logger.error(f"❌ 啟動失敗: {e}")
         await send_direct_admin_alert(
@@ -119,6 +121,7 @@ async def main():
             alert_key="startup_failure",
         )
         return 1
+
 
 async def run_cleanup_retention(dry_run: bool = False) -> int:
     """Run retention cleanup without requiring Telegram credentials."""
@@ -152,11 +155,7 @@ async def run_cleanup_retention(dry_run: bool = False) -> int:
         logger.info(f"Retention cleanup result: {result}")
         await get_system_log_repo().log(
             level="INFO",
-            message=(
-                "Retention cleanup dry run completed"
-                if dry_run
-                else "Retention cleanup completed"
-            ),
+            message=("Retention cleanup dry run completed" if dry_run else "Retention cleanup completed"),
             module="maintenance",
             function="run_cleanup_retention",
             extra_data=result,
@@ -182,6 +181,7 @@ async def run_cleanup_retention(dry_run: bool = False) -> int:
         )
         return 1
 
+
 def generate_encryption_key():
     """生成加密金鑰的工具函數"""
     from app.encryption import KeyGenerator
@@ -190,6 +190,7 @@ def generate_encryption_key():
     print(f"Generated encryption key: {key}")
     print(f"Add this to your .env file: ENCRYPTION_KEY={key}")
     return key
+
 
 def create_env_template():
     """創建環境變數模板"""
@@ -228,35 +229,37 @@ BITGET_ALERT_WINDOW_SECONDS=600
 BACKUP_STALE_HOURS=36
 MAINTENANCE_STALE_HOURS=36
 """
-    
+
     key = KeyGenerator.generate_key()
     template = template.format(encryption_key=key)
-    
-    with open('.env.template', 'w', encoding='utf-8') as f:
+
+    with open(".env.template", "w", encoding="utf-8") as f:
         f.write(template)
-    
+
     print("✅ .env.template 文件已創建")
     print("請將其複製為 .env 並填入正確的配置值")
+
 
 def init_project():
     """初始化項目"""
     print("🔧 初始化項目...")
-    
+
     # 創建必要目錄
-    dirs = ['logs', 'data', 'backups']
+    dirs = ["logs", "data", "backups"]
     for dir_name in dirs:
         Path(dir_name).mkdir(exist_ok=True)
         print(f"✅ 創建目錄: {dir_name}")
-    
+
     # 創建環境變數模板
-    if not Path('.env').exists():
+    if not Path(".env").exists():
         create_env_template()
-    
+
     print("🎉 項目初始化完成！")
     print("\n下一步：")
     print("1. 編輯 .env 文件，填入正確的配置")
     print("2. 運行 'docker compose run --rm bot alembic upgrade head' 套用資料庫 migration")
     print("3. 運行 'docker compose up bot' 啟動機器人")
+
 
 def show_help():
     """顯示幫助信息"""
@@ -291,19 +294,20 @@ def show_help():
     """
     print(help_text)
 
+
 if __name__ == "__main__":
     import argparse
-    
-    parser = argparse.ArgumentParser(description='Bitget Telegram Trading Bot')
-    parser.add_argument('--init', action='store_true', help='初始化項目')
-    parser.add_argument('--generate-key', action='store_true', help='生成加密金鑰')
-    parser.add_argument('--check-db', action='store_true', help='檢查資料庫連接')
-    parser.add_argument('--create-tables', action='store_true', help='已停用，請使用 alembic upgrade head')
-    parser.add_argument('--cleanup-retention', action='store_true', help='清理超過保留期限的資料')
-    parser.add_argument('--dry-run', action='store_true', help='搭配 --cleanup-retention，只顯示會清理的筆數')
-    
+
+    parser = argparse.ArgumentParser(description="Bitget Telegram Trading Bot")
+    parser.add_argument("--init", action="store_true", help="初始化項目")
+    parser.add_argument("--generate-key", action="store_true", help="生成加密金鑰")
+    parser.add_argument("--check-db", action="store_true", help="檢查資料庫連接")
+    parser.add_argument("--create-tables", action="store_true", help="已停用，請使用 alembic upgrade head")
+    parser.add_argument("--cleanup-retention", action="store_true", help="清理超過保留期限的資料")
+    parser.add_argument("--dry-run", action="store_true", help="搭配 --cleanup-retention，只顯示會清理的筆數")
+
     args = parser.parse_args()
-    
+
     if args.init:
         init_project()
     elif args.generate_key:
@@ -327,7 +331,7 @@ if __name__ == "__main__":
     elif args.cleanup_retention:
         exit_code = asyncio.run(run_cleanup_retention(dry_run=args.dry_run))
         sys.exit(exit_code)
-    elif len(sys.argv) > 1 and sys.argv[1] in ['--help', '-h']:
+    elif len(sys.argv) > 1 and sys.argv[1] in ["--help", "-h"]:
         show_help()
     else:
         # 運行主程序

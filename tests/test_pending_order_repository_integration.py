@@ -1,8 +1,8 @@
 import asyncio
-from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
 import os
 import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import select, text
@@ -50,9 +50,7 @@ async def integration_database():
     database_url = os.environ["TEST_DATABASE_URL"]
     schema = f"test_pending_orders_{uuid.uuid4().hex}"
     admin_engine = create_async_engine(database_url, poolclass=NullPool)
-    original_schemas = {
-        table: table.schema for table in Base.metadata.tables.values()
-    }
+    original_schemas = {table: table.schema for table in Base.metadata.tables.values()}
 
     async with admin_engine.begin() as connection:
         await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
@@ -129,9 +127,7 @@ async def create_pending(repo, user_id, telegram_id=123456, **overrides):
 
 async def load_pending(db, token):
     async with db.get_session() as session:
-        result = await session.execute(
-            select(PendingOrder).where(PendingOrder.token == token)
-        )
+        result = await session.execute(select(PendingOrder).where(PendingOrder.token == token))
         return result.scalar_one()
 
 
@@ -163,9 +159,7 @@ def test_create_and_claim_pending_order_lifecycle():
             saved = await load_pending(db, pending.token)
             assert saved.status == "processing"
 
-            claimed_again, status_again = await repo.claim_pending_order(
-                pending.token, 123456
-            )
+            claimed_again, status_again = await repo.claim_pending_order(pending.token, 123456)
             assert claimed_again.token == pending.token
             assert status_again == "processing"
 
@@ -208,26 +202,18 @@ def test_cancel_pending_order_lifecycle():
             assert await repo.cancel_pending_order("missing", 123456) == "missing"
 
             cancellable = await create_pending(repo, user_id)
-            assert (
-                await repo.cancel_pending_order(cancellable.token, 123456)
-                == "cancelled"
-            )
+            assert await repo.cancel_pending_order(cancellable.token, 123456) == "cancelled"
             saved = await load_pending(db, cancellable.token)
             assert saved.status == "cancelled"
 
             processing = await create_pending(repo, user_id)
             await repo.claim_pending_order(processing.token, 123456)
-            assert (
-                await repo.cancel_pending_order(processing.token, 123456)
-                == "processing"
-            )
+            assert await repo.cancel_pending_order(processing.token, 123456) == "processing"
 
             executed = await create_pending(repo, user_id)
             trade_id = await seed_trade(db, user_id)
             assert await repo.mark_executed(executed.token, trade_id) is True
-            assert (
-                await repo.cancel_pending_order(executed.token, 123456) == "executed"
-            )
+            assert await repo.cancel_pending_order(executed.token, 123456) == "executed"
 
     asyncio.run(scenario())
 

@@ -13,27 +13,21 @@ class FakeBitgetAPIError(Exception):
 
 
 def test_invalid_api_key_is_user_config_error():
-    result = classify_bitget_exception(
-        FakeBitgetAPIError("40001", "invalid API key or signature")
-    )
+    result = classify_bitget_exception(FakeBitgetAPIError("40001", "invalid API key or signature"))
 
     assert result.category == BitgetErrorCategory.USER_CONFIG
     assert result.user_message == "API 设置或权限异常，请检查 API Key 权限。"
 
 
 def test_unknown_symbol_is_trading_pair_error():
-    result = classify_bitget_exception(
-        FakeBitgetAPIError("40706", "symbol not exist")
-    )
+    result = classify_bitget_exception(FakeBitgetAPIError("40706", "symbol not exist"))
 
     assert result.category == BitgetErrorCategory.TRADING_PAIR
     assert "交易对" in result.user_message
 
 
 def test_exchange_rejection_keeps_raw_code_and_message():
-    result = classify_bitget_exception(
-        FakeBitgetAPIError("43012", "insufficient balance")
-    )
+    result = classify_bitget_exception(FakeBitgetAPIError("43012", "insufficient balance"))
 
     assert result.category == BitgetErrorCategory.EXCHANGE_REJECTED
     assert result.raw_code == "43012"
@@ -57,9 +51,7 @@ def test_http_5xx_is_temporary_exchange_error():
 
 
 def test_http_403_is_user_config_error():
-    result = classify_bitget_exception(
-        FakeBitgetAPIError("403", "HTTP 403", http_status=403)
-    )
+    result = classify_bitget_exception(FakeBitgetAPIError("403", "HTTP 403", http_status=403))
 
     assert result.category == BitgetErrorCategory.USER_CONFIG
     assert result.is_retryable is False
