@@ -344,7 +344,7 @@ def test_admin_health_replies_report(monkeypatch):
         return "🩺 **系统健康检查**\n\nDB：✅ 正常", {"db_ok": True}
 
     monkeypatch.setattr(
-        "app.bot_admin_handlers.build_admin_health_report",
+        "app.bot_admin_monitoring.build_admin_health_report",
         fake_build_admin_health_report,
     )
     handler = FakeAdminHandler(FakeChannelRepo())

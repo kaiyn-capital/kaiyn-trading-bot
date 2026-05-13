@@ -49,7 +49,11 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 │   ├── main.py              # CLI 入口、啟動流程、初始化工具
 │   ├── bot.py               # Telegram Bot handler 註冊與 lifecycle
 │   ├── bot_account_handlers.py # /start、/status、/balance、/setapi、/settings
-│   ├── bot_admin_handlers.py # 管理員、頻道、topic、health 指令
+│   ├── bot_admin_handlers.py # 管理員 handler mixin 聚合入口
+│   ├── bot_admin_core.py  # /admin、/admin_users、/add_trader
+│   ├── bot_admin_channels.py # 頻道、群組、topic 管理
+│   ├── bot_admin_messaging.py # 管理員廣播與指定頻道發送
+│   ├── bot_admin_monitoring.py # /admin_health、/admin_audit
 │   ├── bot_order_handlers.py # /send_signal、pending order、下單確認流程
 │   ├── bot_keyboards.py     # Telegram inline keyboard builders
 │   ├── bot_messages.py      # Bot 訊息文字與格式化
@@ -60,9 +64,10 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 │   ├── admin_alerts.py      # 管理員告警、cooldown、Bitget 連續錯誤門檻
 │   ├── health.py            # /admin_health 與備份/維護狀態整理
 │   ├── config.py            # 環境變數設定與驗證
-│   ├── database.py          # PostgreSQL async repositories
+│   ├── database.py          # PostgreSQL async manager 與 repo getter façade
 │   ├── encryption.py        # API 憑證加解密
-│   └── models.py            # SQLAlchemy models
+│   ├── models.py            # SQLAlchemy models
+│   └── repositories/        # User/Trade/PendingOrder/Channel/SystemLog repositories
 ├── tests/                   # pytest 純邏輯、handler 與 DB integration 測試
 ├── backups/                 # 本機/部署備份輸出目錄，git ignored
 ├── logs/                    # Bot log 與 alert state，git ignored
