@@ -202,6 +202,17 @@ git diff --check
 docker compose down -v --remove-orphans
 ```
 
+## Dependabot
+
+本專案提供基礎 Dependabot 設定：`.github/dependabot.yml`。
+
+Dependabot 每週一台北時間 09:00 檢查：
+
+- Python 套件：`pyproject.toml`
+- GitHub Actions：`.github/workflows/*.yml`
+
+Dependabot 只會開 PR，不會自動合併。每個 Dependabot PR 都應通過 GitHub Actions CI，並由管理者手動確認後再合併。交易 bot 的 major dependency update 建議先查看 changelog，再決定是否合併。
+
 目前測試覆蓋重點：
 
 - `/send_signal` 解析、TP 與備註。

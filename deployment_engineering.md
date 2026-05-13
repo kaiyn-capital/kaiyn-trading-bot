@@ -20,11 +20,12 @@
 - Docker-first pytest，含 opt-in PostgreSQL integration tests。
 - Ruff lint / format，透過 Docker `test` service 執行。
 - GitHub Actions CI，透過 Docker Compose 執行 Ruff、pytest、DB integration、py_compile 與 whitespace 檢查。
+- Dependabot 每週檢查 Python packages 與 GitHub Actions，開 PR 後交由 CI 驗證。
 
 目前建議狀態：
 
 - 可以開始 staging 或小額真實試運行。
-- 若要長期正式放著跑，建議繼續完成本文件剩餘兩個工程化項目。
+- 若要長期正式放著跑，建議繼續完成本文件剩餘一個工程化項目。
 
 ## Recommended Order
 
@@ -81,11 +82,14 @@ DB integration 測試每次 CI 都跑，使用 Docker Compose 內建 `postgres` 
 
 在 CI 建好後加入 Dependabot。建議順序放在 CI 後面，因為 Dependabot 開 PR 後需要 CI 自動驗證，否則只會增加手動檢查負擔。
 
-建議內容：
-- 新增 `.github/dependabot.yml`。
+狀態：已完成基礎版。
+
+設定內容：
+- 已新增 `.github/dependabot.yml`。
 - 監控 Python package ecosystem。
 - 監控 GitHub Actions ecosystem。
-- 更新頻率建議 weekly。
+- 每週一台北時間 09:00 檢查。
+- 同時最多 5 個 open PR。
 - 只開 PR，不自動 merge。
 - 每次 Dependabot PR 仍需通過 CI，並由你手動確認後合併。
 
