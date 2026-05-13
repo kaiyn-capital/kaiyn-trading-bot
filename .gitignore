@@ -52,9 +52,9 @@ ehthumbs.db
 Thumbs.db
 
 # 日誌文件
+logs/
 *.log
-logs/*.log
-logs/*.json
+*.log.*
 app.log
 
 # 數據庫文件
