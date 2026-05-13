@@ -35,7 +35,7 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 - httpx
 - cryptography Fernet
 - Docker Compose
-- pytest（dev optional dependency）
+- pytest（dev optional dependency，僅測試 image 安裝）
 
 ## 專案結構
 
@@ -63,7 +63,7 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 │   ├── database.py          # PostgreSQL async repositories
 │   ├── encryption.py        # API 憑證加解密
 │   └── models.py            # SQLAlchemy models
-├── tests/                   # pytest 純邏輯與 handler 單元測試
+├── tests/                   # pytest 純邏輯、handler 與 DB integration 測試
 ├── backups/                 # 本機/部署備份輸出目錄，git ignored
 ├── logs/                    # Bot log 與 alert state，git ignored
 ├── alembic.ini
@@ -128,25 +128,43 @@ MAINTENANCE_STALE_HOURS=36
 
 Python 套件只維護 `pyproject.toml`，沒有 `requirements.txt`。Runtime 依賴與 Docker 安裝流程也都以 `pyproject.toml` 為準。
 
-安裝開發測試依賴：
+建置測試 image：
 
 ```bash
-pip install -e ".[dev]"
+docker compose build test
 ```
 
-執行純邏輯測試：
+執行預設測試：
 
 ```bash
-python3 -m pytest
+docker compose run --rm test python -m pytest
 ```
 
-目前測試範圍限於純函式與交易防呆，不會連線 Telegram、不會呼叫 Bitget 真實 API，也不需要 PostgreSQL。
+預設測試不會連線 Telegram、不會呼叫 Bitget 真實 API；DB integration 測試會被自動跳過。測試 service 透過 Docker network 使用 `postgres:5432`，不依賴本機 `localhost:5432`。
+
+執行 PostgreSQL integration 測試：
+
+```bash
+docker compose up -d postgres
+docker compose run --rm test python -m pytest --run-db -m integration
+```
+
+執行全部測試：
+
+```bash
+docker compose run --rm test python -m pytest --run-db
+```
+
+DB integration 測試會在 PostgreSQL 裡建立獨立測試 schema，測完自動刪除，不會清空 `public` schema。
+本機 `python3 -m pytest` 可作為開發 shortcut，但主要驗證流程以 Docker Compose 為準。
+若要使用本機 shortcut，可先執行 `pip install -e ".[dev]"`。
 
 目前測試覆蓋重點：
 
 - `/send_signal` 解析、TP 與備註。
 - 市價/掛單預覽、立即成交切市價、1R 倉位計算。
 - Bitget 合約規則防呆與錯誤分類。
+- Pending order confirm/cancel/expired/executed/failed 狀態流程。
 - 管理頻道、topic 設定、API 設定流程。
 - 管理員告警、backup/maintenance health report。
 
@@ -415,8 +433,10 @@ Pending order 狀態：
 本專案目前不做壓測或大量模擬測試。基本驗證流程：
 
 ```bash
-python3 -m pytest
-python3 -m py_compile app/*.py alembic/env.py alembic/versions/*.py
+docker compose build test
+docker compose run --rm test python -m pytest
+docker compose run --rm test python -m pytest --run-db
+docker compose run --rm test python -m py_compile app/*.py alembic/env.py alembic/versions/*.py tests/*.py
 git diff --check
 docker compose build
 docker compose up -d postgres

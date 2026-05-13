@@ -5,6 +5,7 @@ x-default-logging: &default-logging
     max-file: "5"
 
 x-bot-image: &bot-image kaiyn-trading-bot-app
+x-test-image: &test-image kaiyn-trading-bot-test
 
 services:
   postgres:
@@ -41,6 +42,26 @@ services:
       - ./logs:/app/logs
       - ./backups:/app/backups:ro
     command: ["python", "-m", "app.main"]
+    logging: *default-logging
+
+  test:
+    image: *test-image
+    build:
+      context: .
+      args:
+        INSTALL_DEV: "true"
+    profiles:
+      - test
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-kaiyn}:${POSTGRES_PASSWORD:-kaiyn}@postgres:5432/${POSTGRES_DB:-kaiyn_trading_bot}
+      TEST_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-kaiyn}:${POSTGRES_PASSWORD:-kaiyn}@postgres:5432/${POSTGRES_DB:-kaiyn_trading_bot}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "pytest"]
     logging: *default-logging
 
   maintenance:

@@ -105,11 +105,11 @@
 - 任一備份檔可以被實際還原。
 - 還原流程不依賴口頭記憶。
 
-### 5. 核心流程測試
+### 5. 核心流程測試（已完成基礎版）
 
 第五優先。不做壓測，但要補最容易出錯的核心邏輯測試。
 
-已建立 pytest 輕量測試框架，範圍限於純邏輯，不打 Telegram、不打 Bitget、不需要 DB。
+已建立 pytest 輕量測試框架，並改為 Docker Compose 優先執行。預設測試不打 Telegram、不打 Bitget；PostgreSQL integration 測試採 opt-in，容器內連 `postgres:5432`，使用獨立測試 schema，測完自動刪除。
 
 已補強：
 
@@ -118,10 +118,8 @@
 - 掛單價可能立即成交時切換市價確認的測試。
 - 1R 倉位計算測試。
 - 交易安全防呆規則測試。
-
-後續可補強：
-
-- pending order claim/cancel/expired 狀態轉換測試。
+- Pending order handler confirm/cancel 分支測試。
+- Pending order repository claim/cancel/expired/executed/failed PostgreSQL integration 測試。
 
 完成標準：
 
@@ -158,8 +156,10 @@
 每輪完成後至少跑：
 
 ```bash
-python3 -m pytest
-python3 -m py_compile app/*.py alembic/env.py alembic/versions/*.py
+docker compose build test
+docker compose run --rm test python -m pytest
+docker compose run --rm test python -m pytest --run-db
+docker compose run --rm test python -m py_compile app/*.py alembic/env.py alembic/versions/*.py tests/*.py
 git diff --check
 docker compose build bot
 docker compose up -d bot

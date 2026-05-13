@@ -29,3 +29,6 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+markers = [
+    "integration: opt-in PostgreSQL integration tests",
+]
