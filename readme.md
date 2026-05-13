@@ -16,9 +16,13 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 - 交易信號支援市價下單與 GTC 限價掛單
 - 交易信號支援備註文字與 UTC+8 時間戳
 - 下單前檢查 Bitget 合約交易對狀態、最小下單量、最小名義價值、精度與單筆上限
+- Bitget API 錯誤分類，使用者看到簡短原因，管理員 log 保留 raw code/message
 - 管理員與發單員權限管理
 - 頻道或群組管理與交易信號轉發
+- Telegram forum topic 指定轉發
 - Pending order 寫入 PostgreSQL，Bot 重啟後仍可確認尚未過期的訂單
+- 管理員告警、`/admin_health` 健康檢查、每日清理與備份
+- 備份還原 runbook 與本地還原驗證流程
 
 ## 技術棧
 
@@ -31,26 +35,43 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 - httpx
 - cryptography Fernet
 - Docker Compose
+- pytest（dev optional dependency）
 
 ## 專案結構
 
 ```text
 .
-├── alembic/                 # Database migrations
+├── alembic/
+│   ├── env.py
+│   └── versions/            # Alembic migration scripts
 ├── app/
+│   ├── __init__.py
 │   ├── main.py              # CLI 入口、啟動流程、初始化工具
 │   ├── bot.py               # Telegram Bot handler 註冊與 lifecycle
+│   ├── bot_account_handlers.py # /start、/status、/balance、/setapi、/settings
+│   ├── bot_admin_handlers.py # 管理員、頻道、topic、health 指令
+│   ├── bot_order_handlers.py # /send_signal、pending order、下單確認流程
 │   ├── bot_keyboards.py     # Telegram inline keyboard builders
 │   ├── bot_messages.py      # Bot 訊息文字與格式化
+│   ├── bot_states.py        # API 設定 conversation state 常數
 │   ├── order_flow.py        # 交易信號解析、下單預覽與執行流程
 │   ├── bitget_api.py        # Bitget API client 與交易管理器
+│   ├── bitget_errors.py     # Bitget/API 錯誤分類與使用者訊息 mapping
+│   ├── admin_alerts.py      # 管理員告警、cooldown、Bitget 連續錯誤門檻
+│   ├── health.py            # /admin_health 與備份/維護狀態整理
 │   ├── config.py            # 環境變數設定與驗證
 │   ├── database.py          # PostgreSQL async repositories
 │   ├── encryption.py        # API 憑證加解密
 │   └── models.py            # SQLAlchemy models
+├── tests/                   # pytest 純邏輯與 handler 單元測試
+├── backups/                 # 本機/部署備份輸出目錄，git ignored
+├── logs/                    # Bot log 與 alert state，git ignored
 ├── alembic.ini
+├── backup_restore_runbook.md
 ├── compose.yml
 ├── Dockerfile
+├── AGENTS.md
+├── production_readiness.md
 ├── pyproject.toml
 ├── restart_bot.sh
 └── .env.template
@@ -102,9 +123,10 @@ BACKUP_STALE_HOURS=36
 MAINTENANCE_STALE_HOURS=36
 ```
 
-`DATABASE_URL` 必須使用 `postgresql+asyncpg://`。此專案不再支援 SQLite fallback。
 
 ## 本地開發與測試
+
+Python 套件只維護 `pyproject.toml`，沒有 `requirements.txt`。Runtime 依賴與 Docker 安裝流程也都以 `pyproject.toml` 為準。
 
 安裝開發測試依賴：
 
@@ -119,6 +141,14 @@ python3 -m pytest
 ```
 
 目前測試範圍限於純函式與交易防呆，不會連線 Telegram、不會呼叫 Bitget 真實 API，也不需要 PostgreSQL。
+
+目前測試覆蓋重點：
+
+- `/send_signal` 解析、TP 與備註。
+- 市價/掛單預覽、立即成交切市價、1R 倉位計算。
+- Bitget 合約規則防呆與錯誤分類。
+- 管理頻道、topic 設定、API 設定流程。
+- 管理員告警、backup/maintenance health report。
 
 ## 本地與部署流程
 
@@ -166,6 +196,12 @@ docker compose up -d maintenance db-backup
 docker compose logs -f bot
 ```
 
+查看服務狀態：
+
+```bash
+docker compose ps
+```
+
 重啟 Bot：
 
 ```bash
@@ -186,6 +222,7 @@ docker compose restart bot
 - PostgreSQL 備份：每天建立 gzip SQL 備份到 `./backups`，保留 30 天。
 - 管理員告警：Bot 啟動、DB/backup/cleanup 異常、Bitget API 連續暫時異常會推送到 `TELEGRAM_ADMIN_IDS`。
 - 健康檢查：管理員可用 `/admin_health` 查看 DB、backup、cleanup、Bitget API 與近期錯誤狀態。
+- 備份還原驗證：正式部署前至少依照 [backup_restore_runbook.md](backup_restore_runbook.md) 驗證一次，之後每月或重大改版後驗證一次。
 
 手動 dry-run 檢查會清理多少資料：
 
@@ -209,6 +246,12 @@ ls -lh backups
 cat backups/backup_status.json
 ```
 
+備份還原驗證：
+
+```bash
+cat backup_restore_runbook.md
+```
+
 ## Telegram 指令
 
 一般使用者：
@@ -230,12 +273,41 @@ cat backups/backup_status.json
 - `/add_channel -1001234567890 描述`：新增私人群組或頻道 ID。
 - `/admin_broadcast 訊息內容`：向所有已管理頻道或群組廣播訊息。
 - `/send_to_channel 目標 訊息內容`：向指定頻道或群組發送訊息。
+- `/set_channel_topic 頻道編號 topic_id [話題名稱]`：設定交易信號轉發到指定 Telegram topic。
+- `/clear_channel_topic 頻道編號`：清除指定 topic，恢復轉發到群組本身。
 - `/add_trader Telegram_ID`：將指定使用者設為發單員。
 - `/send_signal ...`：發送交易信號。
 
 發單員：
 
 - `/send_signal ...`：發送交易信號到已啟用自動轉發的頻道或群組。
+
+## Telegram Topic 轉發
+
+若管理群組是 Telegram forum supergroup，可讓交易信號轉發到指定話題。
+
+流程：
+
+1. 先用 `/add_channel` 加入群組。
+2. 用 `/admin_channels` 查看頻道編號。
+3. 管理員自行取得 Telegram `message_thread_id`。
+4. 設定指定 topic：
+
+```text
+/set_channel_topic 1 12345 交易信号
+```
+
+5. 之後 `/send_signal` 轉發到該群組時，會帶上 `message_thread_id`。
+
+清除 topic：
+
+```text
+/clear_channel_topic 1
+```
+
+`[話題名稱]` 是管理員自訂備註名稱，只用於 `/admin_channels` 顯示，不需要與 Telegram 話題實際名稱完全一致。
+
+目前指定 topic 只套用於 `/send_signal` 交易信號自動轉發；`/admin_broadcast` 與 `/send_to_channel` 維持發到群組本身。
 
 ## 交易信號格式
 
@@ -296,6 +368,15 @@ cat backups/backup_status.json
 - Long 止損必須低於計算價格；Short 止損必須高於計算價格。
 - 本專案目前不額外設定 1R 全域上限，也不額外設定止損距離百分比上下限。
 
+錯誤處理：
+
+- API key、權限、簽名、IP whitelist 等問題會回報為 API 設定或權限異常。
+- 交易對不存在或不可交易會回報為交易對問題。
+- Bitget 拒單會回報為交易所拒絕下單。
+- timeout、network error、HTTP 5xx 或交易所暫時繁忙會回報為暫時異常。
+- 使用者只看到簡短原因；`trades.error_message`、`pending_orders.error_message` 與 `system_logs.extra_data` 會保留分類、raw code/message 與上下文。
+- 不自動 retry 送單，避免重複下單風險。
+
 ## Database
 
 Schema 由 Alembic 管理，不使用 `create_all()` 建表。
@@ -307,7 +388,7 @@ Schema 由 Alembic 管理，不使用 `create_all()` 建表。
 - `pending_orders`：待確認訂單、callback token、order mode、掛單價、entry 區間、計算結果、狀態與過期時間。
 - `notification_logs`：通知紀錄。
 - `trading_pairs`：交易對與限制資料。
-- `channel_groups`：受管理的 Telegram 頻道或群組。
+- `channel_groups`：受管理的 Telegram 頻道或群組，以及可選的 `message_thread_id` topic 設定。
 - `system_logs`：系統操作與錯誤日誌。
 
 Pending order 狀態：
@@ -325,14 +406,17 @@ Pending order 狀態：
 - `ENCRYPTION_KEY` 遺失後，既有加密 API 憑證將無法解密。
 - Bot 需要能主動私訊使用者；使用者需先與 Bot 開啟對話。
 - 頻道或群組轉發需要 Bot 具備相應管理權限。
+- 備份檔會包含加密後的 API 憑證與交易紀錄，應與 `.env` 一樣保護。
+- 還原備份時需要原本的 `ENCRYPTION_KEY`，否則還原後的 API 憑證仍無法解密使用。
 
 ## 驗證
 
-本輪不做壓測或大量模擬測試。基本驗證流程：
+本專案目前不做壓測或大量模擬測試。基本驗證流程：
 
 ```bash
 python3 -m pytest
 python3 -m py_compile app/*.py alembic/env.py alembic/versions/*.py
+git diff --check
 docker compose build
 docker compose up -d postgres
 docker compose run --rm bot alembic upgrade head
@@ -341,6 +425,8 @@ docker compose run --rm bot python -m app.main --cleanup-retention --dry-run
 docker compose run --rm bot python -m app.main --cleanup-retention
 docker compose up -d bot
 docker compose up -d maintenance db-backup
+docker compose ps
+docker compose logs --tail 40 bot
 ```
 
 接著在 Telegram 手動驗證：
@@ -354,3 +440,5 @@ docker compose up -d maintenance db-backup
 - 確認信號上出現「市价下单」與「挂单」
 - 點擊兩種下單方式，確認 `pending_orders.order_mode` 與 `limit_price` 正確寫入
 - 重啟 Bot 後確認尚未過期的 pending order 仍可被確認
+- 若使用 forum supergroup，設定 `/set_channel_topic` 後確認信號出現在指定 topic
+- 依照 [backup_restore_runbook.md](backup_restore_runbook.md) 驗證最新備份可還原
