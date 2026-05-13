@@ -403,6 +403,7 @@ Pending order 狀態：
 ## 安全注意事項
 
 - `.env`、資料庫資料與 log 不應提交到 git。
+- Runtime log 會摘要化，不應包含 API key、secret、passphrase 或完整交易所 response；但仍可能包含交易對、方向、數量、狀態與錯誤碼，應視為內部資料。
 - `ENCRYPTION_KEY` 遺失後，既有加密 API 憑證將無法解密。
 - Bot 需要能主動私訊使用者；使用者需先與 Bot 開啟對話。
 - 頻道或群組轉發需要 Bot 具備相應管理權限。

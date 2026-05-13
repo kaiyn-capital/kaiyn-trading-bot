@@ -11,6 +11,11 @@ import logging
 from .config import Config
 from .encryption import EncryptionManager
 from .bitget_errors import classify_bitget_exception
+from .log_sanitizer import (
+    summarize_http_error,
+    summarize_order_payload,
+    summarize_order_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +112,14 @@ class BitgetAPIClient:
                 )
             
             if response.status_code >= 400:
-                logger.warning(f"HTTP {response.status_code} but Bitget code is 00000: {result}")
+                logger.warning(
+                    "HTTP status indicates error despite Bitget success code: %s",
+                    {
+                        "http_status": response.status_code,
+                        "endpoint": endpoint,
+                        "method": method,
+                    },
+                )
                 raise BitgetAPIError(
                     code=str(response.status_code),
                     message=f"HTTP {response.status_code}",
@@ -121,7 +133,14 @@ class BitgetAPIClient:
             
         except httpx.HTTPStatusError as e:
             # 嘗試解析錯誤響應體獲取真實的Bitget錯誤碼
-            logger.error(f"HTTP error: {e.response.status_code} - {e.response.text}")
+            logger.error(
+                "Bitget HTTP error summary: %s",
+                {
+                    **summarize_http_error(e.response.status_code, e.response.text),
+                    "endpoint": endpoint,
+                    "method": method,
+                },
+            )
             try:
                 error_data = e.response.json()
                 if 'code' in error_data and 'msg' in error_data:
@@ -243,7 +262,7 @@ class BitgetAPIClient:
         if take_profit_price:
             data['presetStopSurplusPrice'] = str(take_profit_price)
         
-        logger.info(f"Placing order with tradeSide parameter: {data}")
+        logger.info("Placing order summary: %s", summarize_order_payload(data))
         return await self._make_request('POST', '/api/v2/mix/order/place-order', data=data)
     
     async def cancel_order(self, symbol: str, order_id: str = None, client_order_id: str = None,
@@ -479,7 +498,7 @@ class BitgetTradeManager:
             stop_loss_price=str(stop_loss_price) if stop_loss_price else None,
             take_profit_price=str(take_profit_price) if take_profit_price else None
         )
-        logger.info(f"Market order placed successfully: {result}")
+        logger.info("Market order placed summary: %s", summarize_order_response(result))
         return result
     
     async def place_limit_order(self, user_id: int, encrypted_credentials: Tuple[str, str, str],

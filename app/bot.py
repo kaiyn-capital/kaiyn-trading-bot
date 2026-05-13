@@ -31,6 +31,7 @@ from .database import (
 )
 from .encryption import create_encryption_manager
 from .health import read_backup_health, read_maintenance_health
+from .log_sanitizer import summarize_telegram_update
 from .models import User
 
 logger = logging.getLogger(__name__)
@@ -274,7 +275,11 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle uncaught Telegram update errors."""
-        logger.error(f"Update {update} caused error {context.error}")
+        logger.error(
+            "Telegram update error: update_summary=%s error=%s",
+            summarize_telegram_update(update),
+            context.error,
+        )
 
         user_id = None
         telegram_id = None

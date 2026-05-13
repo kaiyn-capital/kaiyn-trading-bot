@@ -11,6 +11,7 @@ from .bot_keyboards import (
 )
 from .bot_messages import help_message, settings_message, welcome_message
 from .bot_states import WAITING_API_KEY, WAITING_PASSPHRASE, WAITING_SECRET_KEY
+from .log_sanitizer import summarize_balance_response
 
 logger = logging.getLogger(__name__)
 
@@ -103,15 +104,23 @@ class AccountHandlersMixin:
                 user.encrypted_passphrase,
             )
 
-            logger.info(f"Getting balance for user ID: {user.id}")
+            logger.info(
+                "Getting balance for user_id=%s telegram_id=%s",
+                user.id,
+                user.telegram_id,
+            )
             balance_data = await self.trade_manager.get_account_balance(
                 user.id, credentials
             )
-            logger.info(f"Balance API response: {balance_data}")
+            logger.info(
+                "Account balance summary: user_id=%s telegram_id=%s summary=%s",
+                user.id,
+                user.telegram_id,
+                summarize_balance_response(balance_data),
+            )
 
             if balance_data.get("code") == "00000" and balance_data.get("data"):
                 assets = balance_data["data"]
-                logger.info(f"Assets data: {assets}")
                 balance_text = self._format_usdt_balance_text(
                     assets, raw_limit=500, compact=True
                 )
@@ -500,10 +509,15 @@ class AccountHandlersMixin:
             balance_data = await self.trade_manager.get_account_balance(
                 user.id, credentials
             )
+            logger.info(
+                "Account balance refresh summary: user_id=%s telegram_id=%s summary=%s",
+                user.id,
+                user.telegram_id,
+                summarize_balance_response(balance_data),
+            )
 
             if balance_data.get("code") == "00000" and balance_data.get("data"):
                 assets = balance_data["data"]
-                logger.info(f"Balance callback - Assets data: {assets}")
                 balance_text = self._format_usdt_balance_text(
                     assets, raw_limit=300, compact=False
                 )
@@ -572,7 +586,6 @@ class AccountHandlersMixin:
 
         if isinstance(assets, list):
             for asset in assets:
-                logger.info(f"Processing asset: {asset}")
                 coin = (
                     asset.get("coin")
                     or asset.get("marginCoin")
@@ -599,7 +612,6 @@ class AccountHandlersMixin:
                         found_assets = True
                         break
         elif isinstance(assets, dict):
-            logger.info(f"Assets is dict: {assets}")
             if "USDT" in assets:
                 usdt_data = assets["USDT"]
                 available = float(
