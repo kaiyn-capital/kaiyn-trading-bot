@@ -178,6 +178,30 @@ DB integration 測試會在 PostgreSQL 裡建立獨立測試 schema，測完自�
 本機 `python3 -m pytest` 可作為開發 shortcut，但主要驗證流程以 Docker Compose 為準。
 若要使用本機 shortcut，可先執行 `pip install -e ".[dev]"`。
 
+## GitHub Actions CI
+
+本專案提供基礎 CI：`.github/workflows/ci.yml`。
+
+觸發條件：
+
+- push 到 `main`
+- PR 指向 `main`
+- 手動 `workflow_dispatch`
+
+CI 使用 Docker Compose 執行，不使用 production secrets，也不連線 Telegram 或 Bitget 真實 API。每次 CI 會檢查：
+
+```bash
+docker compose version
+docker compose build test
+docker compose up -d postgres
+docker compose run --rm test ruff check .
+docker compose run --rm test ruff format --check .
+docker compose run --rm test python -m pytest --run-db
+docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+git diff --check
+docker compose down -v --remove-orphans
+```
+
 目前測試覆蓋重點：
 
 - `/send_signal` 解析、TP 與備註。

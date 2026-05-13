@@ -19,11 +19,12 @@
 - 每日 PostgreSQL 備份與備份還原 runbook。
 - Docker-first pytest，含 opt-in PostgreSQL integration tests。
 - Ruff lint / format，透過 Docker `test` service 執行。
+- GitHub Actions CI，透過 Docker Compose 執行 Ruff、pytest、DB integration、py_compile 與 whitespace 檢查。
 
 目前建議狀態：
 
 - 可以開始 staging 或小額真實試運行。
-- 若要長期正式放著跑，建議繼續完成本文件剩餘三個工程化項目。
+- 若要長期正式放著跑，建議繼續完成本文件剩餘兩個工程化項目。
 
 ## Recommended Order
 
@@ -52,18 +53,23 @@
 
 先做基礎 CI，不急著自動部署。
 
-建議 CI 檢查：
+狀態：已完成基礎版。
+
+CI 檢查：
 
 ```bash
+docker compose version
 docker compose build test
-docker compose run --rm test python -m pytest
-docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+docker compose up -d postgres
 docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
+docker compose run --rm test python -m pytest --run-db
+docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
 git diff --check
+docker compose down -v --remove-orphans
 ```
 
-DB integration 測試可再決定是否每次 CI 都跑。基礎版可先不跑 `--run-db`，避免 CI PostgreSQL 設定複雜；正式版可加入 service container 或 Compose postgres。
+DB integration 測試每次 CI 都跑，使用 Docker Compose 內建 `postgres` service，不另外設定 GitHub Actions service container。
 
 部署策略建議：
 

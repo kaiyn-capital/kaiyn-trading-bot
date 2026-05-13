@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-compose-checks:
+    name: Docker Compose checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Show Docker Compose version
+        run: docker compose version
+
+      - name: Build test image
+        run: docker compose build test
+
+      - name: Start PostgreSQL
+        run: docker compose up -d postgres
+
+      - name: Run Ruff lint
+        run: docker compose run --rm test ruff check .
+
+      - name: Check Ruff formatting
+        run: docker compose run --rm test ruff format --check .
+
+      - name: Run pytest with PostgreSQL integration
+        run: docker compose run --rm test python -m pytest --run-db
+
+      - name: Compile Python files
+        run: docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+
+      - name: Check whitespace errors
+        run: git diff --check
+
+      - name: Clean up Docker Compose
+        if: always()
+        run: docker compose down -v --remove-orphans
