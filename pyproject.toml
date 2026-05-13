@@ -11,7 +11,7 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
     "python-telegram-bot[ext]==20.6",
     "SQLAlchemy[asyncio]==2.0.49",
-    "alembic==1.12.1",
+    "alembic==1.18.4",
     "asyncpg==0.29.0",
     "cryptography==48.0.0",
     "httpx==0.25.2",
