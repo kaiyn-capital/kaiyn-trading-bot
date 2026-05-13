@@ -40,9 +40,13 @@ class FakeConfirmOrderHandler(OrderHandlersMixin):
         self.pending_order_repo = pending_order_repo
         self.private_messages = []
         self.executions = []
+        self.audit_events = []
 
     async def _send_private_message(self, query, user, text, reply_markup=None):
         self.private_messages.append(text)
+
+    async def _audit_action(self, user, action, details=None):
+        self.audit_events.append({"action": action, "details": details or {}})
 
     async def _execute_order(
         self,
@@ -106,6 +110,9 @@ def test_confirm_pending_order_missing_token():
     assert repo.claims == [{"token": "tok_missing", "telegram_id": 123456}]
     assert not handler.executions
     assert "找不到这笔待确认订单" in handler.private_messages[-1]
+    assert handler.audit_events[-1]["action"] == "pending_order_confirm"
+    assert handler.audit_events[-1]["details"]["status"] == "missing"
+    assert handler.audit_events[-1]["details"]["pending_order_token"] == "***sing"
 
 
 def test_confirm_pending_order_expired_token():
@@ -122,6 +129,7 @@ def test_confirm_pending_order_expired_token():
 
     assert not handler.executions
     assert "已过期" in handler.private_messages[-1]
+    assert handler.audit_events[-1]["details"]["status"] == "expired"
 
 
 @pytest.mark.parametrize("status", ["processing_by_other", "executed", "failed"])
@@ -137,6 +145,7 @@ def test_confirm_pending_order_non_processing_status_does_not_execute(status):
 
     assert not handler.executions
     assert f"状态为 {status}" in handler.private_messages[-1]
+    assert handler.audit_events[-1]["details"]["status"] == status
 
 
 def test_confirm_pending_order_processing_executes_with_full_pending_data():
@@ -164,6 +173,9 @@ def test_confirm_pending_order_processing_executes_with_full_pending_data():
             "pending_order_token": "tok_ready",
         }
     ]
+    assert handler.audit_events[-1]["action"] == "pending_order_confirm"
+    assert handler.audit_events[-1]["details"]["status"] == "processing"
+    assert handler.audit_events[-1]["details"]["pending_order_token"] == "***eady"
 
 
 def test_cancel_pending_order_cancelled_status():
@@ -180,6 +192,8 @@ def test_cancel_pending_order_cancelled_status():
     assert repo.cancellations == [{"token": "tok_cancel", "telegram_id": 123456}]
     assert query.answers == ["已取消下单"]
     assert "已取消下单" in handler.private_messages[-1]
+    assert handler.audit_events[-1]["action"] == "pending_order_cancel"
+    assert handler.audit_events[-1]["details"]["status"] == "cancelled"
 
 
 def test_cancel_pending_order_missing_status():
@@ -193,6 +207,7 @@ def test_cancel_pending_order_missing_status():
     )
 
     assert "找不到这笔待确认订单" in handler.private_messages[-1]
+    assert handler.audit_events[-1]["details"]["status"] == "missing"
 
 
 def test_cancel_pending_order_non_pending_status():
@@ -206,6 +221,7 @@ def test_cancel_pending_order_non_pending_status():
     )
 
     assert "状态为 processing，无法取消" in handler.private_messages[-1]
+    assert handler.audit_events[-1]["details"]["status"] == "processing"
 
 
 class FakeUserRepo:
@@ -265,9 +281,13 @@ class FakeValidationOrderHandler(OrderHandlersMixin):
         self.pending_order_repo = FakeConfirmPendingOrderRepo()
         self.system_log_repo = FakeSystemLogRepo()
         self.private_messages = []
+        self.audit_events = []
 
     async def _send_private_message(self, query, user, text, reply_markup=None):
         self.private_messages.append(text)
+
+    async def _audit_action(self, user, action, details=None):
+        self.audit_events.append({"action": action, "details": details or {}})
 
 
 def test_execute_order_marks_pending_failed_when_second_validation_fails():
@@ -296,3 +316,5 @@ def test_execute_order_marks_pending_failed_when_second_validation_fails():
     )
     assert "订单已不符合交易所规则" in handler.private_messages[-1]
     assert "下单数量低于交易所最小值" in handler.private_messages[-1]
+    assert handler.audit_events[-1]["action"] == "order_validation_failed"
+    assert handler.audit_events[-1]["details"]["pending_order_token"] == "***tion"

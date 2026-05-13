@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from types import SimpleNamespace
 
 from app.bot_admin_handlers import AdminHandlersMixin
@@ -64,6 +65,29 @@ class FakeChannelRepo:
         return True
 
 
+class FakeUserRepo:
+    def __init__(self, set_trader_result=True):
+        self.db = SimpleNamespace()
+        self.set_trader_result = set_trader_result
+        self.set_trader_calls = []
+
+    async def set_trader_status(self, telegram_id, is_trader):
+        self.set_trader_calls.append(
+            {"telegram_id": telegram_id, "is_trader": is_trader}
+        )
+        return self.set_trader_result
+
+
+class FakeSystemLogRepo:
+    def __init__(self, logs=None):
+        self.logs = logs or []
+        self.calls = []
+
+    async def get_recent_logs(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.logs[: kwargs.get("limit", 10)]
+
+
 class FakeBot:
     def __init__(self):
         self.chat = SimpleNamespace(
@@ -73,6 +97,7 @@ class FakeBot:
             username="test_kaiyn",
         )
         self.id = 99
+        self.sent_messages = []
 
     async def get_chat(self, chat_identifier):
         return self.chat
@@ -80,9 +105,13 @@ class FakeBot:
     async def get_chat_member(self, chat_identifier, bot_id):
         return SimpleNamespace(status="administrator")
 
+    async def send_message(self, **kwargs):
+        self.sent_messages.append(kwargs)
+        return SimpleNamespace(message_id=len(self.sent_messages))
+
 
 class FakeAdminHandler(AdminHandlersMixin):
-    def __init__(self, channel_repo):
+    def __init__(self, channel_repo, system_log_repo=None, user_repo=None):
         self.channel_repo = channel_repo
         self.user_sessions = {
             123: {
@@ -91,12 +120,21 @@ class FakeAdminHandler(AdminHandlersMixin):
             }
         }
         self.user = SimpleNamespace(telegram_id=123)
-        self.user_repo = SimpleNamespace(db=SimpleNamespace())
-        self.system_log_repo = SimpleNamespace()
+        self.user_repo = user_repo or FakeUserRepo()
+        self.system_log_repo = system_log_repo or FakeSystemLogRepo()
         self.started_at = None
+        self.audit_events = []
 
     async def _get_or_create_user(self, update):
         return self.user
+
+    async def _audit_action(self, user, action, details=None):
+        self.audit_events.append(
+            {"telegram_id": user.telegram_id, "action": action, "details": details or {}}
+        )
+
+    def _get_sender_username(self, update):
+        return "admin"
 
     def _escape_html(self, text):
         return super()._escape_html(text)
@@ -125,6 +163,8 @@ def test_delete_channel_success_reply_does_not_use_markdown(monkeypatch):
     assert channel_repo.deactivated_chat_id == "-1001"
     assert update.message.replies[-1]["text"].startswith("✅ 频道已删除")
     assert "parse_mode" not in update.message.replies[-1]["kwargs"]
+    assert handler.audit_events[-1]["action"] == "admin_delete_channel"
+    assert handler.audit_events[-1]["details"]["status"] == "success"
 
 
 def test_add_channel_reactivates_inactive_existing_channel(monkeypatch):
@@ -141,6 +181,8 @@ def test_add_channel_reactivates_inactive_existing_channel(monkeypatch):
     assert channel_repo.reactivated["title"] == "test_kaiyn"
     assert update.message.replies[-1]["kwargs"]["parse_mode"] == "HTML"
     assert "频道/群组添加成功" in update.message.replies[-1]["text"]
+    assert handler.audit_events[-1]["action"] == "admin_add_channel"
+    assert handler.audit_events[-1]["details"]["status"] == "reactivated"
 
 
 def test_channel_to_dict_includes_topic_fields():
@@ -178,6 +220,8 @@ def test_set_channel_topic_by_display_number(monkeypatch):
         "thread_title": "交易信号",
     }
     assert "指定话题已设置" in update.message.replies[-1]["text"]
+    assert handler.audit_events[-1]["action"] == "admin_set_channel_topic"
+    assert handler.audit_events[-1]["details"]["message_thread_id"] == 456
 
 
 def test_set_channel_topic_rejects_invalid_topic_id(monkeypatch):
@@ -194,6 +238,8 @@ def test_set_channel_topic_rejects_invalid_topic_id(monkeypatch):
 
     assert channel_repo.topic_updated is None
     assert update.message.replies[-1]["text"] == "❌ 频道编号和 topic_id 必须是正整数"
+    assert handler.audit_events[-1]["action"] == "admin_set_channel_topic"
+    assert handler.audit_events[-1]["details"]["status"] == "failed"
 
 
 def test_clear_channel_topic_by_display_number(monkeypatch):
@@ -208,6 +254,77 @@ def test_clear_channel_topic_by_display_number(monkeypatch):
 
     assert channel_repo.topic_cleared_chat_id == "-1001"
     assert "指定话题已清除" in update.message.replies[-1]["text"]
+    assert handler.audit_events[-1]["action"] == "admin_clear_channel_topic"
+    assert handler.audit_events[-1]["details"]["status"] == "success"
+
+
+def test_add_trader_success_is_audited(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+    user_repo = FakeUserRepo(set_trader_result=True)
+    handler = FakeAdminHandler(FakeChannelRepo(), user_repo=user_repo)
+    update = make_update("")
+
+    asyncio.run(handler.add_trader_command(update, make_context_with_args(["456"])))
+
+    assert user_repo.set_trader_calls == [{"telegram_id": 456, "is_trader": True}]
+    assert handler.audit_events[-1]["action"] == "admin_add_trader"
+    assert handler.audit_events[-1]["details"] == {
+        "status": "success",
+        "target_telegram_id": 456,
+    }
+
+
+def test_admin_broadcast_records_summary_audit(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+    handler = FakeAdminHandler(FakeChannelRepo())
+    update = make_update("")
+    context = make_context_with_args(["系统维护", "请稍候"])
+
+    asyncio.run(handler.admin_broadcast_command(update, context))
+
+    audit = handler.audit_events[-1]
+    assert audit["action"] == "admin_broadcast"
+    assert audit["details"]["target_count"] == 1
+    assert audit["details"]["sent_count"] == 1
+    assert audit["details"]["message"]["length"] == len("系统维护 请稍候")
+
+
+def test_admin_audit_rejects_non_admin(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "999")
+    handler = FakeAdminHandler(FakeChannelRepo())
+    update = make_update("")
+
+    asyncio.run(handler.admin_audit_command(update, make_context_with_args([])))
+
+    assert update.message.replies[-1]["text"] == "❌ 您没有管理员权限"
+
+
+def test_admin_audit_shows_recent_audit_logs(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+    system_log_repo = FakeSystemLogRepo(
+        logs=[
+            SimpleNamespace(
+                created_at=datetime(2026, 5, 12, 1, 2, 3),
+                function="signal_sent",
+                telegram_id=123,
+                extra_data={
+                    "status": "completed",
+                    "symbol": "BTCUSDT",
+                    "target_count": 1,
+                    "sent_count": 1,
+                },
+            )
+        ]
+    )
+    handler = FakeAdminHandler(FakeChannelRepo(), system_log_repo=system_log_repo)
+    update = make_update("")
+
+    asyncio.run(handler.admin_audit_command(update, make_context_with_args(["50"])))
+
+    assert system_log_repo.calls[-1]["module"] == "audit"
+    assert system_log_repo.calls[-1]["limit"] == 30
+    assert "近期操作审计" in update.message.replies[-1]["text"]
+    assert "signal_sent" in update.message.replies[-1]["text"]
 
 
 def test_admin_health_rejects_non_admin(monkeypatch):

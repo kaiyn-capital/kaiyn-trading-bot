@@ -240,6 +240,7 @@ docker compose restart bot
 - PostgreSQL 備份：每天建立 gzip SQL 備份到 `./backups`，保留 30 天。
 - 管理員告警：Bot 啟動、DB/backup/cleanup 異常、Bitget API 連續暫時異常會推送到 `TELEGRAM_ADMIN_IDS`。
 - 健康檢查：管理員可用 `/admin_health` 查看 DB、backup、cleanup、Bitget API 與近期錯誤狀態。
+- 操作審計：管理員、發單員與下單關鍵操作會以結構化摘要寫入 `system_logs`，同樣保留 30 天。
 - 備份還原驗證：正式部署前至少依照 [backup_restore_runbook.md](backup_restore_runbook.md) 驗證一次，之後每月或重大改版後驗證一次。
 
 手動 dry-run 檢查會清理多少資料：
@@ -285,6 +286,7 @@ cat backup_restore_runbook.md
 
 - `/admin`：管理員面板與系統統計。
 - `/admin_health`：查看系統健康狀態、備份、維護任務與近期錯誤。
+- `/admin_audit [數量]`：查看近期操作審計，預設 10 筆，最多 30 筆。
 - `/admin_users`：查看活躍使用者列表。
 - `/admin_channels`：查看與管理頻道或群組。
 - `/add_channel @username 描述`：新增公開頻道或群組。
@@ -299,6 +301,12 @@ cat backup_restore_runbook.md
 發單員：
 
 - `/send_signal ...`：發送交易信號到已啟用自動轉發的頻道或群組。
+
+## 操作審計
+
+`/admin_audit [數量]` 可查詢最近的正式操作事件，包含新增發單員、頻道管理、廣播、發送信號、點擊市價/掛單、pending order 確認/取消、下單成功與失敗原因。
+
+審計資料寫入 `system_logs`，`module` 固定為 `audit`，資料保留 30 天。審計內容採摘要化策略：交易信號保留 symbol、方向、entry、SL、TP 與備註；廣播和手動發送只保留訊息長度與短預覽；不保存 API key、secret、passphrase、完整 Bitget response、完整下單 payload。
 
 ## Telegram Topic 轉發
 
@@ -407,7 +415,7 @@ Schema 由 Alembic 管理，不使用 `create_all()` 建表。
 - `notification_logs`：通知紀錄。
 - `trading_pairs`：交易對與限制資料。
 - `channel_groups`：受管理的 Telegram 頻道或群組，以及可選的 `message_thread_id` topic 設定。
-- `system_logs`：系統操作與錯誤日誌。
+- `system_logs`：系統操作、錯誤日誌與 `module="audit"` 的操作審計摘要。
 
 Pending order 狀態：
 

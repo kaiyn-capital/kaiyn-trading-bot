@@ -5,6 +5,12 @@ import traceback
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from .audit import (
+    AUDIT_MODULE,
+    emit_audit_event,
+    format_audit_log_entry,
+    summarize_message_text,
+)
 from .config import Config
 from .health import build_admin_health_report
 
@@ -38,6 +44,12 @@ class AdminHandlersMixin:
             success = await self.user_repo.set_trader_status(telegram_id, True)
 
             if success:
+                await emit_audit_event(
+                    self,
+                    user,
+                    "admin_add_trader",
+                    {"status": "success", "target_telegram_id": telegram_id},
+                )
                 await update.message.reply_text(
                     f"✅ **发单员添加成功**\n\n"
                     f"Telegram ID：{telegram_id}\n"
@@ -45,12 +57,34 @@ class AdminHandlersMixin:
                     parse_mode="Markdown",
                 )
             else:
+                await emit_audit_event(
+                    self,
+                    user,
+                    "admin_add_trader",
+                    {
+                        "status": "failed",
+                        "target_telegram_id": telegram_id,
+                        "reason": "repository_returned_false",
+                    },
+                )
                 await update.message.reply_text("❌ 设置发单员失败，请稍后重试")
 
         except ValueError:
+            await emit_audit_event(
+                self,
+                user,
+                "admin_add_trader",
+                {"status": "failed", "reason": "invalid_telegram_id"},
+            )
             await update.message.reply_text("❌ Telegram ID 必须是数字")
         except Exception as e:
             logger.error(f"Add trader error: {e}")
+            await emit_audit_event(
+                self,
+                user,
+                "admin_add_trader",
+                {"status": "failed", "reason": type(e).__name__},
+            )
             await update.message.reply_text("❌ 添加发单员失败")
 
     async def delete_channel_by_number(
@@ -73,6 +107,16 @@ class AdminHandlersMixin:
                 or channel_number < 1
                 or channel_number > len(channels_data)
             ):
+                await emit_audit_event(
+                    self,
+                    user,
+                    "admin_delete_channel",
+                    {
+                        "status": "failed",
+                        "reason": "invalid_channel_number",
+                        "channel_number": channel_number,
+                    },
+                )
                 await update.message.reply_text("❌ 无效的频道编号")
                 return
 
@@ -81,20 +125,55 @@ class AdminHandlersMixin:
                 channel_to_delete["chat_id"]
             )
             if deleted:
+                await emit_audit_event(
+                    self,
+                    user,
+                    "admin_delete_channel",
+                    {
+                        "status": "success",
+                        "channel_number": channel_number,
+                        "chat_id": channel_to_delete["chat_id"],
+                        "channel_title": channel_to_delete.get("title"),
+                    },
+                )
                 await update.message.reply_text(
                     f"✅ 频道已删除\n\n"
                     f"频道名称：{channel_to_delete['title']}\n"
                     f"已从管理列表中移除。"
                 )
             else:
+                await emit_audit_event(
+                    self,
+                    user,
+                    "admin_delete_channel",
+                    {
+                        "status": "failed",
+                        "reason": "not_found",
+                        "channel_number": channel_number,
+                        "chat_id": channel_to_delete["chat_id"],
+                        "channel_title": channel_to_delete.get("title"),
+                    },
+                )
                 await update.message.reply_text("❌ 找不到指定的频道")
 
             self.user_sessions.pop(user.telegram_id, None)
 
         except ValueError:
+            await emit_audit_event(
+                self,
+                user,
+                "admin_delete_channel",
+                {"status": "failed", "reason": "invalid_input"},
+            )
             await update.message.reply_text("❌ 请输入有效的数字")
         except Exception as e:
             logger.error(f"Delete channel error: {e}")
+            await emit_audit_event(
+                self,
+                user,
+                "admin_delete_channel",
+                {"status": "failed", "reason": type(e).__name__},
+            )
             await update.message.reply_text("❌ 删除频道失败")
 
     async def admin_users_command(
@@ -181,9 +260,31 @@ class AdminHandlersMixin:
                 f"发送失败：{failed_channels} 个频道/群组",
                 parse_mode="Markdown",
             )
+            await emit_audit_event(
+                self,
+                user,
+                "admin_broadcast",
+                {
+                    "status": "completed",
+                    "target_count": len(channels),
+                    "sent_count": sent_to_channels,
+                    "failed_count": failed_channels,
+                    "message": summarize_message_text(message_text),
+                },
+            )
 
         except Exception as e:
             logger.error(f"Broadcast error: {e}")
+            await emit_audit_event(
+                self,
+                user,
+                "admin_broadcast",
+                {
+                    "status": "failed",
+                    "reason": type(e).__name__,
+                    "message": summarize_message_text(message_text),
+                },
+            )
             await update.message.reply_text("❌ 广播时发生错误")
 
     async def admin_channels_command(
@@ -254,6 +355,18 @@ class AdminHandlersMixin:
                 chat_identifier, context.bot.id
             )
             if bot_member.status not in ["administrator", "creator"]:
+                await emit_audit_event(
+                    self,
+                    user,
+                    "admin_add_channel",
+                    {
+                        "status": "failed",
+                        "reason": "bot_not_admin",
+                        "chat_id": str(chat_info.id),
+                        "channel_title": chat_info.title,
+                        "chat_type": chat_info.type.value,
+                    },
+                )
                 await update.message.reply_text(
                     "❌ 机器人在该频道/群组中不是管理员\n\n"
                     "请确保机器人有管理员权限后再试。"
@@ -262,6 +375,17 @@ class AdminHandlersMixin:
 
             existing = await self.channel_repo.get_channel_by_chat_id(str(chat_info.id))
             if existing and existing.is_active:
+                await emit_audit_event(
+                    self,
+                    user,
+                    "admin_add_channel",
+                    {
+                        "status": "already_exists",
+                        "chat_id": str(chat_info.id),
+                        "channel_title": chat_info.title,
+                        "chat_type": chat_info.type.value,
+                    },
+                )
                 await update.message.reply_text(
                     f"⚠️ 频道/群组 {chat_info.title} 已经在管理列表中"
                 )
@@ -277,9 +401,32 @@ class AdminHandlersMixin:
                     description=description,
                 )
                 if not reactivated:
+                    await emit_audit_event(
+                        self,
+                        user,
+                        "admin_add_channel",
+                        {
+                            "status": "failed",
+                            "reason": "reactivate_failed",
+                            "chat_id": str(chat_info.id),
+                            "channel_title": chat_info.title,
+                            "chat_type": chat_info.type.value,
+                        },
+                    )
                     await update.message.reply_text("❌ 重新启用频道失败，请稍后重试")
                     return
 
+                await emit_audit_event(
+                    self,
+                    user,
+                    "admin_add_channel",
+                    {
+                        "status": "reactivated",
+                        "chat_id": str(chat_info.id),
+                        "channel_title": chat_info.title,
+                        "chat_type": chat_info.type.value,
+                    },
+                )
                 await update.message.reply_text(
                     f"✅ <b>频道/群组添加成功</b>\n\n"
                     f"<b>名称：</b> {self._escape_html(str(chat_info.title))}\n"
@@ -300,6 +447,17 @@ class AdminHandlersMixin:
                 description=description,
             )
 
+            await emit_audit_event(
+                self,
+                user,
+                "admin_add_channel",
+                {
+                    "status": "created",
+                    "chat_id": str(chat_info.id),
+                    "channel_title": chat_info.title,
+                    "chat_type": chat_info.type.value,
+                },
+            )
             await update.message.reply_text(
                 f"✅ <b>频道/群组添加成功</b>\n\n"
                 f"<b>名称：</b> {self._escape_html(str(chat_info.title))}\n"
@@ -312,6 +470,16 @@ class AdminHandlersMixin:
 
         except Exception as e:
             logger.error(f"Add channel error: {e}")
+            await emit_audit_event(
+                self,
+                user,
+                "admin_add_channel",
+                {
+                    "status": "failed",
+                    "reason": type(e).__name__,
+                    "chat_identifier": chat_identifier,
+                },
+            )
             await update.message.reply_text(
                 f"❌ 添加频道失败\n\n"
                 f"可能的原因：\n"
@@ -348,12 +516,30 @@ class AdminHandlersMixin:
             if channel_index <= 0 or message_thread_id <= 0:
                 raise ValueError
         except ValueError:
+            await emit_audit_event(
+                self,
+                user,
+                "admin_set_channel_topic",
+                {"status": "failed", "reason": "invalid_input"},
+            )
             await update.message.reply_text("❌ 频道编号和 topic_id 必须是正整数")
             return
 
         thread_title = " ".join(context.args[2:]).strip() or None
         channel = await self._get_active_channel_by_number(channel_index)
         if not channel:
+            await emit_audit_event(
+                self,
+                user,
+                "admin_set_channel_topic",
+                {
+                    "status": "failed",
+                    "reason": "invalid_channel_number",
+                    "channel_number": channel_index,
+                    "message_thread_id": message_thread_id,
+                    "thread_title": thread_title,
+                },
+            )
             await update.message.reply_text("❌ 无效的频道编号，请先使用 /admin_channels 查看列表")
             return
 
@@ -361,10 +547,37 @@ class AdminHandlersMixin:
             channel["chat_id"], message_thread_id, thread_title
         )
         if not success:
+            await emit_audit_event(
+                self,
+                user,
+                "admin_set_channel_topic",
+                {
+                    "status": "failed",
+                    "reason": "repository_returned_false",
+                    "channel_number": channel_index,
+                    "chat_id": channel["chat_id"],
+                    "channel_title": channel.get("title"),
+                    "message_thread_id": message_thread_id,
+                    "thread_title": thread_title,
+                },
+            )
             await update.message.reply_text("❌ 设置指定话题失败，请稍后重试")
             return
 
         display_title = thread_title or str(message_thread_id)
+        await emit_audit_event(
+            self,
+            user,
+            "admin_set_channel_topic",
+            {
+                "status": "success",
+                "channel_number": channel_index,
+                "chat_id": channel["chat_id"],
+                "channel_title": channel.get("title"),
+                "message_thread_id": message_thread_id,
+                "thread_title": thread_title,
+            },
+        )
         await update.message.reply_text(
             f"✅ <b>指定话题已设置</b>\n\n"
             f"<b>频道：</b> {self._escape_html(str(channel['title'] or 'Unknown'))}\n"
@@ -399,19 +612,58 @@ class AdminHandlersMixin:
             if channel_index <= 0:
                 raise ValueError
         except ValueError:
+            await emit_audit_event(
+                self,
+                user,
+                "admin_clear_channel_topic",
+                {"status": "failed", "reason": "invalid_input"},
+            )
             await update.message.reply_text("❌ 频道编号必须是正整数")
             return
 
         channel = await self._get_active_channel_by_number(channel_index)
         if not channel:
+            await emit_audit_event(
+                self,
+                user,
+                "admin_clear_channel_topic",
+                {
+                    "status": "failed",
+                    "reason": "invalid_channel_number",
+                    "channel_number": channel_index,
+                },
+            )
             await update.message.reply_text("❌ 无效的频道编号，请先使用 /admin_channels 查看列表")
             return
 
         success = await self.channel_repo.clear_channel_topic(channel["chat_id"])
         if not success:
+            await emit_audit_event(
+                self,
+                user,
+                "admin_clear_channel_topic",
+                {
+                    "status": "failed",
+                    "reason": "repository_returned_false",
+                    "channel_number": channel_index,
+                    "chat_id": channel["chat_id"],
+                    "channel_title": channel.get("title"),
+                },
+            )
             await update.message.reply_text("❌ 清除指定话题失败，请稍后重试")
             return
 
+        await emit_audit_event(
+            self,
+            user,
+            "admin_clear_channel_topic",
+            {
+                "status": "success",
+                "channel_number": channel_index,
+                "chat_id": channel["chat_id"],
+                "channel_title": channel.get("title"),
+            },
+        )
         await update.message.reply_text(
             f"✅ <b>指定话题已清除</b>\n\n"
             f"<b>频道：</b> {self._escape_html(str(channel['title'] or 'Unknown'))}",
@@ -449,6 +701,17 @@ class AdminHandlersMixin:
                 chat_id=chat_identifier, text=message_text, parse_mode="Markdown"
             )
 
+            await emit_audit_event(
+                self,
+                user,
+                "admin_send_to_channel",
+                {
+                    "status": "sent",
+                    "chat_identifier": chat_identifier,
+                    "telegram_message_id": sent_message.message_id,
+                    "message": summarize_message_text(message_text),
+                },
+            )
             await update.message.reply_text(
                 f"✅ **消息已发送**\n\n"
                 f"目标频道：{chat_identifier}\n"
@@ -458,6 +721,17 @@ class AdminHandlersMixin:
 
         except Exception as e:
             logger.error(f"Send to channel error: {e}")
+            await emit_audit_event(
+                self,
+                user,
+                "admin_send_to_channel",
+                {
+                    "status": "failed",
+                    "reason": type(e).__name__,
+                    "chat_identifier": chat_identifier,
+                    "message": summarize_message_text(message_text),
+                },
+            )
             await update.message.reply_text(f"❌ 发送失败\n\n" f"错误：{str(e)}")
 
     async def admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -489,6 +763,7 @@ class AdminHandlersMixin:
             admin_text += f"• `/set_channel_topic` - 设置频道指定话题\n"
             admin_text += f"• `/clear_channel_topic` - 清除频道指定话题\n"
             admin_text += f"• `/admin_health` - 查看系统健康状态\n"
+            admin_text += f"• `/admin_audit` - 查看近期操作审计\n"
             admin_text += f"• `/add_trader` - 添加交易员"
 
             await update.message.reply_text(admin_text, parse_mode="Markdown")
@@ -497,6 +772,42 @@ class AdminHandlersMixin:
             logger.error(f"Admin command error: {e}")
             traceback.print_exc()
             await update.message.reply_text(f"❌ 获取管理信息时发生错误: {str(e)}")
+
+    async def admin_audit_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Show recent operator audit events for admins."""
+        user = await self._get_or_create_user(update)
+
+        if not Config.is_admin(user.telegram_id):
+            await update.message.reply_text("❌ 您没有管理员权限")
+            return
+
+        try:
+            limit = 10
+            if context.args:
+                limit = int(context.args[0])
+            limit = max(1, min(limit, 30))
+        except ValueError:
+            await update.message.reply_text("❌ 数量必须是数字")
+            return
+
+        try:
+            logs = await self.system_log_repo.get_recent_logs(
+                levels=["INFO"], module=AUDIT_MODULE, limit=limit
+            )
+            if not logs:
+                await update.message.reply_text("📋 近期没有操作审计记录")
+                return
+
+            lines = [format_audit_log_entry(log_entry) for log_entry in logs]
+            await update.message.reply_text(
+                "📋 近期操作审计\n\n"
+                + "\n".join(f"{index}. {line}" for index, line in enumerate(lines, 1))
+            )
+        except Exception as e:
+            logger.error(f"Admin audit command error: {e}")
+            await update.message.reply_text(f"❌ 获取操作审计时发生错误: {str(e)}")
 
     async def admin_health_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE

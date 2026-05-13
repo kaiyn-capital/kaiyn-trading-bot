@@ -40,6 +40,7 @@ class FakeOrderHandler(OrderHandlersMixin):
     def __init__(self):
         self.channel_repo = FakeChannelRepo()
         self.user = SimpleNamespace(telegram_id=123)
+        self.audit_events = []
 
     async def _get_or_create_user(self, update):
         return self.user
@@ -49,6 +50,9 @@ class FakeOrderHandler(OrderHandlersMixin):
 
     def _get_sender_username(self, update):
         return "admin"
+
+    async def _audit_action(self, user, action, details=None):
+        self.audit_events.append({"action": action, "details": details or {}})
 
 
 def make_update():
@@ -93,3 +97,19 @@ def test_send_signal_without_topic_omits_message_thread_id():
     second_message = context.bot.sent_messages[1]
     assert second_message["chat_id"] == "-1002"
     assert "message_thread_id" not in second_message
+
+
+def test_send_signal_records_audit_summary():
+    handler = FakeOrderHandler()
+    update = make_update()
+    context = make_context()
+
+    asyncio.run(handler.send_signal_command(update, context))
+
+    audit = handler.audit_events[-1]
+    assert audit["action"] == "signal_sent"
+    assert audit["details"]["symbol"] == "BTCUSDT"
+    assert audit["details"]["direction"] == "short"
+    assert audit["details"]["remark"] == "等待回踩后执行"
+    assert audit["details"]["target_count"] == 2
+    assert audit["details"]["sent_count"] == 2

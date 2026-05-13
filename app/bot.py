@@ -15,6 +15,7 @@ from telegram.ext import (
 )
 
 from .admin_alerts import AdminAlertManager
+from .audit import record_audit_event
 from .bitget_api import BitgetTradeManager
 from .bot_account_handlers import AccountHandlersMixin
 from .bot_admin_handlers import AdminHandlersMixin
@@ -90,6 +91,9 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         self.application.add_handler(CommandHandler("admin", self.admin_command))
         self.application.add_handler(
             CommandHandler("admin_health", self.admin_health_command)
+        )
+        self.application.add_handler(
+            CommandHandler("admin_audit", self.admin_audit_command)
         )
         self.application.add_handler(
             CommandHandler("admin_users", self.admin_users_command)
@@ -203,6 +207,15 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 telegram_id=user.telegram_id,
                 extra_data=details or {},
             )
+
+    async def _audit_action(
+        self, user: User, action: str, details: Optional[Dict] = None
+    ):
+        """Persist an operator audit event."""
+        try:
+            await record_audit_event(self.system_log_repo, user, action, details or {})
+        except Exception as e:
+            logger.error(f"Failed to record audit event {action}: {e}")
 
     async def _record_bitget_failure_alert(
         self, classified_error, source: str, details: Optional[Dict] = None

@@ -133,9 +133,13 @@ class FakeOrderHandler(OrderHandlersMixin):
         self.pending_order_repo = FakePendingOrderRepo()
         self.system_log_repo = FakeSystemLogRepo()
         self.private_messages = []
+        self.audit_events = []
 
     async def _send_private_message(self, query, user, text, reply_markup=None):
         self.private_messages.append(text)
+
+    async def _audit_action(self, user, action, details=None):
+        self.audit_events.append({"action": action, "details": details or {}})
 
 
 def test_execute_order_handler_marks_pending_failed_and_sends_user_message():
@@ -168,3 +172,6 @@ def test_execute_order_handler_marks_pending_failed_and_sends_user_message():
     logged_error = handler.system_log_repo.logs[-1]["extra_data"]["classified_error"]
     assert logged_error["category"] == "exchange_rejected"
     assert logged_error["raw_code"] == "43012"
+    assert handler.audit_events[-1]["action"] == "order_failed"
+    assert handler.audit_events[-1]["details"]["error_category"] == "exchange_rejected"
+    assert handler.audit_events[-1]["details"]["pending_order_token"] == "***_123"

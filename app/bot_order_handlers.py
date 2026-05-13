@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from .audit import emit_audit_event, summarize_identifier
 from .bitget_errors import classify_bitget_exception
 from .bot_keyboards import pending_order_keyboard, signal_order_keyboard
 from .bot_messages import (
@@ -66,8 +67,12 @@ class OrderHandlersMixin:
             )
 
             sent_to_channels = 0
+            failed_channels = 0
+            target_count = 0
+            channel_error = None
             try:
                 channels_data = await self.channel_repo.get_signal_channels()
+                target_count = len(channels_data)
 
                 for channel_data in channels_data:
                     try:
@@ -91,6 +96,7 @@ class OrderHandlersMixin:
                         )
                         sent_to_channels += 1
                     except Exception as e:
+                        failed_channels += 1
                         logger.warning(
                             "Failed to send signal to channel "
                             f"{channel_data['chat_id']} "
@@ -98,17 +104,47 @@ class OrderHandlersMixin:
                         )
 
             except Exception as e:
+                channel_error = type(e).__name__
                 logger.error(f"Error getting channels: {e}")
 
             await update.message.reply_text(
                 signal_sent_message(sent_to_channels, signal_text),
                 parse_mode="Markdown",
             )
+            await emit_audit_event(
+                self,
+                user,
+                "signal_sent",
+                {
+                    "status": (
+                        "completed"
+                        if channel_error is None
+                        else "completed_with_channel_lookup_error"
+                    ),
+                    "symbol": signal.symbol,
+                    "direction": signal.direction,
+                    "entry_lower": signal.entry_lower,
+                    "entry_upper": signal.entry_upper,
+                    "stop_loss": signal.stop_loss,
+                    "take_profit_levels": signal.take_profit_levels,
+                    "remark": signal.remark,
+                    "target_count": target_count,
+                    "sent_count": sent_to_channels,
+                    "failed_count": failed_channels,
+                    "reason": channel_error,
+                },
+            )
 
         except ValueError:
             await update.message.reply_text("❌ 价格格式错误，请输入有效数字")
         except Exception as e:
             logger.error(f"Send signal error: {e}")
+            await emit_audit_event(
+                self,
+                user,
+                "signal_sent",
+                {"status": "failed", "reason": type(e).__name__},
+            )
             await update.message.reply_text(
                 "❌ 发送信号时发生错误", parse_mode="Markdown"
             )
@@ -120,12 +156,42 @@ class OrderHandlersMixin:
         try:
             callback_data = parse_order_callback_data(data)
         except (ValueError, IndexError):
+            await emit_audit_event(
+                self,
+                user,
+                "order_place_clicked",
+                {"status": "failed", "reason": "invalid_callback_data"},
+            )
             await self._send_private_message(query, user, "❌ 交易信号数据解析失败")
             return
+
+        await emit_audit_event(
+            self,
+            user,
+            "order_place_clicked",
+            {
+                "status": "received",
+                "symbol": callback_data.symbol,
+                "direction": callback_data.direction,
+                "requested_order_mode": callback_data.order_mode,
+            },
+        )
 
         user_data = await self.user_repo.get_user_by_telegram_id(user.telegram_id)
 
         if not user_data or not user_data.is_api_connected:
+            await emit_audit_event(
+                self,
+                user,
+                "order_place_blocked",
+                {
+                    "status": "blocked",
+                    "reason": "api_not_connected",
+                    "symbol": callback_data.symbol,
+                    "direction": callback_data.direction,
+                    "requested_order_mode": callback_data.order_mode,
+                },
+            )
             await self._send_private_message(
                 query,
                 user,
@@ -136,6 +202,18 @@ class OrderHandlersMixin:
             return
 
         if not getattr(user_data, "fixed_risk_amount", None):
+            await emit_audit_event(
+                self,
+                user,
+                "order_place_blocked",
+                {
+                    "status": "blocked",
+                    "reason": "fixed_risk_not_set",
+                    "symbol": callback_data.symbol,
+                    "direction": callback_data.direction,
+                    "requested_order_mode": callback_data.order_mode,
+                },
+            )
             await self._send_private_message(
                 query,
                 user,
@@ -164,10 +242,34 @@ class OrderHandlersMixin:
                 )
             except ValueError as e:
                 if "entry price" in str(e):
+                    await emit_audit_event(
+                        self,
+                        user,
+                        "order_place_blocked",
+                        {
+                            "status": "blocked",
+                            "reason": "invalid_entry_price",
+                            "symbol": callback_data.symbol,
+                            "direction": callback_data.direction,
+                            "requested_order_mode": callback_data.order_mode,
+                        },
+                    )
                     await self._send_private_message(
                         query, user, "❌ 进场价格错误，无法计算仓位"
                     )
                     return
+                await emit_audit_event(
+                    self,
+                    user,
+                    "order_place_blocked",
+                    {
+                        "status": "blocked",
+                        "reason": "invalid_stop_loss",
+                        "symbol": callback_data.symbol,
+                        "direction": callback_data.direction,
+                        "requested_order_mode": callback_data.order_mode,
+                    },
+                )
                 await self._send_private_message(
                     query, user, "❌ 止损价格设置错误，无法计算仓位"
                 )
@@ -177,6 +279,19 @@ class OrderHandlersMixin:
                 preview, contract_rules, callback_data.direction
             )
             if not validation.is_valid:
+                await emit_audit_event(
+                    self,
+                    user,
+                    "order_place_blocked",
+                    {
+                        "status": "blocked",
+                        "reason": "validation_failed",
+                        "symbol": callback_data.symbol,
+                        "direction": callback_data.direction,
+                        "requested_order_mode": callback_data.order_mode,
+                        "error_message": validation.error_message,
+                    },
+                )
                 await self._send_private_message(
                     query, user, validation.error_message or "❌ 无法下单"
                 )
@@ -204,6 +319,24 @@ class OrderHandlersMixin:
                 f"for user {user.telegram_id}; "
                 f"requested_mode={preview.requested_order_mode}"
             )
+            await emit_audit_event(
+                self,
+                user,
+                "pending_order_created",
+                {
+                    "status": "pending",
+                    "symbol": callback_data.symbol,
+                    "direction": callback_data.direction,
+                    "requested_order_mode": preview.requested_order_mode,
+                    "order_mode": preview.order_mode,
+                    "limit_price": preview.limit_price,
+                    "quantity": preview.quantity,
+                    "position_value": preview.position_value,
+                    "expires_at": pending_order.expires_at,
+                    "pending_order_id": getattr(pending_order, "id", None),
+                    "pending_order_token": summarize_identifier(pending_order.token),
+                },
+            )
 
             await self._send_private_message(
                 query,
@@ -224,6 +357,20 @@ class OrderHandlersMixin:
                     "telegram_id": user.telegram_id,
                     "symbol": callback_data.symbol,
                     "order_mode": callback_data.order_mode,
+                },
+            )
+            await emit_audit_event(
+                self,
+                user,
+                "pending_order_create_failed",
+                {
+                    "status": "failed",
+                    "symbol": callback_data.symbol,
+                    "direction": callback_data.direction,
+                    "requested_order_mode": callback_data.order_mode,
+                    "error_category": classified.category.value,
+                    "raw_code": classified.raw_code,
+                    "raw_message": classified.raw_message,
                 },
             )
             await self._send_private_message(
@@ -258,23 +405,70 @@ class OrderHandlersMixin:
             )
 
             if not pending_order:
+                await emit_audit_event(
+                    self,
+                    user,
+                    "pending_order_confirm",
+                    {
+                        "status": "missing",
+                        "pending_order_token": summarize_identifier(token),
+                    },
+                )
                 await self._send_private_message(
                     query, user, "❌ 找不到这笔待确认订单，请重新点击最新信号下单。"
                 )
                 return
 
             if status == "expired":
+                await emit_audit_event(
+                    self,
+                    user,
+                    "pending_order_confirm",
+                    {
+                        "status": "expired",
+                        "symbol": pending_order.symbol,
+                        "direction": pending_order.direction,
+                        "order_mode": pending_order.order_mode,
+                        "pending_order_token": summarize_identifier(token),
+                    },
+                )
                 await self._send_private_message(
                     query, user, "❌ 这笔待确认订单已过期，请重新点击信号下单。"
                 )
                 return
 
             if status != "processing":
+                await emit_audit_event(
+                    self,
+                    user,
+                    "pending_order_confirm",
+                    {
+                        "status": status,
+                        "symbol": pending_order.symbol,
+                        "direction": pending_order.direction,
+                        "order_mode": pending_order.order_mode,
+                        "pending_order_token": summarize_identifier(token),
+                    },
+                )
                 await self._send_private_message(
                     query, user, f"⚠️ 这笔待确认订单目前状态为 {status}，无法重复执行。"
                 )
                 return
 
+            await emit_audit_event(
+                self,
+                user,
+                "pending_order_confirm",
+                {
+                    "status": "processing",
+                    "symbol": pending_order.symbol,
+                    "direction": pending_order.direction,
+                    "order_mode": pending_order.order_mode,
+                    "quantity": pending_order.quantity,
+                    "position_value": pending_order.position_value,
+                    "pending_order_token": summarize_identifier(token),
+                },
+            )
             await self._execute_order(
                 query,
                 user,
@@ -291,6 +485,18 @@ class OrderHandlersMixin:
 
         except Exception as e:
             logger.error(f"Confirm pending order error: {e}")
+            await emit_audit_event(
+                self,
+                user,
+                "pending_order_confirm",
+                {
+                    "status": "failed",
+                    "reason": type(e).__name__,
+                    "pending_order_token": summarize_identifier(
+                        data.removeprefix("confirm_order_")
+                    ),
+                },
+            )
             await self._send_private_message(query, user, "❌ 确认下单时发生错误")
 
     async def _handle_cancel_pending_order_callback(self, query, user, data):
@@ -298,6 +504,16 @@ class OrderHandlersMixin:
         token = data.removeprefix("cancel_order_")
         status = await self.pending_order_repo.cancel_pending_order(
             token, user.telegram_id
+        )
+
+        await emit_audit_event(
+            self,
+            user,
+            "pending_order_cancel",
+            {
+                "status": status,
+                "pending_order_token": summarize_identifier(token),
+            },
         )
 
         if status == "cancelled":
@@ -387,6 +603,25 @@ class OrderHandlersMixin:
                     await self.pending_order_repo.mark_failed(
                         pending_order_token, error_message
                     )
+                await emit_audit_event(
+                    self,
+                    user,
+                    "order_validation_failed",
+                    {
+                        "status": "failed",
+                        "reason": "validation_failed",
+                        "symbol": symbol,
+                        "direction": direction,
+                        "order_mode": order_mode,
+                        "quantity": quantity,
+                        "position_value": position_value,
+                        "limit_price": limit_price,
+                        "error_message": error_message,
+                        "pending_order_token": summarize_identifier(
+                            pending_order_token
+                        ),
+                    },
+                )
                 await self._send_private_message(
                     query,
                     user,
@@ -439,18 +674,22 @@ class OrderHandlersMixin:
                 ),
             )
 
-            await self._log_user_action(
+            await emit_audit_event(
+                self,
                 user,
                 "order_executed",
                 {
+                    "status": result.status,
                     "symbol": result.symbol,
                     "direction": direction,
                     "quantity": result.quantity,
                     "position_value": result.position_value,
-                    "bitget_order_id": result.bitget_order_id,
+                    "bitget_order_id": summarize_identifier(result.bitget_order_id),
                     "stop_loss": stop_loss,
                     "order_mode": result.order_type,
                     "limit_price": result.limit_price,
+                    "trade_id": result.trade_id,
+                    "pending_order_token": summarize_identifier(pending_order_token),
                 },
             )
             return True
@@ -466,13 +705,33 @@ class OrderHandlersMixin:
                     "symbol": symbol,
                     "direction": direction,
                     "order_mode": order_mode,
-                    "pending_order_token": pending_order_token,
+                    "pending_order_token": summarize_identifier(pending_order_token),
                 },
             )
             if pending_order_token:
                 await self.pending_order_repo.mark_failed(
                     pending_order_token, classified.storage_message()
                 )
+
+            await emit_audit_event(
+                self,
+                user,
+                "order_failed",
+                {
+                    "status": "failed",
+                    "symbol": symbol,
+                    "direction": direction,
+                    "quantity": quantity,
+                    "position_value": position_value,
+                    "order_mode": order_mode,
+                    "limit_price": limit_price,
+                    "pending_order_token": summarize_identifier(pending_order_token),
+                    "error_category": classified.category.value,
+                    "raw_code": classified.raw_code,
+                    "raw_message": classified.raw_message,
+                    "http_status": classified.http_status,
+                },
+            )
 
             try:
                 await self.system_log_repo.log(
@@ -489,7 +748,9 @@ class OrderHandlersMixin:
                         "position_value": position_value,
                         "order_mode": order_mode,
                         "limit_price": limit_price,
-                        "pending_order_token": pending_order_token,
+                        "pending_order_token": summarize_identifier(
+                            pending_order_token
+                        ),
                         "classified_error": classified.to_log_data(),
                     },
                 )
