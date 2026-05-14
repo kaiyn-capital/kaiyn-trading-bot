@@ -27,7 +27,7 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 ## 技術棧
 
 - Python 3.11
-- python-telegram-bot 20.6
+- python-telegram-bot 22.7
 - SQLAlchemy asyncio
 - PostgreSQL
 - Alembic
@@ -73,6 +73,7 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 ├── logs/                    # Bot log 與 alert state，git ignored
 ├── alembic.ini
 ├── backup_restore_runbook.md
+├── deployment_runbook.md
 ├── compose.yml
 ├── Dockerfile
 ├── AGENTS.md
@@ -225,6 +226,8 @@ Dependabot 只會開 PR，不會自動合併。每個 Dependabot PR 都應通過
 ## 本地與部署流程
 
 本地測試與 VPS 部署使用同一套 Docker Compose 流程。
+
+正式部署主線採 DigitalOcean Droplet + Ubuntu 24.04 LTS + Docker Compose，完整首次部署、更新、rollback、備份拉取與故障處理流程請看 [deployment_runbook.md](deployment_runbook.md)。
 
 建置映像：
 

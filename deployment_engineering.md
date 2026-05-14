@@ -1,8 +1,8 @@
 # Deployment Engineering Roadmap
 
-更新日期：2026-05-13
+更新日期：2026-05-14
 
-本文件記錄 Kaiyn Trading Bot 進入正式部署前，剩下偏工程化與部署流程的補強事項。核心功能與 production readiness 基礎項目已大致完成，目前距離小規模正式部署約 90%。接下來重點不再是交易功能，而是部署條件、CI/CD、格式檢查、依賴更新管理與可重複的上線流程。
+本文件記錄 Kaiyn Trading Bot 進入正式部署前，偏工程化與部署流程的補強事項。核心功能、production readiness 基礎項目、CI、依賴更新管理與可重複上線流程已完成基礎版，目前可進入 DigitalOcean VPS 小額正式試運行。
 
 ## Current Status
 
@@ -21,11 +21,12 @@
 - Ruff lint / format，透過 Docker `test` service 執行。
 - GitHub Actions CI，透過 Docker Compose 執行 Ruff、pytest、DB integration、py_compile 與 whitespace 檢查。
 - Dependabot 每週檢查 Python packages 與 GitHub Actions，開 PR 後交由 CI 驗證。
+- DigitalOcean VPS deployment runbook，涵蓋首次部署、更新、rollback、備份拉取、還原連結與故障處理。
 
 目前建議狀態：
 
-- 可以開始 staging 或小額真實試運行。
-- 若要長期正式放著跑，建議繼續完成本文件剩餘一個工程化項目。
+- 可以開始 DigitalOcean VPS 小額真實試運行。
+- 正式長期放著跑前，先照 `deployment_runbook.md` 完成一次從零部署與 smoke test。
 
 ## Recommended Order
 
@@ -100,38 +101,47 @@ DB integration 測試每次 CI 都跑，使用 Docker Compose 內建 `postgres` 
 
 ### 4. Deployment Runbook
 
-新增正式部署操作文件，例如 `deployment_runbook.md`。
+新增正式部署操作文件 `deployment_runbook.md`。
 
-建議包含：
+狀態：已完成基礎版。
 
-- VPS 建議規格。
-- OS 與 Docker / Docker Compose 版本要求。
-- production `.env` 必填值。
-- Bitget API 權限與 IP whitelist 建議。
-- Telegram admin ID 設定。
-- 首次部署流程。
-- 更新部署流程。
+已固定第一版部署條件：
+
+- DigitalOcean Droplet。
+- Singapore region。
+- Basic Premium AMD，1 vCPU / 2GB RAM / 50GB SSD。
+- Ubuntu 24.04 LTS。
+- 同機 Docker Compose 執行 `postgres`、`bot`、`maintenance`、`db-backup`。
+- `test` service 僅用於部署前檢查，不長駐。
+
+Runbook 已包含：
+
+- Droplet 建立、SSH key、關閉 password login。
+- DigitalOcean Cloud Firewall / UFW 基本設定。
+- Docker Engine 與 Compose plugin 安裝。
+- production `.env` 建立與 `POSTGRES_PORT=127.0.0.1:5432` 建議。
+- 首次部署、migration、`--check-db`、服務啟動。
+- 日常更新部署。
 - rollback 流程。
-- migration 執行方式。
-- 啟動與停止命令。
 - `/admin_health`、`/admin_audit`、`/send_signal` smoke test checklist。
-- 備份與還原驗證連結到 `backup_restore_runbook.md`。
+- 備份拉取與 `backup_restore_runbook.md` 還原連結。
+- 常見故障處理。
 
-建議部署方式：
+部署策略：
 
 - 使用 Docker Compose。
 - production VPS 上手動執行 migration。
 - bot、maintenance、db-backup 服務一起啟動。
 - 不在 bot 啟動時自動跑 migration。
+- 不做 GitHub Actions 自動部署。
 
 ## Platform Notes
 
 最低建議 VPS：
 
-- 1-2 vCPU。
-- 1-2 GB RAM。
-- 20 GB 以上 SSD。
-- Ubuntu LTS。
+- DigitalOcean Basic Premium AMD。
+- 1 vCPU / 2GB RAM / 50GB SSD。
+- Ubuntu 24.04 LTS。
 - Docker Engine + Docker Compose plugin。
 
 正式安全建議：
@@ -139,13 +149,14 @@ DB integration 測試每次 CI 都跑，使用 Docker Compose 內建 `postgres` 
 - `.env` 不使用預設密碼。
 - `TELEGRAM_ADMIN_IDS` 僅放實際管理員。
 - Bitget API 使用最小必要權限。
-- 若 Bitget 支援，綁定 VPS IP whitelist。
+- Bitget API 不開提現權限。
+- 目前已決策不綁定 Bitget API IP whitelist。
 - VPS firewall 只開 SSH；此 bot 通常不需要對外開 HTTP port。
 - 備份不要只留在 VPS，至少定期拉到本機或雲端儲存。
 
 ## Remaining Production Gap
 
-完成本文件後，專案可視為接近小規模正式長期部署標準。
+工程化基礎項目已完成。專案可視為接近小規模正式長期部署標準，接下來的主要工作是依照 `deployment_runbook.md` 做一次真實 VPS 部署與小額試運行。
 
 仍不包含：
 
