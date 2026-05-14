@@ -70,16 +70,17 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 │   └── repositories/        # User/Trade/PendingOrder/Channel/SystemLog repositories
 ├── tests/                   # pytest 純邏輯、handler 與 DB integration 測試
 ├── backups/                 # 本機/部署備份輸出目錄，git ignored
+├── docs/
+│   ├── backup_restore_runbook.md
+│   ├── deployment_engineering.md
+│   ├── deployment_runbook.md
+│   └── production_readiness.md
 ├── logs/                    # Bot log 與 alert state，git ignored
 ├── alembic.ini
-├── backup_restore_runbook.md
-├── deployment_runbook.md
 ├── compose.yml
 ├── Dockerfile
 ├── AGENTS.md
-├── production_readiness.md
 ├── pyproject.toml
-├── restart_bot.sh
 └── .env.template
 ```
 
@@ -227,7 +228,7 @@ Dependabot 只會開 PR，不會自動合併。每個 Dependabot PR 都應通過
 
 本地測試與 VPS 部署使用同一套 Docker Compose 流程。
 
-正式部署主線採 DigitalOcean Droplet + Ubuntu 24.04 LTS + Docker Compose，完整首次部署、更新、rollback、備份拉取與故障處理流程請看 [deployment_runbook.md](deployment_runbook.md)。
+正式部署主線採 DigitalOcean Droplet + Ubuntu 24.04 LTS + Docker Compose，完整首次部署、更新、rollback、備份拉取與故障處理流程請看 [deployment_runbook.md](docs/deployment_runbook.md)。
 
 建置映像：
 
@@ -283,8 +284,6 @@ docker compose ps
 docker compose restart bot
 ```
 
-`restart_bot.sh` 僅保留作為舊版輔助腳本；正式本地測試與部署建議以 `docker compose` 指令為準。
-
 ## 長期維護
 
 部署後建議同時啟動 `maintenance` 與 `db-backup` 服務，避免舊資料、檔案 log、Docker log 或備份檔長期撐滿磁碟。
@@ -298,7 +297,7 @@ docker compose restart bot
 - 管理員告警：Bot 啟動、DB/backup/cleanup 異常、Bitget API 連續暫時異常會推送到 `TELEGRAM_ADMIN_IDS`。
 - 健康檢查：管理員可用 `/admin_health` 查看 DB、backup、cleanup、Bitget API 與近期錯誤狀態。
 - 操作審計：管理員、發單員與下單關鍵操作會以結構化摘要寫入 `system_logs`，同樣保留 30 天。
-- 備份還原驗證：正式部署前至少依照 [backup_restore_runbook.md](backup_restore_runbook.md) 驗證一次，之後每月或重大改版後驗證一次。
+- 備份還原驗證：正式部署前至少依照 [backup_restore_runbook.md](docs/backup_restore_runbook.md) 驗證一次，之後每月或重大改版後驗證一次。
 
 手動 dry-run 檢查會清理多少資料：
 
@@ -325,7 +324,7 @@ cat backups/backup_status.json
 備份還原驗證：
 
 ```bash
-cat backup_restore_runbook.md
+cat docs/backup_restore_runbook.md
 ```
 
 ## Telegram 指令
@@ -529,4 +528,4 @@ docker compose logs --tail 40 bot
 - 點擊兩種下單方式，確認 `pending_orders.order_mode` 與 `limit_price` 正確寫入
 - 重啟 Bot 後確認尚未過期的 pending order 仍可被確認
 - 若使用 forum supergroup，設定 `/set_channel_topic` 後確認信號出現在指定 topic
-- 依照 [backup_restore_runbook.md](backup_restore_runbook.md) 驗證最新備份可還原
+- 依照 [backup_restore_runbook.md](docs/backup_restore_runbook.md) 驗證最新備份可還原

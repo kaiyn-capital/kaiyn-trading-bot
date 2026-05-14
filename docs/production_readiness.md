@@ -95,7 +95,7 @@
 
 已完成：
 
-- 新增 `backup_restore_runbook.md`。
+- 新增 `docs/backup_restore_runbook.md`。
 - 提供將 `backups/*.sql.gz` 還原到獨立臨時 PostgreSQL DB 的指令。
 - 記錄建議頻率：正式部署前至少測一次，之後每月或重大改版後測一次。
 - 確認還原後 Alembic version、主要資料表、近期資料筆數可查詢。

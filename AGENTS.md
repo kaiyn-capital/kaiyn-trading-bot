@@ -1,156 +1,147 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides repository-specific guidance for coding agents working on Kaiyn Trading Bot.
 
 ## Project Overview
 
-This is a Telegram bot for Bitget cryptocurrency trading. The bot allows users to connect their Bitget API credentials and execute trades through Telegram commands. It includes user management, encrypted API key storage, trade execution, and administrative features for managing traders and channels.
+Kaiyn Trading Bot is a Telegram bot for Bitget USDT-FUTURES signal execution. It lets users store encrypted Bitget API credentials, set a fixed 1R risk amount, receive trading signals, and submit market or GTC limit orders from Telegram. Admin users can manage traders, forwarding channels, Telegram forum topics, health checks, alerts, audits, retention, and backups.
+
+## Current Architecture
+
+- Runtime is Docker Compose first.
+- Python runtime is fixed to Python 3.11.
+- PostgreSQL is the only supported database.
+- SQLAlchemy is used with async engine/session.
+- Alembic owns schema creation and migrations.
+- `pyproject.toml` is the only Python dependency source.
+- SQLite, `requirements.txt`, and `create_all()` table creation are not part of the current workflow.
 
 ## Development Commands
 
-### Environment Setup
-```bash
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+Build the test image:
 
-# Install dependencies
-pip install -r requirements.txt
+```bash
+docker compose build test
 ```
 
-### Database Operations
+Run lint and format checks:
+
 ```bash
-# Initialize database and create tables
-python app/main.py --create-tables
-
-# Check database connection
-python app/main.py --check-db
-
-# Generate encryption key for .env
-python app/main.py --generate-key
+docker compose run --rm test ruff check .
+docker compose run --rm test ruff format --check .
 ```
 
-### Running the Bot
-```bash
-# Start the bot
-python app/main.py
+Apply formatting:
 
-# Initialize project structure (creates directories and .env template)
-python app/main.py --init
+```bash
+docker compose run --rm test ruff check --fix .
+docker compose run --rm test ruff format .
 ```
 
-### Testing
+Run the fast test suite:
+
 ```bash
-# Run basic functionality tests
-python test_fixes.py
-
-# Run detailed testing
-python test_fixes_detailed.py
-
-# Test signal flow functionality  
-python test_signal_flow.py
-
-# Test bot improvements
-python test_bot_improvements.py
+docker compose run --rm test python -m pytest
 ```
 
-## Architecture Overview
+Run the full test suite, including PostgreSQL integration tests:
 
-### Core Components
+```bash
+docker compose up -d postgres
+docker compose run --rm test python -m pytest --run-db
+```
 
-**Database Layer (`app/database.py`)**
-- Uses SQLAlchemy with both sync and async session support
-- `DatabaseManager` class handles connection management with context managers
-- Supports both SQLite (development) and PostgreSQL (production)
-- Repository pattern for data access (`get_user_repo`, `get_trade_repo`, etc.)
+Run py_compile:
 
-**Models (`app/models.py`)**
-- `User`: Stores encrypted API credentials, trading preferences, and trader permissions
-- `Trade`: Records all trading activity with Bitget order tracking
-- `NotificationLog`: Message logging system
-- `TradingPair`: Trading pair metadata and constraints
-- `ChannelGroup`: Manages Telegram channels/groups for signal forwarding
-- `SystemLog`: Application-wide logging
+```bash
+docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+```
 
-**Bot Logic (`app/bot.py`)**
-- `TelegramBot` class handles all Telegram interactions
-- Conversation handlers for multi-step workflows (API setup, trading)
-- Command handlers for bot functionality (`/start`, `/setapi`, `/trade`, etc.)
-- Callback query handlers for inline keyboards
-- Admin functionality for managing traders and channels
+Check whitespace:
 
-**Bitget Integration (`app/bitget_api.py`)**
-- `BitgetAPIClient`: Low-level API client with authentication
-- `BitgetTradeManager`: High-level trading operations
-- Request signing, error handling, and rate limiting
-- Order validation and execution
+```bash
+git diff --check
+```
 
-**Security (`app/encryption.py`)**
-- `EncryptionManager`: Fernet-based encryption for API keys
-- `KeyGenerator`: Utility for generating encryption keys
-- All sensitive data is encrypted before database storage
+## Database Operations
 
-### Key Patterns
+Start PostgreSQL:
 
-**Configuration Management**
-- Environment variables loaded via `python-dotenv`
-- `Config` class centralizes all configuration with validation
-- Separate development/production database URLs
+```bash
+docker compose up -d postgres
+```
 
-**Error Handling**
-- Global error handler in bot catches and logs all exceptions
-- Custom exception types for API errors (`BitgetAPIError`)
-- User-friendly error messages with system error logging
+Apply migrations:
 
-**State Management**
-- Conversation states for multi-step user interactions
-- User session data stored in context
-- Persistent state in database models
+```bash
+docker compose run --rm bot alembic upgrade head
+```
 
-**Permissions System**
-- Admin-only commands checked via `Config.TELEGRAM_ADMIN_ID`
-- Trader permissions via `is_trader` field on User model
-- Combined permission checks in `_is_trader_or_admin` method
+Check database connectivity:
 
-## Database Schema Notes
+```bash
+docker compose run --rm bot python -m app.main --check-db
+```
 
-The database uses a repository pattern for clean separation. Key relationships:
-- Users have many Trades and NotificationLogs
-- All API credentials are encrypted before storage
-- The `is_trader` field grants signal-sending permissions
-- SystemLog captures application events for monitoring
+Generate a Fernet encryption key:
 
-## Common Issues
+```bash
+docker compose run --rm bot python -m app.main --generate-key
+```
 
-**Database Migration**
-- When adding new model fields, manually update existing SQLite databases with `ALTER TABLE` statements
-- The `is_trader` field was added as a migration and may need manual addition to existing databases
+Run retention cleanup:
 
-**API Key Security**  
-- All Bitget API credentials are encrypted using Fernet before database storage
-- Encryption key must be 32 bytes base64 encoded in ENCRYPTION_KEY environment variable
-- Test encryption setup using `python app/main.py --generate-key`
+```bash
+docker compose run --rm bot python -m app.main --cleanup-retention --dry-run
+docker compose run --rm bot python -m app.main --cleanup-retention
+```
 
-**Conversation State**
-- Multi-step commands use conversation handlers with numbered states
-- State constants defined at module level (WAITING_API_KEY, WAITING_SECRET_KEY, etc.)
-- Context.user_data used for temporary state storage
+## Running Services
 
-## Configuration Requirements
+Start the production-like services:
 
-Essential environment variables in `.env`:
-- `TELEGRAM_BOT_TOKEN`: Bot token from @BotFather
-- `TELEGRAM_ADMIN_ID`: Admin user's Telegram ID (numeric)  
-- `ENCRYPTION_KEY`: 32-byte base64 key for API credential encryption
-- `DATABASE_URL`: SQLite for development, PostgreSQL for production
-- `BITGET_API_URL`: Usually "https://api.bitget.com"
+```bash
+docker compose up -d postgres
+docker compose up -d bot maintenance db-backup
+```
 
-## Testing Strategy
+View service state:
 
-The project includes several test files that verify core functionality:
-- Database connectivity and schema validation
-- Bot command handling and conversation flows  
-- API integration and encryption/decryption
-- Signal forwarding and trading workflows
+```bash
+docker compose ps
+docker compose logs --tail 80 bot
+```
 
-Test files follow the pattern `test_*.py` and can be run directly with Python.
+The `test` service is only for checks and should not be kept running in production.
+
+## Key Modules
+
+- `app/bot.py`: Telegram bot entrypoint, lifecycle, handler registration, callback router, shared helpers.
+- `app/bot_account_handlers.py`: `/start`, `/help`, `/status`, `/balance`, `/setapi`, `/settings`, 1R setup.
+- `app/bot_admin_*.py`: admin, user, channel, topic, messaging, health, and audit handlers.
+- `app/bot_order_handlers.py`: `/send_signal`, order mode callbacks, pending order confirm/cancel, order execution.
+- `app/order_flow.py`: signal parsing, order preview, Bitget contract-rule validation, order execution helpers.
+- `app/bitget_api.py`: low-level Bitget API client and higher-level trade manager.
+- `app/bitget_errors.py`: Bitget/API error classification and user-facing message mapping.
+- `app/database.py`: async DB manager and repository getter facade.
+- `app/repositories/`: repository implementations.
+- `app/models.py`: SQLAlchemy models.
+- `app/audit.py`: structured audit helpers.
+- `app/health.py`: admin health report helpers.
+- `alembic/versions/`: schema migrations.
+- `tests/`: pytest unit and opt-in PostgreSQL integration tests.
+
+## Repository Hygiene
+
+- Do not commit `.env`, logs, backups, database files, cache directories, or generated package metadata.
+- Runtime logs are summarized, but still treat them as internal operational data.
+- Backups contain encrypted user API credentials and trading records; treat them as sensitive.
+- Keep public documentation generic where possible. Avoid committing local backup filenames, real Telegram IDs, real API keys, VPS IPs, or production-specific secrets.
+
+## Documentation
+
+- `readme.md`: public project overview and main setup instructions.
+- `docs/deployment_runbook.md`: DigitalOcean VPS deployment runbook.
+- `docs/backup_restore_runbook.md`: PostgreSQL backup restore verification.
+- `docs/production_readiness.md`: production readiness implementation record.
+- `docs/deployment_engineering.md`: engineering rollout record for lint, CI, Dependabot, and deployment.

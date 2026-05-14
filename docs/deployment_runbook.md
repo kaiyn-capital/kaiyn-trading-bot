@@ -400,7 +400,7 @@ scp deploy@<droplet-ip>:/opt/kaiyn-trading-bot/backups/kaiyn_trading_bot_*.sql.g
 正式部署前至少做一次還原驗證，之後每月或重大改版後再驗證一次：
 
 ```bash
-cat backup_restore_runbook.md
+cat docs/backup_restore_runbook.md
 ```
 
 還原流程請以 [backup_restore_runbook.md](backup_restore_runbook.md) 為準。不要在正式 `postgres` service 或正式 `postgres_data` volume 裡做還原測試。

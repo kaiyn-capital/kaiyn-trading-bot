@@ -24,7 +24,7 @@ ls -lh backups/kaiyn_trading_bot_*.sql.gz
 選擇最新備份檔，例如：
 
 ```bash
-BACKUP_FILE=backups/kaiyn_trading_bot_20260512_162128.sql.gz
+BACKUP_FILE=backups/kaiyn_trading_bot_YYYYMMDD_HHMMSS.sql.gz
 ```
 
 ## 2. 啟動臨時 PostgreSQL
@@ -140,12 +140,3 @@ docker rm -f kaiyn_restore_test
 - 是否成功清除臨時 container。
 
 如還原失敗，應立即檢查 `db-backup` service log 與 `backups/backup_status.json`，不要等到真正需要恢復資料時才處理。
-
-## 最近一次本地驗證
-
-- 驗證日期：2026-05-13
-- 備份檔案：`backups/kaiyn_trading_bot_20260512_162128.sql.gz`
-- 還原目標：獨立臨時 container `kaiyn_restore_test`
-- Alembic version：`20260512_0004`
-- 主要資料表查詢：成功
-- 臨時 container 清除：成功

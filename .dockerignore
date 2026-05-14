@@ -1,7 +1,9 @@
 .git
 .gitignore
 .env
+.env.*
 *.env
+!.env.template
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -20,3 +22,14 @@ logs/
 *.sqlite3
 data/
 backups/
+*.bak
+*.backup
+*.dump
+*.sql
+*.sql.gz
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+kaiyn_trading_bot.egg-info/

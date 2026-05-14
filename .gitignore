@@ -1,6 +1,8 @@
 # 環境變數文件
 .env
+.env.*
 *.env
+!.env.template
 
 # Python
 __pycache__/
@@ -65,7 +67,22 @@ app.log
 
 # 備份文件
 backups/
+*.bak
 *.backup
+*.dump
+*.sql
+*.sql.gz
+*.tar
+*.tar.gz
+
+# 憑證與金鑰
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
 
 # 臨時文件
 tmp/
@@ -94,3 +111,4 @@ Pipfile.lock
 data/
 .cache/
 .claude/
+kaiyn_trading_bot.egg-info/
