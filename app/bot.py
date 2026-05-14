@@ -301,9 +301,6 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             await self.application.updater.start_polling(
                 poll_interval=1.0,
                 timeout=20,
-                read_timeout=20,
-                write_timeout=20,
-                connect_timeout=20,
             )
 
             logger.info("Telegram bot started successfully")
