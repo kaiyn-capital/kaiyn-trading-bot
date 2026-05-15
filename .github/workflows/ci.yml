@@ -35,6 +35,9 @@ jobs:
       - name: Start PostgreSQL
         run: docker compose up -d postgres
 
+      - name: Check uv lockfile
+        run: docker compose run --rm test uv lock --check
+
       - name: Run Ruff lint
         run: docker compose run --rm test ruff check .
 

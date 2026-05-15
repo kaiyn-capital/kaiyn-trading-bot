@@ -155,6 +155,7 @@ Bitget/API 錯誤會統一分類並轉成簡短使用者訊息。
 
 ```bash
 docker compose build test
+docker compose run --rm test uv lock --check
 docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
 docker compose run --rm test python -m pytest

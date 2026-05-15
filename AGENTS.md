@@ -13,53 +13,76 @@ Kaiyn Trading Bot is a Telegram bot for Bitget USDT-FUTURES signal execution. It
 - PostgreSQL is the only supported database.
 - SQLAlchemy is used with async engine/session.
 - Alembic owns schema creation and migrations.
-- `pyproject.toml` is the only Python dependency source.
+- `pyproject.toml` declares Python dependencies.
+- `uv.lock` is the committed Python dependency lockfile.
 
 ## Development Commands
+
+Show available shortcuts:
+
+```bash
+make help
+```
 
 Build the test image:
 
 ```bash
-docker compose build test
+make build-test
+```
+
+Check the dependency lockfile:
+
+```bash
+make lock-check
+```
+
+Regenerate `uv.lock` after changing Python dependencies:
+
+```bash
+make lock
 ```
 
 Run lint and format checks:
 
 ```bash
-docker compose run --rm test ruff check .
-docker compose run --rm test ruff format --check .
+make lint
+make format-check
 ```
 
 Apply formatting:
 
 ```bash
-docker compose run --rm test ruff check --fix .
-docker compose run --rm test ruff format .
+make format
 ```
 
 Run the fast test suite:
 
 ```bash
-docker compose run --rm test python -m pytest
+make test
 ```
 
 Run the full test suite, including PostgreSQL integration tests:
 
 ```bash
-docker compose up -d postgres
-docker compose run --rm test python -m pytest --run-db
+make test-db
 ```
 
 Run py_compile:
 
 ```bash
-docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+make py-compile
 ```
 
 Check whitespace:
 
 ```bash
-git diff --check
+make diff-check
+```
+
+Run full Docker-first verification:
+
+```bash
+make verify
 ```
 
 ## Database Operations
@@ -67,32 +90,32 @@ git diff --check
 Start PostgreSQL:
 
 ```bash
-docker compose up -d postgres
+make up-db
 ```
 
 Apply migrations:
 
 ```bash
-docker compose run --rm bot alembic upgrade head
+make migrate
 ```
 
 Check database connectivity:
 
 ```bash
-docker compose run --rm bot python -m app.main --check-db
+make check-db
 ```
 
 Generate a Fernet encryption key:
 
 ```bash
-docker compose run --rm bot python -m app.main --generate-key
+make generate-key
 ```
 
 Run retention cleanup:
 
 ```bash
-docker compose run --rm bot python -m app.main --cleanup-retention --dry-run
-docker compose run --rm bot python -m app.main --cleanup-retention
+make cleanup-dry-run
+make cleanup
 ```
 
 ## Running Services
@@ -100,15 +123,15 @@ docker compose run --rm bot python -m app.main --cleanup-retention
 Start the production-like services:
 
 ```bash
-docker compose up -d postgres
-docker compose up -d bot maintenance db-backup
+make up-db
+make up
 ```
 
 View service state:
 
 ```bash
-docker compose ps
-docker compose logs --tail 80 bot
+make ps
+make logs
 ```
 
 The `test` service is only for checks and should not be kept running in production.

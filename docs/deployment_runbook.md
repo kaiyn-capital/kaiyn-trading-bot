@@ -224,6 +224,16 @@ docker compose run --rm bot python -m app.main --generate-key
 
 ## 7. 首次部署
 
+快速流程：
+
+```bash
+make deploy
+make ps
+make logs
+```
+
+等效 Docker Compose 展開流程：
+
 建置 image：
 
 ```bash
@@ -268,8 +278,15 @@ docker compose logs --tail 80 db-backup
 正式上線前可在 VPS 上跑一次 Docker-first 檢查：
 
 ```bash
+make verify
+```
+
+等效 Docker Compose 展開流程：
+
+```bash
 docker compose build test
 docker compose up -d postgres
+docker compose run --rm test uv lock --check
 docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
 docker compose run --rm test python -m pytest --run-db
@@ -317,6 +334,14 @@ docker compose ps
 git pull --ff-only
 ```
 
+執行部署：
+
+```bash
+make deploy
+```
+
+等效 Docker Compose 展開流程：
+
 建置 image：
 
 ```bash
@@ -350,8 +375,8 @@ docker compose up -d bot maintenance db-backup
 檢查結果：
 
 ```bash
-docker compose ps
-docker compose logs --tail 80 bot
+make ps
+make logs
 ```
 
 最後在 Telegram 執行 `/admin_health` 與基本 smoke test。

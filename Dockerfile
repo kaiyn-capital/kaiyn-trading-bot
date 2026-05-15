@@ -1,20 +1,25 @@
 FROM python:3.11-slim
 
+COPY --from=ghcr.io/astral-sh/uv:python3.11-bookworm-slim /usr/local/bin/uv /usr/local/bin/uvx /bin/
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PYTHON_DOWNLOADS=0 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH"
 
 ARG INSTALL_DEV=false
 
 WORKDIR /app
 
-COPY pyproject.toml readme.md ./
+COPY pyproject.toml uv.lock readme.md ./
 COPY app ./app
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 
-RUN pip install --upgrade pip \
-    && if [ "$INSTALL_DEV" = "true" ]; then pip install ".[dev]"; else pip install .; fi
+RUN if [ "$INSTALL_DEV" = "true" ]; then uv sync --locked --no-editable; else uv sync --locked --no-dev --no-editable; fi
 
 COPY . .
 

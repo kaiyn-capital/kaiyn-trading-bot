@@ -10,13 +10,30 @@
 
 - Python 3.11 runtime。
 - Docker Compose 作為本地測試與正式部署入口。
+- Makefile 作為 Docker Compose 指令捷徑，不取代 Docker Compose。
 - PostgreSQL、Alembic migration、async SQLAlchemy。
-- `pyproject.toml` 作為唯一 Python 套件來源。
+- `pyproject.toml` 作為 Python 依賴宣告來源，`uv.lock` 作為鎖定檔。
 - Ruff 作為 Python lint 與 format 工具。
 - pytest 作為測試框架，包含純邏輯、handler 與 PostgreSQL integration tests。
 - GitHub Actions CI，以 Docker Compose 執行 Ruff、pytest、DB integration、py_compile 與 whitespace 檢查。
 - Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 merge。
 - DigitalOcean VPS deployment runbook，涵蓋首次部署、更新、rollback、備份拉取、還原連結與故障處理。
+
+## Dependency Management
+
+專案使用 uv 鎖定 Python 依賴：
+
+- `pyproject.toml` 宣告 runtime dependencies 與 dev dependency group。
+- `uv.lock` 鎖定完整 transitive dependency graph，並提交到 git。
+- Docker runtime image 使用 `uv sync --locked --no-dev --no-editable`。
+- Docker test image 使用 `uv sync --locked --no-editable`，包含 dev tools。
+- VPS 與本機 host 不需要安裝 uv；uv 由 Docker image 提供。
+
+更新 Python 依賴後，重新產生 lockfile：
+
+```bash
+docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-slim uv lock
+```
 
 ## Linter And Formatter
 
@@ -38,7 +55,7 @@ docker compose run --rm test ruff format .
 
 設定位置：
 
-- `pyproject.toml` 的 `[project.optional-dependencies].dev`
+- `pyproject.toml` 的 `[dependency-groups].dev`
 - `pyproject.toml` 的 `[tool.ruff]`
 - `pyproject.toml` 的 `[tool.ruff.lint]`
 
@@ -60,6 +77,7 @@ CI 執行項目：
 docker compose version
 docker compose build test
 docker compose up -d postgres
+docker compose run --rm test uv lock --check
 docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
 docker compose run --rm test python -m pytest --run-db
@@ -70,6 +88,28 @@ docker compose down -v --remove-orphans
 
 CI 不使用 production secrets，不連線 Telegram，也不呼叫 Bitget 真實 API。
 
+## Makefile Shortcuts
+
+Makefile 封裝常用 Docker Compose 命令：
+
+```bash
+make help
+make verify
+make deploy
+make test
+make test-db
+make lint
+make format-check
+make migrate
+make check-db
+make up
+make logs
+```
+
+- `make verify` 執行完整 Docker-first 檢查。
+- `make deploy` 執行 build、PostgreSQL startup、migration、DB check 與服務啟動。
+- CI 維持直接執行 Docker Compose 命令，避免 CI 行為被 Makefile abstraction 隱藏。
+
 ## Dependabot
 
 Dependabot 設定檔：
@@ -78,7 +118,7 @@ Dependabot 設定檔：
 
 更新範圍：
 
-- Python package ecosystem：`pyproject.toml`
+- Python package ecosystem：`pyproject.toml` 與 `uv.lock`
 - GitHub Actions ecosystem：`.github/workflows/*.yml`
 
 PR 規則：
