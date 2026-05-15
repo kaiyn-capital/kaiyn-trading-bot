@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![uv](https://img.shields.io/badge/dependencies-uv-261230?logo=astral&logoColor=white)](https://docs.astral.sh/uv/)
 [![Docker Compose](https://img.shields.io/badge/Docker%20Compose-runtime-2496ED?logo=docker&logoColor=white)](./compose.yml)
+[![CD: GHCR + SSH](https://img.shields.io/badge/CD-GHCR%20%2B%20SSH-24292F?logo=githubactions&logoColor=white)](.github/workflows/release.yml)
 
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](./pyproject.toml)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](./compose.yml)
@@ -14,7 +15,9 @@
 [![pytest](https://img.shields.io/badge/tests-pytest%209.0.3-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
 [![Dependabot](https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot&logoColor=white)](./.github/dependabot.yml)
 
-Kaiyn Trading Bot 是整合 Telegram 與 Bitget USDT-FUTURES 的交易信號執行機器人。使用者可透過 Telegram 設定加密 API 憑證、設定固定 1R 風險金額，並從交易信號按鈕送出市價單或 GTC 限價單。
+Kaiyn Trading Bot 是整合 Telegram 與 Bitget USDT-FUTURES 的交易信號執行機器人。專案以 production-ready 實務運行規格設計，涵蓋交易確認流程、交易所規則驗證、加密憑證保存、審計紀錄、備份還原與 CI/CD。
+
+使用者可透過 Telegram 設定加密 API 憑證、設定固定 1R 風險金額，並從交易信號按鈕送出市價單或 GTC 限價單。
 
 > 風險提醒：本專案會連接真實交易所 API 並送出合約訂單。Bitget API 應只授予交易權限，不授予提幣權限。
 
@@ -26,7 +29,7 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget USDT-FUTURES 的交易信號執�
 - Encrypted API credential storage，使用 Fernet 加密保存 Bitget API Key、Secret Key、Passphrase。
 - Admin alerts, health checks, audit trail，提供 `/admin_health`、`/admin_audit`、啟動與異常告警。
 - Docker-first deployment with retention and backup，包含 log rotation、DB retention、每日 PostgreSQL 備份。
-- CI/CD with Ruff, pytest, PostgreSQL integration tests, GHCR image publishing, Coolify webhook deployment, Dependabot。
+- CI/CD with Ruff, pytest, PostgreSQL integration tests, GHCR image publishing, VPS SSH deployment, Dependabot。
 
 ## Architecture
 
@@ -47,7 +50,7 @@ flowchart TD
     ci["GitHub Actions CI"] --> test["test service<br/>Ruff + pytest + DB integration"]
     test --> db
     ci --> ghcr["GHCR<br/>multi-arch release image"]
-    ghcr --> deploy["Coolify on VPS / Oracle<br/>deploy sha-tag image"]
+    ghcr --> deploy["VPS SSH CD<br/>deploy image digest"]
     deploy --> bot
 
     classDef actor fill:#111827,stroke:#38bdf8,color:#f8fafc;
@@ -112,7 +115,7 @@ sequenceDiagram
 | Testing               | pytest 9.0.3 + opt-in PostgreSQL integration tests                     |
 | Lint / format         | Ruff 0.15.12                                                           |
 | CI                    | GitHub Actions with Docker Compose-first checks                        |
-| CD                    | GHCR multi-arch image + Coolify webhook deployment                     |
+| CD                    | GHCR multi-arch image + VPS SSH deployment by digest                   |
 | Dependency automation | Dependabot weekly updates; GitHub Actions patch/minor auto-merge       |
 
 ## Core Capabilities
@@ -125,13 +128,13 @@ sequenceDiagram
 - Admin health checks, alerts, audit events, retention cleanup, and backups.
 - Docker Compose local/deployment parity with CI-backed verification.
 
-## Portfolio Notes
+## Engineering Notes
 
 - Trading state is persisted in PostgreSQL, so pending confirmations survive Bot restarts and duplicate clicks are guarded by row locking.
 - Exchange execution is validated against Bitget contract rules before confirmation and again before order submission.
 - Operations are part of the product surface: health checks, audit events, retention cleanup, backups, and restore documentation are included.
 - CI mirrors the Docker Compose runtime path, including PostgreSQL integration tests instead of relying on host-local services.
-- CD publishes multi-arch images to GHCR and deploys production through Coolify after environment approval.
+- CD publishes multi-arch images to GHCR and deploys production through SSH after environment approval.
 
 ## Quick Start
 
@@ -164,7 +167,7 @@ docker compose run --rm bot python -m app.main --check-db
 docker compose up -d bot maintenance db-backup
 ```
 
-完整部署流程見 [deployment_runbook.md](docs/deployment_runbook.md)。
+完整 DigitalOcean 部署流程見 [deployment_runbook.md](docs/deployment_runbook.md)；Coolify 可選部署方案見 [coolify_runbook.md](docs/coolify_runbook.md)。
 
 ## Configuration
 
@@ -199,7 +202,9 @@ docker compose run --rm test python -m pytest
 docker compose run --rm test python -m pytest --run-db
 ```
 
-GitHub Actions 以相同 Docker Compose 流程執行 Ruff、pytest、PostgreSQL integration tests、`py_compile` 與 whitespace 檢查。CI 通過後，release workflow 會發布 multi-arch image 到 GHCR，並在 `production` environment approval 後透過 Coolify webhook 部署到 VPS / Oracle runtime。Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 squash merge，Python dependency PR 維持人工 review。
+GitHub Actions 以相同 Docker Compose 流程執行 Ruff、pytest、PostgreSQL integration tests、`py_compile` 與 whitespace 檢查。CI 通過後，release workflow 會發布 multi-arch image 到 GHCR，並在 `production` environment approval 後透過 SSH 部署 image digest 到 VPS。Coolify 文件保留為可選部署方案。
+
+Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 squash merge，Python dependency PR 維持人工 review。
 
 更新 Python 依賴時，使用 Dockerized uv 更新 lockfile：
 
@@ -224,8 +229,7 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 | [commands.md](docs/commands.md) | Telegram command reference, signal syntax, topic forwarding, smoke tests |
 | [trading_flow.md](docs/trading_flow.md) | Order flow, pending orders, exchange-rule validation, error categories, schema summary |
 | [deployment_runbook.md](docs/deployment_runbook.md) | DigitalOcean VPS deployment, update, rollback, troubleshooting |
-| [oracle_cloud_arm_runbook.md](docs/oracle_cloud_arm_runbook.md) | Oracle Cloud Ampere A1 Flex ARM64 deployment |
-| [coolify_runbook.md](docs/coolify_runbook.md) | Coolify webhook deployment with GHCR image pipeline |
+| [coolify_runbook.md](docs/coolify_runbook.md) | Optional Coolify deployment variant with GHCR image pipeline |
 | [backup_restore_runbook.md](docs/backup_restore_runbook.md) | PostgreSQL backup restore verification |
 | [production_readiness.md](docs/production_readiness.md) | Production readiness design record |
 | [deployment_engineering.md](docs/deployment_engineering.md) | CI, Dependabot, lint/format, deployment engineering baseline |
@@ -240,7 +244,7 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 ├── docs/                   # command, trading, deployment, backup, readiness docs, screenshots
 ├── compose.yml             # postgres, bot, test, maintenance, db-backup services
 ├── compose.prod.yml        # image-based production override for GHCR deployments
-├── compose.coolify.yml     # complete Coolify Docker Compose application
+├── compose.coolify.yml     # optional Coolify Docker Compose application
 ├── Dockerfile
 ├── Makefile
 ├── pyproject.toml

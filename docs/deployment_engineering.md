@@ -1,8 +1,8 @@
 # Deployment Engineering Record
 
-更新日期：2026-05-15
+更新日期：2026-05-16
 
-本文件記錄 Kaiyn Trading Bot 的工程化部署設計。專案採 Docker Compose 優先流程，並以相同容器環境執行開發檢查、CI、資料庫 migration、正式部署與維護任務。
+本文件記錄 Kaiyn Trading Bot 的工程化部署設計。專案採 Docker Compose 優先流程，並以相同容器環境執行開發檢查、CI、資料庫 migration、正式部署與維護任務。正式部署主線為 DigitalOcean Droplet，由 GitHub Actions 發布 GHCR image，再透過 SSH 執行 image-based production deployment。
 
 ## Engineering Baseline
 
@@ -16,9 +16,9 @@
 - Ruff 作為 Python lint 與 format 工具。
 - pytest 作為測試框架，包含純邏輯、handler 與 PostgreSQL integration tests。
 - GitHub Actions CI，以 Docker Compose 執行 Ruff、pytest、DB integration、py_compile 與 whitespace 檢查。
-- GitHub Actions CD，在 CI 通過後發布 GHCR multi-arch image，並透過 Coolify webhook 部署到 VPS / Oracle runtime。
+- GitHub Actions CD，在 CI 通過後發布 GHCR multi-arch image，並透過 SSH 以 image digest 部署到 DigitalOcean VPS。
 - Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 merge。
-- DigitalOcean VPS 與 Oracle Cloud ARM deployment runbooks，涵蓋首次部署、更新、備份拉取、還原連結與故障處理。
+- DigitalOcean VPS、SSH CD 與 backup/restore runbooks，涵蓋首次部署、更新、rollback、備份拉取、還原驗證與故障處理。
 
 ## Dependency Management
 
@@ -89,7 +89,7 @@ docker compose down -v --remove-orphans
 
 CI 不使用 production secrets，不連線 Telegram，也不呼叫 Bitget 真實 API。
 
-## GHCR Image Pipeline And Coolify CD
+## GHCR Image Pipeline And VPS SSH CD
 
 Release workflow：
 
@@ -107,24 +107,27 @@ CI passed
 -> build linux/amd64 + linux/arm64 Docker image
 -> push ghcr.io/kylekkkk61/kaiyn-trading-bot:sha-<commit>
 -> push ghcr.io/kylekkkk61/kaiyn-trading-bot:main
--> update Coolify BOT_IMAGE after production environment approval
--> trigger Coolify deployment webhook
+-> wait for production environment approval
+-> SSH to production VPS
+-> deploy ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest>
 ```
 
-Production deployment 使用 Coolify application 與 `compose.coolify.yml`。`bot` 與 `maintenance` 由 GHCR image 啟動；`postgres` 與 `db-backup` 保留 Docker Compose service model。
+Production deployment 使用 `compose.yml` + `compose.prod.yml` 與 `make deploy-image`。`bot` 與 `maintenance` 由 GHCR image digest 啟動；`postgres` 與 `db-backup` 保留 Docker Compose service model。
 
 GitHub `production` environment 需提供：
 
 ```text
-COOLIFY_TOKEN
-COOLIFY_API_BASE_URL
-COOLIFY_APPLICATION_UUID
-COOLIFY_WEBHOOK
+PRODUCTION_SSH_HOST
+PRODUCTION_SSH_PORT
+PRODUCTION_SSH_USER
+PRODUCTION_SSH_KEY
+PRODUCTION_SSH_KNOWN_HOSTS
+PRODUCTION_APP_DIR
 ```
 
 建議 `production` environment 設定 required reviewer，讓 production deploy 在 image 發布後等待人工 approval。
 
-SSH + `make deploy-image` 保留為 manual fallback，不再是 release workflow 的 production executor。
+Coolify 文件與 compose 檔保留為 optional deployment variant，不是 release workflow 的 production executor。
 
 ## Makefile Shortcuts
 
@@ -198,16 +201,15 @@ GitHub repository settings：
 部署流程：
 
 - 使用 Docker Compose。
-- `compose.coolify.yml` 以 `migrate` 一次性服務執行 Alembic migration。
+- `make deploy-image` 使用 GHCR image digest 執行 Alembic migration、DB check 與 service startup。
 - 同時啟動 `bot`、`maintenance`、`db-backup`。
 - Bot 啟動時不自動套用 migration。
-- GitHub Actions 可在 CI 通過與 `production` environment approval 後觸發 Coolify deployment。
+- GitHub Actions 可在 CI 通過與 `production` environment approval 後透過 SSH 執行 image-based deployment。
 
 部署文件：
 
 - [deployment_runbook.md](deployment_runbook.md)
-- [oracle_cloud_arm_runbook.md](oracle_cloud_arm_runbook.md)
-- [coolify_runbook.md](coolify_runbook.md)
+- [coolify_runbook.md](coolify_runbook.md)，可選 Coolify deployment variant
 - [backup_restore_runbook.md](backup_restore_runbook.md)
 
 ## Security Baseline

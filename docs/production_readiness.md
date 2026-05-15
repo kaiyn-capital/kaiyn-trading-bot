@@ -1,6 +1,6 @@
 # Production Readiness Record
 
-更新日期：2026-05-15
+更新日期：2026-05-16
 
 本文件記錄 Kaiyn Trading Bot 的 production readiness 設計與完成項目。專案定位為 Telegram + Bitget USDT-FUTURES 下單 bot，目標是在 VPS 上長期運行，並降低真金交易時的操作風險。
 
@@ -38,6 +38,9 @@
 - 備份還原 runbook 與獨立臨時 PostgreSQL 還原驗證流程。
 - 操作審計與 `/admin_audit` 查詢。
 - Docker-first pytest，包含 PostgreSQL integration tests。
+- GitHub Actions CI，涵蓋 Ruff、pytest、PostgreSQL integration、`py_compile` 與 whitespace 檢查。
+- GHCR image pipeline 與 VPS SSH CD，經 `production` environment approval 後以 image digest 部署到 DigitalOcean VPS。
+- DigitalOcean、SSH CD、backup/restore 與 deployment engineering 文件，覆蓋上線、更新、rollback 與災難恢復驗證。
 
 ## Trading Safety
 

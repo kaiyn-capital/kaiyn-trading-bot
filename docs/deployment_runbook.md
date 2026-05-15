@@ -2,7 +2,7 @@
 
 本文件是 Kaiyn Trading Bot 的正式部署操作手冊。部署主線固定為 DigitalOcean Droplet + Ubuntu 24.04 LTS + Docker Compose，同一台 VPS 內執行 `postgres`、`bot`、`maintenance`、`db-backup`。
 
-Production CD 使用 GitHub Actions 發布 GHCR image，並經 `production` environment approval 後觸發 Coolify deployment。SSH + Docker Compose 手動部署保留為 fallback。
+Production CD 使用 GitHub Actions 發布 GHCR image，並經 `production` environment approval 後透過 SSH 在 VPS 執行 image-based Docker Compose deployment。Coolify 設定細節集中在 [coolify_runbook.md](coolify_runbook.md)，作為可選 deployment variant 保留。
 
 參考官方文件：
 
@@ -307,7 +307,7 @@ git diff --check
 - `/admin`
 - `/admin_health`
 - `/admin_audit`
-- `/send_signal BTCUSDT short 80200 81000 81700 77777 75000 等待回踩后执行`
+- `/send_signal BTCUSDT short 80200 81000 81700 77777 75000 等待回踩後執行`
 - 確認信號已轉發到指定群組或 topic。
 - 點「市价下单」與「挂单」，至少確認可進入 pending order 確認畫面。
 
@@ -381,51 +381,59 @@ make logs
 
 最後在 Telegram 執行 `/admin_health` 與基本 smoke test。
 
-## 11. Coolify CD
+## 11. GitHub Actions SSH CD
 
-Production CD 使用 `.github/workflows/release.yml` 與 Coolify：
+Production CD 使用 `.github/workflows/release.yml` 與 VPS SSH：
 
 ```text
 CI passed
 -> build linux/amd64 + linux/arm64 image
 -> push GHCR
 -> wait for production environment approval
--> update Coolify BOT_IMAGE
--> trigger Coolify webhook
+-> SSH to VPS
+-> deploy image digest with make deploy-image
 ```
 
 GitHub `production` environment 需要設定下列 secrets：
 
 ```text
-COOLIFY_TOKEN
-COOLIFY_API_BASE_URL
-COOLIFY_APPLICATION_UUID
-COOLIFY_WEBHOOK
+PRODUCTION_SSH_HOST
+PRODUCTION_SSH_PORT
+PRODUCTION_SSH_USER
+PRODUCTION_SSH_KEY
+PRODUCTION_SSH_KNOWN_HOSTS
+PRODUCTION_APP_DIR
 ```
 
-Coolify application 使用：
+遠端部署流程：
 
 ```text
-compose.coolify.yml
+cd $PRODUCTION_APP_DIR
+git status must be clean
+git fetch origin main
+git checkout main
+git merge --ff-only $DEPLOY_SHA
+BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest> make deploy-image
+docker compose ps
+docker compose logs --tail 80 bot
 ```
 
-`compose.coolify.yml` 內建 `migrate` 一次性服務，部署順序為：
+`make deploy-image` 使用 `compose.yml` 與 `compose.prod.yml`，部署順序為：
 
 ```text
-postgres healthy
--> migrate runs alembic upgrade head
--> bot and maintenance start
+pull GHCR image by digest
+-> run alembic upgrade head with the deployment image
+-> run DB health check with the deployment image
+-> start bot, maintenance, db-backup
 ```
 
-Coolify 不需要額外設定 deployment command。完整 Coolify 設定見 [coolify_runbook.md](coolify_runbook.md)。
-
-SSH + image-based manual deployment 保留為 fallback：
+手動執行同一套 image-based deployment：
 
 ```bash
 BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest> make deploy-image
 ```
 
-`compose.prod.yml` 使用 Docker Compose `!reset` 移除 build 設定，fallback VPS Docker Compose plugin 需支援 Compose `2.24.4+`。
+`compose.prod.yml` 使用 Docker Compose `!reset` 移除 build 設定，VPS Docker Compose plugin 需支援 Compose `2.24.4+`。Coolify 方案保留為可選部署變體，完整設定見 [coolify_runbook.md](coolify_runbook.md)。
 
 ## 12. Rollback
 

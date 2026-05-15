@@ -1,8 +1,8 @@
 # Coolify Deployment Runbook
 
-本文件說明 Kaiyn Trading Bot 使用 Coolify 作為 VPS 上的 deployment executor。GHCR image pipeline 仍由 GitHub Actions 負責，Coolify 負責拉取已通過 CI 的 image、執行部署、保存環境變數與提供 deployment dashboard。
+本文件保留 Kaiyn Trading Bot 的 optional Coolify deployment variant。正式 production CD 主線為 GHCR + VPS SSH CD，透過 `.github/workflows/release.yml` 連線 VPS 並執行 `make deploy-image`。Coolify 可作為未來替代 executor，用於拉取已通過 CI 的 image、執行部署、保存環境變數與提供 deployment dashboard。
 
-部署模型：
+可選 Coolify 部署模型：
 
 ```text
 CI passed
@@ -23,7 +23,7 @@ CI passed
 - Deployment trigger：使用 API / webhook，由 GitHub Actions 控制
 - Public HTTP domain：不需要，Bot 沒有 HTTP endpoint
 
-Coolify application 應部署在既有 VPS / Oracle VM 上。若 VM 已用手動 Docker Compose 跑過 production DB，搬到 Coolify stack 前先做 SQL backup，並用 [backup_restore_runbook.md](backup_restore_runbook.md) 還原到 Coolify-managed PostgreSQL volume。
+Coolify application 應部署在既有 DigitalOcean Droplet 上。若 Droplet 已用手動 Docker Compose 跑過 production DB，搬到 Coolify stack 前先做 SQL backup，並用 [backup_restore_runbook.md](backup_restore_runbook.md) 還原到 Coolify-managed PostgreSQL volume。
 
 ## 2. Required Coolify Variables
 
@@ -73,7 +73,7 @@ Coolify 不需要額外設定 pre-deployment command。每次 deployment 由 com
 
 ## 4. GitHub Environment Secrets
 
-GitHub `production` environment 需要設定：
+只有切換到 Coolify executor 時，GitHub `production` environment 才需要設定：
 
 ```text
 COOLIFY_TOKEN
@@ -89,11 +89,11 @@ COOLIFY_WEBHOOK
 - `COOLIFY_APPLICATION_UUID`：Coolify application UUID。
 - `COOLIFY_WEBHOOK`：Coolify deployment webhook URL。
 
-SSH secrets 不再由 release workflow 使用；SSH manual deployment 只作 fallback。
+正式 SSH CD 主線使用 `PRODUCTION_SSH_*` secrets；Coolify secrets 不屬於目前主線必要設定。
 
 ## 5. GitHub Actions Deployment
 
-`.github/workflows/release.yml` 會執行：
+目前 `.github/workflows/release.yml` 使用 SSH executor，不呼叫 Coolify API。若切換到本可選方案，release workflow 可改為執行：
 
 1. build and push GHCR image。
 2. 等待 `production` environment approval。
@@ -105,7 +105,7 @@ SSH secrets 不再由 release workflow 使用；SSH manual deployment 只作 fal
 
 4. `GET $COOLIFY_WEBHOOK` 觸發 Coolify deploy。
 
-若 Coolify API 或 webhook 回傳非 2xx，workflow 會失敗，不會 fallback 到 SSH deploy。
+若 Coolify API 或 webhook 回傳非 2xx，workflow 應直接失敗，不 fallback 到 SSH deploy。
 
 ## 6. Manual Deploy And Rollback
 
@@ -149,16 +149,16 @@ docker volume inspect <volume_name>
 GitHub Actions release run 應顯示：
 
 - `Build and publish GHCR image` 成功。
-- `Deploy production via Coolify` 成功。
+- Coolify executor 啟用時，`Deploy production via Coolify` 成功。
 - 無 Node.js deprecation warning。
 
 ## 8. Operational Notes
 
-- Coolify 是部署 executor，不取代 GHCR image pipeline。
+- Coolify 是可選部署 executor，不取代 GHCR image pipeline。
 - GHCR package 建議保持 public；若改 private，需要在 Coolify/VPS 設定 GHCR pull credentials。
 - Coolify application variables 屬於 production secrets，不提交到 git。
 - `compose.coolify.yml` 不對外公開 PostgreSQL port。
-- SSH + `make deploy-image` 流程保留為 disaster fallback。
+- SSH + `make deploy-image` 是目前 production CD 主線；Coolify 切換前需先停止 SSH CD 或避免同一個 Telegram bot token 同時啟動兩套 runtime。
 
 References:
 

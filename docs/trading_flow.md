@@ -1,6 +1,6 @@
 # Trading Flow
 
-本文件整理 Kaiyn Trading Bot 的交易信號、下單流程、pending order 狀態、交易安全防呆、錯誤分類與資料表摘要。
+本文件整理 Kaiyn Trading Bot 的交易信號、下單流程、pending order 狀態、交易安全防呆、錯誤分類與資料表摘要。按鈕名稱保留 Bot 目前實際顯示文字。
 
 ## Signal Flow
 

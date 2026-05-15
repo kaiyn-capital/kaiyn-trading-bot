@@ -1,6 +1,6 @@
 # Telegram Commands
 
-本文件整理 Kaiyn Trading Bot 的 Telegram 指令、交易信號格式、topic 轉發設定與手動 smoke test。Bot 介面文字使用簡體中文。
+本文件整理 Kaiyn Trading Bot 的 Telegram 指令、交易信號格式、topic 轉發設定與部署後 smoke test。文件敘述使用繁體中文；表格與檢查清單中的按鈕名稱保留 Bot 目前實際顯示文字。
 
 ## User Commands
 
@@ -46,7 +46,7 @@
 
 ```text
 /send_signal BTCUSDT long 115000 115500 114200 117500 120500 123500
-/send_signal ETHUSDT short 3200 3250 3300 3100 3000 2900 等待回踩后执行
+/send_signal ETHUSDT short 3200 3250 3300 3100 3000 2900 等待回踩後執行
 ```
 
 格式規則：
@@ -69,7 +69,7 @@
 4. 設定指定 topic：
 
 ```text
-/set_channel_topic 1 12345 交易信号
+/set_channel_topic 1 12345 交易信號
 ```
 
 清除 topic：
@@ -82,7 +82,7 @@
 
 指定 topic 僅套用於 `/send_signal` 交易信號自動轉發；`/admin_broadcast` 與 `/send_to_channel` 維持發到群組本身。
 
-## Manual Smoke Test
+## Post-deploy Smoke Test
 
 部署後使用 Telegram 驗證：
 
