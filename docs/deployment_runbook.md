@@ -381,50 +381,49 @@ make logs
 
 最後在 Telegram 執行 `/admin_health` 與基本 smoke test。
 
-## 11. GitHub Actions CD
+## 11. Coolify CD
 
-Production CD 使用 `.github/workflows/release.yml`：
+Production CD 使用 `.github/workflows/release.yml` 與 Coolify：
 
 ```text
 CI passed
 -> build linux/amd64 + linux/arm64 image
 -> push GHCR
 -> wait for production environment approval
--> SSH deploy to this VPS
+-> update Coolify BOT_IMAGE
+-> trigger Coolify webhook
 ```
 
 GitHub `production` environment 需要設定下列 secrets：
 
 ```text
-PRODUCTION_SSH_HOST
-PRODUCTION_SSH_PORT
-PRODUCTION_SSH_USER
-PRODUCTION_SSH_KEY
-PRODUCTION_SSH_KNOWN_HOSTS
-PRODUCTION_APP_DIR
+COOLIFY_TOKEN
+COOLIFY_API_BASE_URL
+COOLIFY_APPLICATION_UUID
+COOLIFY_WEBHOOK
 ```
 
-`PRODUCTION_APP_DIR` 通常是：
+Coolify application 使用：
 
 ```text
-/opt/kaiyn-trading-bot
+compose.coolify.yml
 ```
 
-VPS 必須已完成首次部署、`.env` 建立、Docker Compose 安裝與 SSH deploy key 設定。CD 會檢查 production worktree 是否乾淨；若有未提交變更，部署會停止。
+Coolify 需設定 pre-deployment command：
 
-CD 使用 GHCR image digest 部署：
+```bash
+alembic upgrade head
+```
+
+pre-deployment command container 指定 `bot`。完整 Coolify 設定見 [coolify_runbook.md](coolify_runbook.md)。
+
+SSH + image-based manual deployment 保留為 fallback：
 
 ```bash
 BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest> make deploy-image
 ```
 
-手動驗證 image-based deployment：
-
-```bash
-BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot:main docker compose -f compose.yml -f compose.prod.yml config
-```
-
-`compose.prod.yml` 使用 Docker Compose `!reset` 移除 build 設定，VPS Docker Compose plugin 需支援 Compose `2.24.4+`。
+`compose.prod.yml` 使用 Docker Compose `!reset` 移除 build 設定，fallback VPS Docker Compose plugin 需支援 Compose `2.24.4+`。
 
 ## 12. Rollback
 

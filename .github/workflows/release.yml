@@ -42,6 +42,7 @@ jobs:
       image-digest: ${{ steps.build.outputs.digest }}
       deployed-sha: ${{ steps.meta.outputs.sha }}
       image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+      image-tag: ${{ env.IMAGE_NAME }}:sha-${{ steps.meta.outputs.sha }}
 
     steps:
       - name: Resolve source commit
@@ -84,7 +85,7 @@ jobs:
             org.opencontainers.image.title=Kaiyn Trading Bot
 
   deploy-production:
-    name: Deploy production VPS
+    name: Deploy production via Coolify
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs:
@@ -92,52 +93,56 @@ jobs:
     environment: production
 
     steps:
-      - name: Prepare SSH credentials
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/production_key
-          chmod 600 ~/.ssh/production_key
-          printf '%s\n' "${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-
-      - name: Deploy image over SSH
+      - name: Update Coolify image variable
         env:
-          DEPLOY_IMAGE: ${{ needs.build-image.outputs.image-ref }}
+          DEPLOY_IMAGE: ${{ needs.build-image.outputs.image-tag }}
           DEPLOY_SHA: ${{ needs.build-image.outputs.deployed-sha }}
-          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
-          SSH_PORT: ${{ secrets.PRODUCTION_SSH_PORT }}
-          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
-          APP_DIR: ${{ secrets.PRODUCTION_APP_DIR }}
+          COOLIFY_API_BASE_URL: ${{ secrets.COOLIFY_API_BASE_URL }}
+          COOLIFY_APPLICATION_UUID: ${{ secrets.COOLIFY_APPLICATION_UUID }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
-          : "${SSH_HOST:?Missing PRODUCTION_SSH_HOST}"
-          : "${SSH_USER:?Missing PRODUCTION_SSH_USER}"
-          : "${APP_DIR:?Missing PRODUCTION_APP_DIR}"
-          SSH_PORT="${SSH_PORT:-22}"
-          ssh -i ~/.ssh/production_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "APP_DIR='$APP_DIR' DEPLOY_IMAGE='$DEPLOY_IMAGE' DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
+          : "${COOLIFY_API_BASE_URL:?Missing COOLIFY_API_BASE_URL}"
+          : "${COOLIFY_APPLICATION_UUID:?Missing COOLIFY_APPLICATION_UUID}"
+          : "${COOLIFY_TOKEN:?Missing COOLIFY_TOKEN}"
+          : "${DEPLOY_IMAGE:?Missing DEPLOY_IMAGE}"
 
-          cd "$APP_DIR"
+          API_BASE="${COOLIFY_API_BASE_URL%/}"
+          python - <<'PY' > /tmp/coolify-bot-image.json
+          import json
+          import os
 
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "Production worktree has uncommitted changes; aborting deploy."
-            git status --short
-            exit 1
-          fi
+          print(json.dumps({
+              "key": "BOT_IMAGE",
+              "value": os.environ["DEPLOY_IMAGE"],
+              "is_preview": False,
+              "is_literal": True,
+              "is_multiline": False,
+              "is_shown_once": False,
+          }))
+          PY
 
-          git fetch origin main
-          git checkout main
-          git merge --ff-only "$DEPLOY_SHA"
+          echo "Updating Coolify BOT_IMAGE for commit ${DEPLOY_SHA}"
+          curl --fail-with-body --silent --show-error \
+            --request PATCH \
+            --url "${API_BASE}/api/v1/applications/${COOLIFY_APPLICATION_UUID}/envs" \
+            --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data @/tmp/coolify-bot-image.json \
+            --output /tmp/coolify-update-response.json
 
-          if [ "$(git rev-parse HEAD)" != "$DEPLOY_SHA" ]; then
-            echo "Production worktree did not resolve to expected commit $DEPLOY_SHA; aborting deploy."
-            git rev-parse HEAD
-            exit 1
-          fi
+      - name: Trigger Coolify deploy webhook
+        env:
+          COOLIFY_WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${COOLIFY_WEBHOOK:?Missing COOLIFY_WEBHOOK}"
+          : "${COOLIFY_TOKEN:?Missing COOLIFY_TOKEN}"
 
-          docker compose version
-          BOT_IMAGE="$DEPLOY_IMAGE" make deploy-image
-          docker compose ps
-          docker compose logs --tail 80 bot
-          REMOTE
+          echo "Triggering Coolify deployment"
+          curl --fail-with-body --silent --show-error \
+            --request GET \
+            --url "${COOLIFY_WEBHOOK}" \
+            --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
+            --output /tmp/coolify-deploy-response.json

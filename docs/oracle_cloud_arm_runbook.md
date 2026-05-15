@@ -286,40 +286,40 @@ make deploy
 
 最後在 Telegram 執行 `/admin_health` 與基本 smoke test。
 
-## 10. GitHub Actions CD
+## 10. Coolify CD
 
-Oracle Cloud ARM 可以使用同一套 GHCR image pipeline。Release workflow 會建立 `linux/amd64` 與 `linux/arm64` multi-arch image；ARM host 會自動拉取 `linux/arm64` image。
+Oracle Cloud ARM 可以使用同一套 GHCR image pipeline 與 Coolify webhook deployment。Release workflow 會建立 `linux/amd64` 與 `linux/arm64` multi-arch image；ARM host 會自動拉取 `linux/arm64` image。
 
 GitHub `production` environment 需要設定：
 
 ```text
-PRODUCTION_SSH_HOST
-PRODUCTION_SSH_PORT
-PRODUCTION_SSH_USER
-PRODUCTION_SSH_KEY
-PRODUCTION_SSH_KNOWN_HOSTS
-PRODUCTION_APP_DIR
+COOLIFY_TOKEN
+COOLIFY_API_BASE_URL
+COOLIFY_APPLICATION_UUID
+COOLIFY_WEBHOOK
 ```
 
-`PRODUCTION_APP_DIR` 通常是：
+Coolify application 使用：
 
 ```text
-/opt/kaiyn-trading-bot
+compose.coolify.yml
 ```
 
-CD 遠端執行：
+Coolify pre-deployment command：
+
+```bash
+alembic upgrade head
+```
+
+pre-deployment command container 指定 `bot`。完整 Coolify 設定見 [coolify_runbook.md](coolify_runbook.md)。
+
+SSH + image-based manual deployment 保留為 fallback：
 
 ```bash
 BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest> make deploy-image
 ```
 
-手動驗證 production override：
-
-```bash
-BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot:main docker compose -f compose.yml -f compose.prod.yml config
-```
-
-`compose.prod.yml` 使用 Docker Compose `!reset` 移除 build 設定，VM Docker Compose plugin 需支援 Compose `2.24.4+`。
+`compose.prod.yml` 使用 Docker Compose `!reset` 移除 build 設定，fallback VM Docker Compose plugin 需支援 Compose `2.24.4+`。
 
 ## 11. 備份與還原
 
