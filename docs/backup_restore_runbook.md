@@ -2,7 +2,7 @@
 
 本文件用於驗證 `db-backup` 服務產生的 PostgreSQL gzip SQL 備份可以實際還原。還原驗證一律使用獨立臨時 PostgreSQL container，不連到正式 `postgres_data`，避免影響正式資料。
 
-建議頻率：
+驗證頻率：
 
 - 正式部署前至少驗證一次。
 - 之後每月驗證一次，或在重大改版後驗證一次。
@@ -21,7 +21,7 @@ cat backups/backup_status.json
 ls -lh backups/kaiyn_trading_bot_*.sql.gz
 ```
 
-選擇最新備份檔，例如：
+設定要驗證的備份檔路徑：
 
 ```bash
 BACKUP_FILE=backups/kaiyn_trading_bot_YYYYMMDD_HHMMSS.sql.gz
@@ -29,7 +29,7 @@ BACKUP_FILE=backups/kaiyn_trading_bot_YYYYMMDD_HHMMSS.sql.gz
 
 ## 2. 啟動臨時 PostgreSQL
 
-如果先前測試留下同名 container，先清除：
+清除既有同名 container：
 
 ```bash
 docker rm -f kaiyn_restore_test
@@ -51,9 +51,9 @@ docker run -d --name kaiyn_restore_test \
 docker exec kaiyn_restore_test pg_isready -U restore -d restore_test
 ```
 
-若尚未 ready，等幾秒後再重試。
+若 PostgreSQL 尚未 ready，等待數秒後重試。
 
-備份檔會包含原始資料庫 owner，例如本專案預設為 `kaiyn`。還原前先在臨時 DB 建立同名 role，避免 `OWNER TO kaiyn` 造成還原錯誤：
+備份檔包含原始資料庫 owner。本專案預設 owner 為 `kaiyn`。還原前在臨時 DB 建立同名 role，避免 `OWNER TO kaiyn` 造成還原錯誤：
 
 ```bash
 docker exec kaiyn_restore_test psql -U restore -d restore_test \
@@ -68,7 +68,7 @@ docker exec kaiyn_restore_test psql -U restore -d restore_test \
 gunzip -c "$BACKUP_FILE" | docker exec -i kaiyn_restore_test psql -v ON_ERROR_STOP=1 -U restore -d restore_test
 ```
 
-還原過程不應出現 `ERROR`。若出現錯誤，先確認備份檔是否完整、container 是否 ready，以及備份是否來自相同 PostgreSQL major version。
+還原過程不應出現 `ERROR`。出現錯誤時，檢查備份檔完整性、container ready 狀態，以及備份來源是否使用相同 PostgreSQL major version。
 
 ## 4. 驗證 schema 版本
 
@@ -79,7 +79,7 @@ docker exec kaiyn_restore_test psql -U restore -d restore_test \
   -c "select version_num from alembic_version;"
 ```
 
-目前預期版本：
+預期 Alembic 版本：
 
 ```text
 20260512_0004
@@ -129,9 +129,9 @@ docker rm -f kaiyn_restore_test
 
 此命令只會移除臨時還原測試 container，不會影響 Docker Compose 的正式 `postgres` service 或 `postgres_data` volume。
 
-## 7. 驗證紀錄建議
+## 7. 驗證紀錄
 
-每次正式驗證後，建議記錄：
+每次正式驗證後記錄：
 
 - 驗證日期。
 - 使用的備份檔名。

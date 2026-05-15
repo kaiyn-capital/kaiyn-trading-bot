@@ -1,8 +1,19 @@
 # Kaiyn Trading Bot
 
+[![CI](https://github.com/kylekkkk61/kaiyn-trading-bot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kylekkkk61/kaiyn-trading-bot/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](./pyproject.toml)
+[![Docker Compose](https://img.shields.io/badge/Docker%20Compose-runtime-2496ED?logo=docker&logoColor=white)](./compose.yml)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](./compose.yml)
+[![python-telegram-bot](https://img.shields.io/badge/python--telegram--bot-22.7-26A5E4?logo=telegram&logoColor=white)](https://python-telegram-bot.org/)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0.49-D71F00)](https://www.sqlalchemy.org/)
+[![Alembic](https://img.shields.io/badge/Alembic-1.18.4-6BA81E)](https://alembic.sqlalchemy.org/)
+[![Ruff](https://img.shields.io/badge/code%20style-ruff-261230?logo=ruff&logoColor=white)](https://docs.astral.sh/ruff/)
+[![pytest](https://img.shields.io/badge/tests-pytest%209.0.3-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
+[![Dependabot](https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot&logoColor=white)](./.github/dependabot.yml)
+
 Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人。使用者可透過 Telegram 設定 Bitget API 憑證、查詢狀態與餘額，並在管理員或發單員發布交易信號後，用按鈕進入定 R 風險下單流程。
 
-> 風險提醒：本專案會連接真實交易所 API 並送出合約訂單。Bitget API 建議只授予交易權限，不要授予提幣權限。
+> 風險提醒：本專案會連接真實交易所 API 並送出合約訂單。Bitget API 應只授予交易權限，不授予提幣權限。
 
 ## 功能概覽
 
@@ -24,18 +35,22 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 - 管理員告警、`/admin_health` 健康檢查、每日清理與備份
 - 備份還原 runbook 與本地還原驗證流程
 
-## 技術棧
+## Tech Stack
 
-- Python 3.11
-- python-telegram-bot 22.7
-- SQLAlchemy asyncio
-- PostgreSQL
-- Alembic
-- asyncpg
-- httpx
-- cryptography Fernet
-- Docker Compose
-- pytest（dev optional dependency，僅測試 image 安裝）
+| Area                  | Choice                                                                 |
+| --------------------- | ---------------------------------------------------------------------- |
+| Runtime               | Python 3.11                                                            |
+| Bot framework         | `python-telegram-bot` 22.7                                             |
+| Exchange integration  | Bitget USDT-FUTURES REST API via `httpx` 0.28.1                        |
+| Database              | PostgreSQL 16 + SQLAlchemy asyncio 2.0.49 + `asyncpg` 0.29.0           |
+| Schema migration      | Alembic 1.18.4                                                         |
+| Credential security   | `cryptography` Fernet 48.0.0                                           |
+| Deployment            | Docker Compose services: `postgres`, `bot`, `maintenance`, `db-backup` |
+| Long-term operations  | Docker log rotation, file log rotation, DB retention, daily SQL backup |
+| Testing               | pytest 9.0.3 + opt-in PostgreSQL integration tests                     |
+| Lint / format         | Ruff 0.15.12                                                           |
+| CI                    | GitHub Actions with Docker Compose-first checks                        |
+| Dependency automation | Dependabot weekly updates for Python packages and GitHub Actions       |
 
 ## 專案結構
 
@@ -43,39 +58,39 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget U 本位合約交易的機器人
 .
 ├── alembic/
 │   ├── env.py
-│   └── versions/            # Alembic migration scripts
+│   └── versions/                   # Alembic migration scripts
 ├── app/
 │   ├── __init__.py
-│   ├── main.py              # CLI 入口、啟動流程、初始化工具
-│   ├── bot.py               # Telegram Bot handler 註冊與 lifecycle
-│   ├── bot_account_handlers.py # /start、/status、/balance、/setapi、/settings
-│   ├── bot_admin_handlers.py # 管理員 handler mixin 聚合入口
-│   ├── bot_admin_core.py  # /admin、/admin_users、/add_trader
-│   ├── bot_admin_channels.py # 頻道、群組、topic 管理
-│   ├── bot_admin_messaging.py # 管理員廣播與指定頻道發送
-│   ├── bot_admin_monitoring.py # /admin_health、/admin_audit
-│   ├── bot_order_handlers.py # /send_signal、pending order、下單確認流程
-│   ├── bot_keyboards.py     # Telegram inline keyboard builders
-│   ├── bot_messages.py      # Bot 訊息文字與格式化
-│   ├── bot_states.py        # API 設定 conversation state 常數
-│   ├── order_flow.py        # 交易信號解析、下單預覽與執行流程
-│   ├── bitget_api.py        # Bitget API client 與交易管理器
-│   ├── bitget_errors.py     # Bitget/API 錯誤分類與使用者訊息 mapping
-│   ├── admin_alerts.py      # 管理員告警、cooldown、Bitget 連續錯誤門檻
-│   ├── health.py            # /admin_health 與備份/維護狀態整理
-│   ├── config.py            # 環境變數設定與驗證
-│   ├── database.py          # PostgreSQL async manager 與 repo getter façade
-│   ├── encryption.py        # API 憑證加解密
-│   ├── models.py            # SQLAlchemy models
-│   └── repositories/        # User/Trade/PendingOrder/Channel/SystemLog repositories
-├── tests/                   # pytest 純邏輯、handler 與 DB integration 測試
-├── backups/                 # 本機/部署備份輸出目錄，git ignored
+│   ├── main.py                     # CLI 入口、啟動流程、初始化工具
+│   ├── bot.py                      # Telegram Bot handler 註冊與 lifecycle
+│   ├── bot_account_handlers.py     # /start、/status、/balance、/setapi、/settings
+│   ├── bot_admin_handlers.py       # 管理員 handler mixin 聚合入口
+│   ├── bot_admin_core.py           # /admin、/admin_users、/add_trader
+│   ├── bot_admin_channels.py       # 頻道、群組、topic 管理
+│   ├── bot_admin_messaging.py      # 管理員廣播與指定頻道發送
+│   ├── bot_admin_monitoring.py     # /admin_health、/admin_audit
+│   ├── bot_order_handlers.py       # /send_signal、pending order、下單確認流程
+│   ├── bot_keyboards.py            # Telegram inline keyboard builders
+│   ├── bot_messages.py             # Bot 訊息文字與格式化
+│   ├── bot_states.py               # API 設定 conversation state 常數
+│   ├── order_flow.py               # 交易信號解析、下單預覽與執行流程
+│   ├── bitget_api.py               # Bitget API client 與交易管理器
+│   ├── bitget_errors.py            # Bitget/API 錯誤分類與使用者訊息 mapping
+│   ├── admin_alerts.py             # 管理員告警、cooldown、Bitget 連續錯誤門檻
+│   ├── health.py                   # /admin_health 與備份/維護狀態整理
+│   ├── config.py                   # 環境變數設定與驗證
+│   ├── database.py                 # PostgreSQL async manager 與 repo getter façade
+│   ├── encryption.py               # API 憑證加解密
+│   ├── models.py                   # SQLAlchemy models
+│   └── repositories/               # User/Trade/PendingOrder/Channel/SystemLog repositories
+├── tests/                          # pytest 純邏輯、handler 與 DB integration 測試
+├── backups/                        # 本機/部署備份輸出目錄，git ignored
 ├── docs/
 │   ├── backup_restore_runbook.md
 │   ├── deployment_engineering.md
 │   ├── deployment_runbook.md
 │   └── production_readiness.md
-├── logs/                    # Bot log 與 alert state，git ignored
+├── logs/                           # Bot log 與 alert state，git ignored
 ├── alembic.ini
 ├── compose.yml
 ├── Dockerfile
@@ -133,7 +148,7 @@ MAINTENANCE_STALE_HOURS=36
 
 ## 本地開發與測試
 
-Python 套件只維護 `pyproject.toml`，沒有 `requirements.txt`。Runtime 依賴與 Docker 安裝流程也都以 `pyproject.toml` 為準。
+Python 套件由 `pyproject.toml` 管理。Runtime 依賴與 Docker 安裝流程皆以 `pyproject.toml` 為準。
 
 建置測試 image：
 
@@ -178,7 +193,7 @@ docker compose run --rm test python -m pytest --run-db
 
 DB integration 測試會在 PostgreSQL 裡建立獨立測試 schema，測完自動刪除，不會清空 `public` schema。
 本機 `python3 -m pytest` 可作為開發 shortcut，但主要驗證流程以 Docker Compose 為準。
-若要使用本機 shortcut，可先執行 `pip install -e ".[dev]"`。
+本機 shortcut 需先執行 `pip install -e ".[dev]"`。
 
 ## GitHub Actions CI
 
@@ -213,9 +228,9 @@ Dependabot 每週一台北時間 09:00 檢查：
 - Python 套件：`pyproject.toml`
 - GitHub Actions：`.github/workflows/*.yml`
 
-Dependabot 只會開 PR，不會自動合併。每個 Dependabot PR 都應通過 GitHub Actions CI，並由管理者手動確認後再合併。交易 bot 的 major dependency update 建議先查看 changelog，再決定是否合併。
+Dependabot 只會開 PR，不會自動合併。每個 Dependabot PR 都必須通過 GitHub Actions CI，並由管理者手動確認後再合併。交易 bot 的 major dependency update 需先查看 changelog，再決定是否合併。
 
-目前測試覆蓋重點：
+測試覆蓋重點：
 
 - `/send_signal` 解析、TP 與備註。
 - 市價/掛單預覽、立即成交切市價、1R 倉位計算。
@@ -286,7 +301,7 @@ docker compose restart bot
 
 ## 長期維護
 
-部署後建議同時啟動 `maintenance` 與 `db-backup` 服務，避免舊資料、檔案 log、Docker log 或備份檔長期撐滿磁碟。
+部署後必須同時啟動 `maintenance` 與 `db-backup` 服務，避免舊資料、檔案 log、Docker log 或備份檔長期撐滿磁碟。
 
 保留策略：
 
@@ -366,11 +381,11 @@ cat docs/backup_restore_runbook.md
 
 ## Telegram Topic 轉發
 
-若管理群組是 Telegram forum supergroup，可讓交易信號轉發到指定話題。
+管理群組為 Telegram forum supergroup 時，交易信號可轉發到指定話題。
 
 流程：
 
-1. 先用 `/add_channel` 加入群組。
+1. 用 `/add_channel` 加入群組。
 2. 用 `/admin_channels` 查看頻道編號。
 3. 管理員自行取得 Telegram `message_thread_id`。
 4. 設定指定 topic：
@@ -387,9 +402,9 @@ cat docs/backup_restore_runbook.md
 /clear_channel_topic 1
 ```
 
-`[話題名稱]` 是管理員自訂備註名稱，只用於 `/admin_channels` 顯示，不需要與 Telegram 話題實際名稱完全一致。
+`[話題名稱]` 是管理員自訂備註名稱，只用於 `/admin_channels` 顯示，不要求與 Telegram 話題實際名稱一致。
 
-目前指定 topic 只套用於 `/send_signal` 交易信號自動轉發；`/admin_broadcast` 與 `/send_to_channel` 維持發到群組本身。
+指定 topic 僅套用於 `/send_signal` 交易信號自動轉發；`/admin_broadcast` 與 `/send_to_channel` 維持發到群組本身。
 
 ## 交易信號格式
 
@@ -411,7 +426,7 @@ cat docs/backup_restore_runbook.md
 - 備註會顯示在信號的 `SL` 下方。
 - 信號底部時間戳使用 UTC+8。
 
-信號按鈕與 Bot 介面文字目前使用簡體中文，例如「市价下单」、「挂单」、「确认下单」。
+信號按鈕與 Bot 介面文字使用簡體中文，例如「市价下单」、「挂单」、「确认下单」。
 
 ## 下單流程
 
@@ -422,14 +437,14 @@ cat docs/backup_restore_runbook.md
 5. Bot 檢查交易對狀態、最小下單量、最小名義價值、數量/價格精度、單筆上限與止損方向。
 6. 驗證通過後，Bot 將待確認訂單寫入 `pending_orders`，並發送確認/取消按鈕。
 7. 使用者確認後，Bot 使用 row lock 將 pending order 標為 `processing`，避免重複下單。
-8. 送單前 Bot 會重新取得市價與合約規則再驗證一次；若規則已不符合，會標記為 `failed` 並提示重新點擊信號下單。
+8. 送單前 Bot 會重新取得市價與合約規則再驗證一次；規則不符合時標記為 `failed` 並提示重新點擊信號下單。
 9. Bitget 下單完成後，Bot 更新 `trades` 與 `pending_orders` 狀態。
 
 下單方式：
 
-- 市價下單：使用目前市價計算 1R，送出 market order，成功後 `trades.status` 記為 `filled`。
+- 市價下單：使用當前市價計算 1R，送出 market order，成功後 `trades.status` 記為 `filled`。
 - 掛單：Long 使用 entry 區間較高點，Short 使用 entry 區間較低點，送出 GTC limit order 並同時帶止損，成功後 `trades.status` 記為 `pending`。
-- 若掛單價格已可能立即成交，Bot 會切換到市價下單確認流程並提示原因。
+- 掛單價格已可能立即成交時，Bot 會切換到市價下單確認流程並提示原因。
 
 倉位計算概念：
 
@@ -439,7 +454,7 @@ cat docs/backup_restore_runbook.md
 交易數量 = 倉位名義價值 / 計算價格
 ```
 
-市價下單的計算價格為目前市價；掛單的計算價格為掛單價。
+市價下單的計算價格為當前市價；掛單的計算價格為掛單價。
 
 交易安全防呆：
 
@@ -448,7 +463,7 @@ cat docs/backup_restore_runbook.md
 - 掛單價格需符合 `pricePlace` 與 `priceEndStep`。
 - 下單名義價值需符合 `minTradeUSDT`。
 - Long 止損必須低於計算價格；Short 止損必須高於計算價格。
-- 本專案目前不額外設定 1R 全域上限，也不額外設定止損距離百分比上下限。
+- 本專案不額外設定 1R 全域上限，也不額外設定止損距離百分比上下限。
 
 錯誤處理：
 
@@ -461,7 +476,7 @@ cat docs/backup_restore_runbook.md
 
 ## Database
 
-Schema 由 Alembic 管理，不使用 `create_all()` 建表。
+Schema 由 Alembic migration 管理。
 
 主要資料表：
 
@@ -494,7 +509,7 @@ Pending order 狀態：
 
 ## 驗證
 
-本專案目前不做壓測或大量模擬測試。基本驗證流程：
+驗證範圍不包含壓測或大量模擬測試。基本驗證流程：
 
 ```bash
 docker compose build test
@@ -527,5 +542,5 @@ docker compose logs --tail 40 bot
 - 確認信號上出現「市价下单」與「挂单」
 - 點擊兩種下單方式，確認 `pending_orders.order_mode` 與 `limit_price` 正確寫入
 - 重啟 Bot 後確認尚未過期的 pending order 仍可被確認
-- 若使用 forum supergroup，設定 `/set_channel_topic` 後確認信號出現在指定 topic
+- 使用 forum supergroup 時，設定 `/set_channel_topic` 後確認信號出現在指定 topic
 - 依照 [backup_restore_runbook.md](docs/backup_restore_runbook.md) 驗證最新備份可還原

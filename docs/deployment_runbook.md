@@ -1,8 +1,8 @@
 # DigitalOcean VPS Deployment Runbook
 
-本文件是 Kaiyn Trading Bot 的正式部署操作手冊。第一版部署主線固定為 DigitalOcean Droplet + Ubuntu 24.04 LTS + Docker Compose，同一台 VPS 內執行 `postgres`、`bot`、`maintenance`、`db-backup`。
+本文件是 Kaiyn Trading Bot 的正式部署操作手冊。部署主線固定為 DigitalOcean Droplet + Ubuntu 24.04 LTS + Docker Compose，同一台 VPS 內執行 `postgres`、`bot`、`maintenance`、`db-backup`。
 
-本專案目前不做自動 CD。正式更新一律 SSH 到 VPS 後手動執行，避免交易 bot 因錯誤分支、錯誤環境變數或未確認的 migration 直接影響真實交易環境。
+本專案不使用自動 CD。正式更新一律 SSH 到 VPS 後手動執行，避免交易 bot 因錯誤分支、錯誤環境變數或未確認的 migration 直接影響真實交易環境。
 
 參考官方文件：
 
@@ -12,7 +12,7 @@
 
 ## 1. 部署目標
 
-建議第一版正式部署規格：
+正式部署規格：
 
 - Provider：DigitalOcean Droplet
 - Region：Singapore
@@ -22,7 +22,7 @@
 - Database：同機 PostgreSQL container
 - Long-running services：`postgres`、`bot`、`maintenance`、`db-backup`
 - Test service：`test` 僅部署前檢查使用，不長駐
-- Domain / TLS / reverse proxy：不需要
+- Domain / TLS / reverse proxy：不使用
 - Public inbound port：只允許 SSH 22
 
 安全決策：
@@ -40,11 +40,11 @@
 2. 選擇 Singapore region。
 3. 選擇 Basic Premium AMD 1 vCPU / 2GB RAM / 50GB SSD。
 4. 使用 SSH key 登入，不使用 password login。
-5. 建議開啟 DigitalOcean Monitoring。
-6. 建議開啟 Droplet backups，作為 VPS 層級災難恢復；它不能取代本專案的 PostgreSQL SQL 備份。
-7. 建議建立 tag，例如 `kaiyn-trading-bot-prod`，後續 Cloud Firewall 可套用到同 tag Droplet。
+5. 開啟 DigitalOcean Monitoring。
+6. 開啟 Droplet backups，作為 VPS 層級災難恢復；它不能取代本專案的 PostgreSQL SQL 備份。
+7. 建立 tag，格式範例為 `kaiyn-trading-bot-prod`，後續 Cloud Firewall 可套用到同 tag Droplet。
 
-若使用 DigitalOcean user data 建立 sudo user，可依官方 recommended setup 建立非 root 使用者。若先用 root 登入，也應在首次登入後建立部署使用者。
+使用 DigitalOcean user data 建立 sudo user 時，依官方 recommended setup 建立非 root 使用者。先用 root 登入時，首次登入後建立部署使用者。
 
 ## 3. SSH 與 Firewall
 
@@ -82,7 +82,7 @@ sudo sshd -t
 sudo systemctl reload ssh
 ```
 
-DigitalOcean Cloud Firewall 建議：
+DigitalOcean Cloud Firewall 規則：
 
 - Inbound：只允許 TCP 22。
 - Outbound：保留預設允許 outbound。
@@ -100,7 +100,7 @@ sudo ufw enable
 sudo ufw status verbose
 ```
 
-注意：Docker 會管理 iptables，UFW 不應作為唯一防線。正式環境主要依賴 DigitalOcean Cloud Firewall 阻擋外部連線，同時 production `.env` 建議把 PostgreSQL host port 綁在 `127.0.0.1`。
+注意：Docker 會管理 iptables，UFW 不作為唯一防線。正式環境主要依賴 DigitalOcean Cloud Firewall 阻擋外部連線，同時 production `.env` 將 PostgreSQL host port 綁定在 `127.0.0.1`。
 
 ## 4. 安裝 Docker Engine
 
@@ -160,7 +160,7 @@ git clone <your-repo-url> /opt/kaiyn-trading-bot
 cd /opt/kaiyn-trading-bot
 ```
 
-若 repo 已存在，更新時使用：
+repo 已存在時，更新使用：
 
 ```bash
 git pull --ff-only
@@ -296,7 +296,7 @@ git diff --check
 - 確認信號已轉發到指定群組或 topic。
 - 點「市价下单」與「挂单」，至少確認可進入 pending order 確認畫面。
 
-若要用真 API 測試送單，建議先使用小額 1R，並確認 Bitget API 沒有提現權限。
+使用真 API 測試送單時，使用低風險 1R，並確認 Bitget API 沒有提現權限。
 
 ## 10. 日常更新部署
 
@@ -306,7 +306,7 @@ git diff --check
 cd /opt/kaiyn-trading-bot
 ```
 
-查看目前狀態：
+查看服務與工作樹狀態：
 
 ```bash
 git status --short
@@ -360,13 +360,13 @@ docker compose logs --tail 80 bot
 
 ## 11. Rollback
 
-先確認目前 commit：
+確認當前 commit：
 
 ```bash
 git log --oneline -n 10
 ```
 
-若只是程式版本需要回退，可切到上一個已知可用 commit 或 tag：
+程式版本回退時，切到上一個已知可用 commit 或 tag：
 
 ```bash
 git switch --detach <known-good-commit-or-tag>
@@ -378,8 +378,8 @@ docker compose logs --tail 80 bot
 注意：
 
 - Alembic migration 已套用後，不在 production 自動 downgrade。
-- 若新 migration 導致資料庫不可用，先停止 bot，再依照 [backup_restore_runbook.md](backup_restore_runbook.md) 選擇備份還原。
-- 建議正式部署前使用 git tag 標記可回退版本，例如 `prod-2026-05-14`。
+- 新 migration 導致資料庫不可用時，先停止 bot，再依照 [backup_restore_runbook.md](backup_restore_runbook.md) 選擇備份還原。
+- 正式部署前使用 git tag 標記可回退版本，格式範例為 `prod-2026-05-14`。
 
 ## 12. 備份與還原
 
@@ -487,7 +487,7 @@ docker compose run --rm bot alembic heads
 docker compose run --rm bot alembic upgrade head
 ```
 
-若 migration 已部分套用且無法修復，不要手動改正式 DB。先備份現況，再依照 [backup_restore_runbook.md](backup_restore_runbook.md) 評估是否還原到上一份備份。
+migration 已部分套用且無法修復時，不要手動改正式 DB。先備份現況，再依照 [backup_restore_runbook.md](backup_restore_runbook.md) 評估是否還原到上一份備份。
 
 ### 備份沒有更新
 
@@ -511,7 +511,7 @@ du -sh logs backups
 docker system df
 ```
 
-本專案已設定 Docker log rotation、Bot log rotation、DB retention 與 backup retention。若仍然不足，先確認是否有舊 image 或未使用 container：
+本專案已設定 Docker log rotation、Bot log rotation、DB retention 與 backup retention。磁碟仍不足時，確認是否存在舊 image 或未使用 container：
 
 ```bash
 docker image prune

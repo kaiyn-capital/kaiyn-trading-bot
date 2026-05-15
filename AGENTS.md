@@ -14,7 +14,6 @@ Kaiyn Trading Bot is a Telegram bot for Bitget USDT-FUTURES signal execution. It
 - SQLAlchemy is used with async engine/session.
 - Alembic owns schema creation and migrations.
 - `pyproject.toml` is the only Python dependency source.
-- SQLite, `requirements.txt`, and `create_all()` table creation are not part of the current workflow.
 
 ## Development Commands
 

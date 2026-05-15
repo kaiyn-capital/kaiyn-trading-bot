@@ -1,63 +1,60 @@
-# Deployment Engineering Roadmap
+# Deployment Engineering Record
 
-更新日期：2026-05-14
+更新日期：2026-05-15
 
-本文件記錄 Kaiyn Trading Bot 進入正式部署前，偏工程化與部署流程的補強事項。核心功能、production readiness 基礎項目、CI、依賴更新管理與可重複上線流程已完成基礎版，目前可進入 DigitalOcean VPS 小額正式試運行。
+本文件記錄 Kaiyn Trading Bot 的工程化部署設計。專案採 Docker Compose 優先流程，並以相同容器環境執行開發檢查、CI、資料庫 migration、正式部署與維護任務。
 
-## Current Status
+## Engineering Baseline
 
-目前已具備：
+專案已採用下列工程化基準：
 
-- Docker Compose 本地/部署一致環境。
+- Python 3.11 runtime。
+- Docker Compose 作為本地測試與正式部署入口。
 - PostgreSQL、Alembic migration、async SQLAlchemy。
-- Pending order DB 化與 row lock。
-- 市價/限價下單流程。
-- Bitget 交易所規則防呆。
-- Bitget API 錯誤分類與簡短回報。
-- 管理員告警、`/admin_health`、`/admin_audit`。
-- Docker log rotation、Bot log rotation、DB retention。
-- 每日 PostgreSQL 備份與備份還原 runbook。
-- Docker-first pytest，含 opt-in PostgreSQL integration tests。
-- Ruff lint / format，透過 Docker `test` service 執行。
-- GitHub Actions CI，透過 Docker Compose 執行 Ruff、pytest、DB integration、py_compile 與 whitespace 檢查。
-- Dependabot 每週檢查 Python packages 與 GitHub Actions，開 PR 後交由 CI 驗證。
+- `pyproject.toml` 作為唯一 Python 套件來源。
+- Ruff 作為 Python lint 與 format 工具。
+- pytest 作為測試框架，包含純邏輯、handler 與 PostgreSQL integration tests。
+- GitHub Actions CI，以 Docker Compose 執行 Ruff、pytest、DB integration、py_compile 與 whitespace 檢查。
+- Dependabot 每週檢查 Python packages 與 GitHub Actions，產生 PR 後由 CI 驗證。
 - DigitalOcean VPS deployment runbook，涵蓋首次部署、更新、rollback、備份拉取、還原連結與故障處理。
 
-目前建議狀態：
+## Linter And Formatter
 
-- 可以開始 DigitalOcean VPS 小額真實試運行。
-- 正式長期放著跑前，先照 `deployment_runbook.md` 完成一次從零部署與 smoke test。
+專案使用 `ruff` 作為唯一 Python lint + format 工具。
 
-## Recommended Order
+執行指令：
 
-### 1. Linter / Formatter
+```bash
+docker compose run --rm test ruff check .
+docker compose run --rm test ruff format --check .
+```
 
-優先加入 `ruff`，用單一工具處理 lint 與 format，避免引入過多工具。
+手動修正格式：
 
-狀態：已完成基礎版。
+```bash
+docker compose run --rm test ruff check --fix .
+docker compose run --rm test ruff format .
+```
 
-建議內容：
+設定位置：
 
-- `pyproject.toml` 的 dev optional dependency 已加入 `ruff`。
-- 已新增 ruff 設定。
-- 已執行一次格式化。
-- 後續 CI 中加入：
-  - `ruff check`
-  - `ruff format --check`
+- `pyproject.toml` 的 `[project.optional-dependencies].dev`
+- `pyproject.toml` 的 `[tool.ruff]`
+- `pyproject.toml` 的 `[tool.ruff.lint]`
 
-原因：
+## GitHub Actions CI
 
-- 讓後續 PR/commit 有一致格式。
-- 減少重構後的風格漂移。
-- 比同時導入 black/isort/flake8 更簡單。
+CI 檔案：
 
-### 2. GitHub Actions CI
+- `.github/workflows/ci.yml`
 
-先做基礎 CI，不急著自動部署。
+觸發條件：
 
-狀態：已完成基礎版。
+- push 到 `main`
+- PR 指向 `main`
+- `workflow_dispatch`
 
-CI 檢查：
+CI 執行項目：
 
 ```bash
 docker compose version
@@ -71,100 +68,72 @@ git diff --check
 docker compose down -v --remove-orphans
 ```
 
-DB integration 測試每次 CI 都跑，使用 Docker Compose 內建 `postgres` service，不另外設定 GitHub Actions service container。
+CI 不使用 production secrets，不連線 Telegram，也不呼叫 Bitget 真實 API。
 
-部署策略建議：
+## Dependabot
 
-- CI 自動測試。
-- production deploy 先採手動執行。
-- 暫不做 push 後自動部署，避免交易 bot 因錯誤分支或錯誤設定直接影響真金環境。
+Dependabot 設定檔：
 
-### 3. Dependabot
+- `.github/dependabot.yml`
 
-在 CI 建好後加入 Dependabot。建議順序放在 CI 後面，因為 Dependabot 開 PR 後需要 CI 自動驗證，否則只會增加手動檢查負擔。
+更新範圍：
 
-狀態：已完成基礎版。
+- Python package ecosystem：`pyproject.toml`
+- GitHub Actions ecosystem：`.github/workflows/*.yml`
 
-設定內容：
-- 已新增 `.github/dependabot.yml`。
-- 監控 Python package ecosystem。
-- 監控 GitHub Actions ecosystem。
+PR 規則：
+
 - 每週一台北時間 09:00 檢查。
 - 同時最多 5 個 open PR。
-- 只開 PR，不自動 merge。
-- 每次 Dependabot PR 仍需通過 CI，並由你手動確認後合併。
+- 只建立 PR，不自動 merge。
+- 每個 PR 必須通過 GitHub Actions CI。
+- 依賴升級由維護者人工檢查 changelog 後合併。
 
-注意事項：
-- 交易 bot 不建議自動合併依賴更新。
-- patch/minor update 可較快合併；major update 需額外檢查 changelog。
-- 若未來 CI 加上 DB integration，也應讓 Dependabot PR 跑同一套檢查。
+## Deployment Baseline
 
-### 4. Deployment Runbook
+正式部署規格：
 
-新增正式部署操作文件 `deployment_runbook.md`。
+- Provider：DigitalOcean Droplet
+- Region：Singapore
+- Plan：Basic Premium AMD
+- Size：1 vCPU / 2GB RAM / 50GB SSD
+- OS：Ubuntu 24.04 LTS
+- Runtime：Docker Engine + Docker Compose plugin
+- Services：`postgres`、`bot`、`maintenance`、`db-backup`
+- Test service：`test` 僅用於檢查，不長駐
 
-狀態：已完成基礎版。
-
-已固定第一版部署條件：
-
-- DigitalOcean Droplet。
-- Singapore region。
-- Basic Premium AMD，1 vCPU / 2GB RAM / 50GB SSD。
-- Ubuntu 24.04 LTS。
-- 同機 Docker Compose 執行 `postgres`、`bot`、`maintenance`、`db-backup`。
-- `test` service 僅用於部署前檢查，不長駐。
-
-Runbook 已包含：
-
-- Droplet 建立、SSH key、關閉 password login。
-- DigitalOcean Cloud Firewall / UFW 基本設定。
-- Docker Engine 與 Compose plugin 安裝。
-- production `.env` 建立與 `POSTGRES_PORT=127.0.0.1:5432` 建議。
-- 首次部署、migration、`--check-db`、服務啟動。
-- 日常更新部署。
-- rollback 流程。
-- `/admin_health`、`/admin_audit`、`/send_signal` smoke test checklist。
-- 備份拉取與 `backup_restore_runbook.md` 還原連結。
-- 常見故障處理。
-
-部署策略：
+部署流程：
 
 - 使用 Docker Compose。
-- production VPS 上手動執行 migration。
-- bot、maintenance、db-backup 服務一起啟動。
-- 不在 bot 啟動時自動跑 migration。
-- 不做 GitHub Actions 自動部署。
+- 在 production VPS 手動執行 migration。
+- 同時啟動 `bot`、`maintenance`、`db-backup`。
+- Bot 啟動時不自動套用 migration。
+- GitHub Actions 不執行 production deployment。
 
-## Platform Notes
+部署文件：
 
-最低建議 VPS：
+- [deployment_runbook.md](deployment_runbook.md)
+- [backup_restore_runbook.md](backup_restore_runbook.md)
 
-- DigitalOcean Basic Premium AMD。
-- 1 vCPU / 2GB RAM / 50GB SSD。
-- Ubuntu 24.04 LTS。
-- Docker Engine + Docker Compose plugin。
+## Security Baseline
 
-正式安全建議：
+正式環境安全規範：
 
-- `.env` 不使用預設密碼。
-- `TELEGRAM_ADMIN_IDS` 僅放實際管理員。
-- Bitget API 使用最小必要權限。
+- `.env` 使用正式強密碼，不使用範例值。
+- `TELEGRAM_ADMIN_IDS` 僅填入實際管理員。
+- Bitget API 授予交易所需最小權限。
 - Bitget API 不開提現權限。
-- 目前已決策不綁定 Bitget API IP whitelist。
-- VPS firewall 只開 SSH；此 bot 通常不需要對外開 HTTP port。
-- 備份不要只留在 VPS，至少定期拉到本機或雲端儲存。
+- Bitget API 不綁定 IP whitelist。
+- VPS firewall 只開 SSH。
+- PostgreSQL host port 綁定 `127.0.0.1:5432`。
+- 備份檔定期從 VPS 拉到本機或雲端保存。
 
-## Remaining Production Gap
+## Out Of Scope
 
-工程化基礎項目已完成。專案可視為接近小規模正式長期部署標準，接下來的主要工作是依照 `deployment_runbook.md` 做一次真實 VPS 部署與小額試運行。
+下列項目不屬於本專案工程化範圍：
 
-仍不包含：
-
-- 自動部署到 production。
-- 外部監控平台。
-- Grafana / Prometheus / Sentry。
+- GitHub Actions 自動部署到 production。
+- Grafana / Prometheus / Sentry 等外部監控平台。
 - 大量壓測。
 - 限價單送出後生命週期追蹤。
 - Dependabot PR 自動合併。
-
-上述項目目前不是本專案定義下的 production blocker。
