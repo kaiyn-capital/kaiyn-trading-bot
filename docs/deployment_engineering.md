@@ -94,10 +94,8 @@ PR 規則：
 正式部署規格：
 
 - Provider：DigitalOcean Droplet
-- Region：Singapore
-- Plan：Basic Premium AMD
-- Size：1 vCPU / 2GB RAM / 50GB SSD
 - OS：Ubuntu 24.04 LTS
+- Instance size：依實際使用量選擇；小型 production target 可從 1 vCPU / 2GB RAM 級別開始
 - Runtime：Docker Engine + Docker Compose plugin
 - Services：`postgres`、`bot`、`maintenance`、`db-backup`
 - Test service：`test` 僅用於檢查，不長駐

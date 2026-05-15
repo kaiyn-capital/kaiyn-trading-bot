@@ -1,8 +1,10 @@
 # Kaiyn Trading Bot
 
 [![CI](https://github.com/kylekkkk61/kaiyn-trading-bot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kylekkkk61/kaiyn-trading-bot/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](./pyproject.toml)
 [![Docker Compose](https://img.shields.io/badge/Docker%20Compose-runtime-2496ED?logo=docker&logoColor=white)](./compose.yml)
+
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](./compose.yml)
 [![python-telegram-bot](https://img.shields.io/badge/python--telegram--bot-22.7-26A5E4?logo=telegram&logoColor=white)](https://python-telegram-bot.org/)
 [![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0.49-D71F00)](https://www.sqlalchemy.org/)
@@ -28,6 +30,7 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget USDT-FUTURES 的交易信號執�
 ## Architecture
 
 ```mermaid
+%%{init: {"theme":"base","themeVariables":{"background":"transparent","primaryColor":"#111827","primaryBorderColor":"#38bdf8","primaryTextColor":"#f8fafc","secondaryColor":"#1f2937","secondaryBorderColor":"#64748b","secondaryTextColor":"#f8fafc","tertiaryColor":"#0f172a","tertiaryBorderColor":"#475569","tertiaryTextColor":"#f8fafc","lineColor":"#475569","fontFamily":"Inter, ui-sans-serif, system-ui, sans-serif"}}}%%
 flowchart TD
     users["Telegram users"] --> bot["bot service<br/>python-telegram-bot"]
     admins["Admins / traders"] --> bot
@@ -42,7 +45,51 @@ flowchart TD
 
     ci["GitHub Actions CI"] --> test["test service<br/>Ruff + pytest + DB integration"]
     test --> db
+
+    classDef actor fill:#111827,stroke:#38bdf8,color:#f8fafc;
+    classDef runtime fill:#0f172a,stroke:#60a5fa,color:#f8fafc;
+    classDef storage fill:#111827,stroke:#94a3b8,color:#f8fafc;
+    classDef external fill:#1f2937,stroke:#64748b,color:#f8fafc;
+    classDef ops fill:#172033,stroke:#38bdf8,color:#f8fafc;
+
+    class users,admins actor;
+    class bot,maintenance,backup,test ops;
+    class db,files storage;
+    class bitget,channels,ci external;
 ```
+
+## Demo Flow
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"background":"transparent","primaryColor":"#111827","primaryBorderColor":"#38bdf8","primaryTextColor":"#f8fafc","secondaryColor":"#1f2937","secondaryBorderColor":"#64748b","secondaryTextColor":"#f8fafc","tertiaryColor":"#0f172a","tertiaryBorderColor":"#475569","tertiaryTextColor":"#f8fafc","lineColor":"#475569","fontFamily":"Inter, ui-sans-serif, system-ui, sans-serif","actorBkg":"#111827","actorBorder":"#38bdf8","actorTextColor":"#f8fafc","actorLineColor":"#475569","signalColor":"#64748b","signalTextColor":"#111827","labelBoxBkgColor":"#111827","labelBoxBorderColor":"#38bdf8","labelTextColor":"#f8fafc","activationBkgColor":"#172033","activationBorderColor":"#60a5fa","noteBkgColor":"#1f2937","noteTextColor":"#f8fafc"}}}%%
+sequenceDiagram
+    actor Trader as Trader / Admin
+    actor User as Telegram User
+    participant Bot as Telegram Bot
+    participant DB as PostgreSQL
+    participant Rules as Bitget Contract Rules
+    participant Bitget as Bitget Order API
+    participant Channel as Channel / Topic
+
+    Trader->>Bot: /send_signal
+    Bot->>Channel: Forward signal with market / limit actions
+    User->>Bot: Select market or GTC limit order
+    Bot->>Rules: Fetch price and contract constraints
+    Rules-->>Bot: Symbol status, precision, min/max rules
+    Bot->>DB: Create pending_order
+    Bot-->>User: Show confirmation preview
+    User->>Bot: Confirm order
+    Bot->>DB: Claim pending_order with row lock
+    Bot->>Rules: Revalidate before execution
+    Bot->>Bitget: Submit market or GTC limit order
+    Bitget-->>Bot: Order result or classified error
+    Bot->>DB: Persist trade result and audit event
+    Bot-->>User: Return execution summary
+```
+
+![Trading signal execution flow](docs/assets/screenshots/trading-flow-showcase.png)
+
+![Operational readiness screenshots](docs/assets/screenshots/operations-showcase.png)
 
 ## Tech Stack
 
@@ -70,6 +117,13 @@ flowchart TD
 - Managed channel/group forwarding with Telegram forum topic support.
 - Admin health checks, alerts, audit events, retention cleanup, and backups.
 - Docker Compose local/deployment parity with CI-backed verification.
+
+## Portfolio Notes
+
+- Trading state is persisted in PostgreSQL, so pending confirmations survive Bot restarts and duplicate clicks are guarded by row locking.
+- Exchange execution is validated against Bitget contract rules before confirmation and again before order submission.
+- Operations are part of the product surface: health checks, audit events, retention cleanup, backups, and restore documentation are included.
+- CI mirrors the Docker Compose runtime path, including PostgreSQL integration tests instead of relying on host-local services.
 
 ## Quick Start
 
@@ -160,7 +214,7 @@ GitHub Actions 以相同 Docker Compose 流程執行 Ruff、pytest、PostgreSQL 
 ├── app/                    # Telegram bot, Bitget client, order flow, repositories
 ├── alembic/                # Alembic migration environment and versions
 ├── tests/                  # pytest unit and PostgreSQL integration tests
-├── docs/                   # command, trading, deployment, backup, readiness docs
+├── docs/                   # command, trading, deployment, backup, readiness docs, screenshots
 ├── compose.yml             # postgres, bot, test, maintenance, db-backup services
 ├── Dockerfile
 ├── pyproject.toml

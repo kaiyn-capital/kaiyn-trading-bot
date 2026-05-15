@@ -15,10 +15,8 @@
 正式部署規格：
 
 - Provider：DigitalOcean Droplet
-- Region：Singapore
-- Plan：Basic Premium AMD
-- Size：1 vCPU / 2GB RAM / 50GB SSD
 - OS：Ubuntu 24.04 LTS
+- Instance size：依實際使用量選擇；小型 production target 可從 1 vCPU / 2GB RAM 級別開始
 - Database：同機 PostgreSQL container
 - Long-running services：`postgres`、`bot`、`maintenance`、`db-backup`
 - Test service：`test` 僅部署前檢查使用，不長駐
@@ -37,8 +35,8 @@
 在 DigitalOcean 建立 Droplet：
 
 1. 選擇 Ubuntu 24.04 LTS。
-2. 選擇 Singapore region。
-3. 選擇 Basic Premium AMD 1 vCPU / 2GB RAM / 50GB SSD。
+2. 選擇靠近 Telegram 使用者與維護者的 region。
+3. 選擇符合使用量的小型 production instance；低流量部署可從 1 vCPU / 2GB RAM 級別開始。
 4. 使用 SSH key 登入，不使用 password login。
 5. 開啟 DigitalOcean Monitoring。
 6. 開啟 Droplet backups，作為 VPS 層級災難恢復；它不能取代本專案的 PostgreSQL SQL 備份。
