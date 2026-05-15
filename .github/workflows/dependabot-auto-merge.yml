@@ -1,0 +1,61 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  github-actions-patch-minor:
+    name: GitHub Actions patch/minor
+    runs-on: ubuntu-24.04
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'kylekkkk61/kaiyn-trading-bot'
+
+    steps:
+      - name: Fetch Dependabot metadata
+        id: dependabot-metadata
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show Dependabot metadata
+        run: |
+          echo "package-ecosystem=${{ steps.dependabot-metadata.outputs.package-ecosystem }}"
+          echo "update-type=${{ steps.dependabot-metadata.outputs.update-type }}"
+          echo "dependency-names=${{ steps.dependabot-metadata.outputs.dependency-names }}"
+
+      - name: Enable auto-merge for GitHub Actions patch/minor updates
+        if: >-
+          ${{
+            steps.dependabot-metadata.outputs.package-ecosystem == 'github-actions' &&
+            (
+              steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch' ||
+              steps.dependabot-metadata.outputs.update-type == 'version-update:semver-minor'
+            )
+          }}
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip non-eligible Dependabot PR
+        if: >-
+          ${{
+            steps.dependabot-metadata.outputs.package-ecosystem != 'github-actions' ||
+            (
+              steps.dependabot-metadata.outputs.update-type != 'version-update:semver-patch' &&
+              steps.dependabot-metadata.outputs.update-type != 'version-update:semver-minor'
+            )
+          }}
+        run: echo "Auto-merge is limited to GitHub Actions semver patch/minor updates."

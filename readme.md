@@ -106,7 +106,7 @@ sequenceDiagram
 | Testing               | pytest 9.0.3 + opt-in PostgreSQL integration tests                     |
 | Lint / format         | Ruff 0.15.12                                                           |
 | CI                    | GitHub Actions with Docker Compose-first checks                        |
-| Dependency automation | Dependabot weekly updates for Python packages and GitHub Actions       |
+| Dependency automation | Dependabot weekly updates; GitHub Actions patch/minor auto-merge       |
 
 ## Core Capabilities
 
@@ -184,7 +184,7 @@ docker compose run --rm test python -m pytest
 docker compose run --rm test python -m pytest --run-db
 ```
 
-GitHub Actions 以相同 Docker Compose 流程執行 Ruff、pytest、PostgreSQL integration tests、`py_compile` 與 whitespace 檢查。Dependabot 每週檢查 Python packages 與 GitHub Actions，開 PR 後由 CI 驗證。
+GitHub Actions 以相同 Docker Compose 流程執行 Ruff、pytest、PostgreSQL integration tests、`py_compile` 與 whitespace 檢查。Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 squash merge，Python dependency PR 維持人工 review。
 
 ## Operations
 

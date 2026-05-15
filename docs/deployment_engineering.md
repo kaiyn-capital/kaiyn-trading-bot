@@ -15,7 +15,7 @@
 - Ruff 作為 Python lint 與 format 工具。
 - pytest 作為測試框架，包含純邏輯、handler 與 PostgreSQL integration tests。
 - GitHub Actions CI，以 Docker Compose 執行 Ruff、pytest、DB integration、py_compile 與 whitespace 檢查。
-- Dependabot 每週檢查 Python packages 與 GitHub Actions，產生 PR 後由 CI 驗證。
+- Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 merge。
 - DigitalOcean VPS deployment runbook，涵蓋首次部署、更新、rollback、備份拉取、還原連結與故障處理。
 
 ## Linter And Formatter
@@ -85,9 +85,24 @@ PR 規則：
 
 - 每週一台北時間 09:00 檢查。
 - 同時最多 5 個 open PR。
-- 只建立 PR，不自動 merge。
+- Python package PR 只建立 PR，不自動 merge。
+- GitHub Actions patch/minor PR 在 CI 與 branch protection 通過後可自動 squash merge。
+- Major updates 一律人工 review。
 - 每個 PR 必須通過 GitHub Actions CI。
-- 依賴升級由維護者人工檢查 changelog 後合併。
+- Python package 與 major update PR 由維護者人工檢查 changelog 後合併。
+
+Auto-merge workflow：
+
+- `.github/workflows/dependabot-auto-merge.yml`
+- 使用 `pull_request_target`，不 checkout 或執行 PR 內容。
+- 只處理 `package-ecosystem == github-actions` 且 `update-type` 為 `version-update:semver-patch` 或 `version-update:semver-minor` 的 Dependabot PR。
+
+GitHub repository settings：
+
+- 啟用 Allow auto-merge。
+- `main` branch 啟用 required status checks。
+- Required check 至少包含 `Docker Compose checks`。
+- 不提供 production secrets 給 auto-merge workflow。
 
 ## Deployment Baseline
 
@@ -134,4 +149,5 @@ PR 規則：
 - Grafana / Prometheus / Sentry 等外部監控平台。
 - 大量壓測。
 - 限價單送出後生命週期追蹤。
-- Dependabot PR 自動合併。
+- Python dependency auto-merge。
+- Dependabot major update auto-merge。
