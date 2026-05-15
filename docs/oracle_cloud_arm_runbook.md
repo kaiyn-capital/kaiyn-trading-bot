@@ -305,13 +305,15 @@ Coolify application 使用：
 compose.coolify.yml
 ```
 
-Coolify pre-deployment command：
+`compose.coolify.yml` 內建 `migrate` 一次性服務，部署順序為：
 
-```bash
-alembic upgrade head
+```text
+postgres healthy
+-> migrate runs alembic upgrade head
+-> bot and maintenance start
 ```
 
-pre-deployment command container 指定 `bot`。完整 Coolify 設定見 [coolify_runbook.md](coolify_runbook.md)。
+Coolify 不需要額外設定 deployment command。完整 Coolify 設定見 [coolify_runbook.md](coolify_runbook.md)。
 
 SSH + image-based manual deployment 保留為 fallback：
 

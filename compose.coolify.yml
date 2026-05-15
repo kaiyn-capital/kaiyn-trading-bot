@@ -21,6 +21,18 @@ services:
       retries: 12
     logging: *default-logging
 
+  migrate:
+    image: ${BOT_IMAGE:?Set BOT_IMAGE in Coolify}
+    restart: "no"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in Coolify}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    logging: *default-logging
+
   bot:
     image: ${BOT_IMAGE:?Set BOT_IMAGE in Coolify}
     restart: unless-stopped
@@ -45,6 +57,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - bot_logs:/app/logs
       - db_backups:/app/backups:ro
@@ -75,6 +89,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - bot_logs:/app/logs
     command:

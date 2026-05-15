@@ -2,7 +2,7 @@
 
 本文件是 Kaiyn Trading Bot 的正式部署操作手冊。部署主線固定為 DigitalOcean Droplet + Ubuntu 24.04 LTS + Docker Compose，同一台 VPS 內執行 `postgres`、`bot`、`maintenance`、`db-backup`。
 
-本專案不使用自動 CD。正式更新一律 SSH 到 VPS 後手動執行，避免交易 bot 因錯誤分支、錯誤環境變數或未確認的 migration 直接影響真實交易環境。
+Production CD 使用 GitHub Actions 發布 GHCR image，並經 `production` environment approval 後觸發 Coolify deployment。SSH + Docker Compose 手動部署保留為 fallback。
 
 參考官方文件：
 
@@ -409,13 +409,15 @@ Coolify application 使用：
 compose.coolify.yml
 ```
 
-Coolify 需設定 pre-deployment command：
+`compose.coolify.yml` 內建 `migrate` 一次性服務，部署順序為：
 
-```bash
-alembic upgrade head
+```text
+postgres healthy
+-> migrate runs alembic upgrade head
+-> bot and maintenance start
 ```
 
-pre-deployment command container 指定 `bot`。完整 Coolify 設定見 [coolify_runbook.md](coolify_runbook.md)。
+Coolify 不需要額外設定 deployment command。完整 Coolify 設定見 [coolify_runbook.md](coolify_runbook.md)。
 
 SSH + image-based manual deployment 保留為 fallback：
 

@@ -55,21 +55,21 @@ MAINTENANCE_STALE_HOURS=36
 
 `BOT_IMAGE` 會由 GitHub Actions release workflow 自動更新為 `ghcr.io/kylekkkk61/kaiyn-trading-bot:sha-<commit>`。
 
-## 3. Migration Command
+## 3. Database Migration
 
-在 Coolify application 設定 pre-deployment command：
-
-```bash
-alembic upgrade head
-```
-
-pre-deployment command container 指定：
+`compose.coolify.yml` 內建 `migrate` 一次性服務：
 
 ```text
-bot
+postgres healthy
+-> migrate runs alembic upgrade head
+-> bot and maintenance start after migrate exits successfully
 ```
 
-這讓每次 Coolify deployment 都在啟動新版 Bot 前套用 Alembic migration。Bot 啟動流程本身仍不自動 migration。
+Coolify 不需要額外設定 pre-deployment command。每次 deployment 由 compose dependency gate 確保新版 Bot 啟動前已套用 Alembic migration。
+
+`migrate` container 成功後會以 exited 狀態保留，這是預期行為。`bot`、`maintenance` 與 `db-backup` 才是長駐服務。
+
+首次部署若看到 `relation "system_logs" does not exist` 或 `relation "pending_orders" does not exist`，代表該 deployment 使用的 compose 尚未執行 migration gate。更新到包含 `migrate` service 的 repo 版本後重新 deploy。
 
 ## 4. GitHub Environment Secrets
 
@@ -131,10 +131,20 @@ Alembic migration 不自動 downgrade。若新 migration 造成資料庫不可�
 
 Coolify deploy 完成後：
 
-- 確認 `bot`、`maintenance`、`db-backup`、`postgres` 都是 running。
+- 確認 `postgres`、`bot`、`maintenance`、`db-backup` 都是 running。
+- 確認 `migrate` 已成功完成，並且 exit code 為 0。
 - 查看 Bot logs 沒有 startup failure。
 - Telegram 執行 `/admin_health`。
 - 確認 `db-backup` volume 內有 `backup_status.json` 與 `.sql.gz` 備份。
+
+在 VPS 上檢查 Docker volume 時使用 Docker 指令：
+
+```bash
+docker volume ls
+docker volume inspect <volume_name>
+```
+
+`postgres_data`、`bot_logs`、`db_backups` 是 compose volume 名稱，不是 shell command。
 
 GitHub Actions release run 應顯示：
 

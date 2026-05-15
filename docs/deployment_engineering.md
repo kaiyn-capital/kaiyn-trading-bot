@@ -198,7 +198,7 @@ GitHub repository settings：
 部署流程：
 
 - 使用 Docker Compose。
-- Coolify pre-deployment command 執行 Alembic migration。
+- `compose.coolify.yml` 以 `migrate` 一次性服務執行 Alembic migration。
 - 同時啟動 `bot`、`maintenance`、`db-backup`。
 - Bot 啟動時不自動套用 migration。
 - GitHub Actions 可在 CI 通過與 `production` environment approval 後觸發 Coolify deployment。
