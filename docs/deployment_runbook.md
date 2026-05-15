@@ -42,7 +42,7 @@
 4. 使用 SSH key 登入，不使用 password login。
 5. 開啟 DigitalOcean Monitoring。
 6. 開啟 Droplet backups，作為 VPS 層級災難恢復；它不能取代本專案的 PostgreSQL SQL 備份。
-7. 建立 tag，格式範例為 `kaiyn-trading-bot-prod`，後續 Cloud Firewall 可套用到同 tag Droplet。
+7. 建立 tag，格式範例為 `kaiyn-trading-bot-prod`，Cloud Firewall 可套用到同 tag Droplet。
 
 使用 DigitalOcean user data 建立 sudo user 時，依官方 recommended setup 建立非 root 使用者。先用 root 登入時，首次登入後建立部署使用者。
 
