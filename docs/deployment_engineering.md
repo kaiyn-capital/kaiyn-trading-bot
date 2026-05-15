@@ -17,7 +17,7 @@
 - pytest 作為測試框架，包含純邏輯、handler 與 PostgreSQL integration tests。
 - GitHub Actions CI，以 Docker Compose 執行 Ruff、pytest、DB integration、py_compile 與 whitespace 檢查。
 - Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 merge。
-- DigitalOcean VPS deployment runbook，涵蓋首次部署、更新、rollback、備份拉取、還原連結與故障處理。
+- DigitalOcean VPS 與 Oracle Cloud ARM deployment runbooks，涵蓋首次部署、更新、備份拉取、還原連結與故障處理。
 
 ## Dependency Management
 
@@ -166,6 +166,7 @@ GitHub repository settings：
 部署文件：
 
 - [deployment_runbook.md](deployment_runbook.md)
+- [oracle_cloud_arm_runbook.md](oracle_cloud_arm_runbook.md)
 - [backup_restore_runbook.md](backup_restore_runbook.md)
 
 ## Security Baseline

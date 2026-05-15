@@ -62,7 +62,7 @@ flowchart TD
 ## Demo Flow
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"background":"transparent","primaryColor":"#111827","primaryBorderColor":"#38bdf8","primaryTextColor":"#f8fafc","secondaryColor":"#1f2937","secondaryBorderColor":"#64748b","secondaryTextColor":"#f8fafc","tertiaryColor":"#0f172a","tertiaryBorderColor":"#475569","tertiaryTextColor":"#f8fafc","lineColor":"#475569","fontFamily":"Inter, ui-sans-serif, system-ui, sans-serif","actorBkg":"#111827","actorBorder":"#38bdf8","actorTextColor":"#f8fafc","actorLineColor":"#475569","signalColor":"#64748b","signalTextColor":"#111827","labelBoxBkgColor":"#111827","labelBoxBorderColor":"#38bdf8","labelTextColor":"#f8fafc","activationBkgColor":"#172033","activationBorderColor":"#60a5fa","noteBkgColor":"#1f2937","noteTextColor":"#f8fafc"}}}%%
+%%{init: {"theme":"base","themeVariables":{"background":"transparent","primaryColor":"#111827","primaryBorderColor":"#38bdf8","primaryTextColor":"#f8fafc","secondaryColor":"#1f2937","secondaryBorderColor":"#64748b","secondaryTextColor":"#f8fafc","tertiaryColor":"#0f172a","tertiaryBorderColor":"#475569","tertiaryTextColor":"#f8fafc","lineColor":"#475569","fontFamily":"Inter, ui-sans-serif, system-ui, sans-serif","actorBkg":"#e2e8f0","actorBorder":"#38bdf8","actorTextColor":"#0f172a","actorLineColor":"#475569","signalColor":"#64748b","signalTextColor":"#111827","labelBoxBkgColor":"#111827","labelBoxBorderColor":"#38bdf8","labelTextColor":"#f8fafc","activationBkgColor":"#172033","activationBorderColor":"#60a5fa","noteBkgColor":"#1f2937","noteTextColor":"#f8fafc"}}}%%
 sequenceDiagram
     actor Trader as Trader / Admin
     actor User as Telegram User
@@ -218,6 +218,7 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 | [commands.md](docs/commands.md) | Telegram command reference, signal syntax, topic forwarding, smoke tests |
 | [trading_flow.md](docs/trading_flow.md) | Order flow, pending orders, exchange-rule validation, error categories, schema summary |
 | [deployment_runbook.md](docs/deployment_runbook.md) | DigitalOcean VPS deployment, update, rollback, troubleshooting |
+| [oracle_cloud_arm_runbook.md](docs/oracle_cloud_arm_runbook.md) | Oracle Cloud Ampere A1 Flex ARM64 deployment |
 | [backup_restore_runbook.md](docs/backup_restore_runbook.md) | PostgreSQL backup restore verification |
 | [production_readiness.md](docs/production_readiness.md) | Production readiness design record |
 | [deployment_engineering.md](docs/deployment_engineering.md) | CI, Dependabot, lint/format, deployment engineering baseline |
