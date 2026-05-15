@@ -286,7 +286,42 @@ make deploy
 
 最後在 Telegram 執行 `/admin_health` 與基本 smoke test。
 
-## 10. 備份與還原
+## 10. GitHub Actions CD
+
+Oracle Cloud ARM 可以使用同一套 GHCR image pipeline。Release workflow 會建立 `linux/amd64` 與 `linux/arm64` multi-arch image；ARM host 會自動拉取 `linux/arm64` image。
+
+GitHub `production` environment 需要設定：
+
+```text
+PRODUCTION_SSH_HOST
+PRODUCTION_SSH_PORT
+PRODUCTION_SSH_USER
+PRODUCTION_SSH_KEY
+PRODUCTION_SSH_KNOWN_HOSTS
+PRODUCTION_APP_DIR
+```
+
+`PRODUCTION_APP_DIR` 通常是：
+
+```text
+/opt/kaiyn-trading-bot
+```
+
+CD 遠端執行：
+
+```bash
+BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest> make deploy-image
+```
+
+手動驗證 production override：
+
+```bash
+BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot:main docker compose -f compose.yml -f compose.prod.yml config
+```
+
+`compose.prod.yml` 使用 Docker Compose `!reset` 移除 build 設定，VM Docker Compose plugin 需支援 Compose `2.24.4+`。
+
+## 11. 備份與還原
 
 備份由 `db-backup` service 每日產生 gzip SQL dump：
 
@@ -297,7 +332,7 @@ cat backups/backup_status.json
 
 還原驗證流程見 [backup_restore_runbook.md](backup_restore_runbook.md)。Oracle Cloud boot volume snapshot 可作為 VM 層級災難恢復，但不能取代 PostgreSQL SQL 備份。
 
-## 11. ARM64 檢查
+## 12. ARM64 檢查
 
 確認 host 架構：
 

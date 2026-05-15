@@ -381,7 +381,52 @@ make logs
 
 最後在 Telegram 執行 `/admin_health` 與基本 smoke test。
 
-## 11. Rollback
+## 11. GitHub Actions CD
+
+Production CD 使用 `.github/workflows/release.yml`：
+
+```text
+CI passed
+-> build linux/amd64 + linux/arm64 image
+-> push GHCR
+-> wait for production environment approval
+-> SSH deploy to this VPS
+```
+
+GitHub `production` environment 需要設定下列 secrets：
+
+```text
+PRODUCTION_SSH_HOST
+PRODUCTION_SSH_PORT
+PRODUCTION_SSH_USER
+PRODUCTION_SSH_KEY
+PRODUCTION_SSH_KNOWN_HOSTS
+PRODUCTION_APP_DIR
+```
+
+`PRODUCTION_APP_DIR` 通常是：
+
+```text
+/opt/kaiyn-trading-bot
+```
+
+VPS 必須已完成首次部署、`.env` 建立、Docker Compose 安裝與 SSH deploy key 設定。CD 會檢查 production worktree 是否乾淨；若有未提交變更，部署會停止。
+
+CD 使用 GHCR image digest 部署：
+
+```bash
+BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest> make deploy-image
+```
+
+手動驗證 image-based deployment：
+
+```bash
+BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot:main docker compose -f compose.yml -f compose.prod.yml config
+```
+
+`compose.prod.yml` 使用 Docker Compose `!reset` 移除 build 設定，VPS Docker Compose plugin 需支援 Compose `2.24.4+`。
+
+## 12. Rollback
 
 確認當前 commit：
 
@@ -398,13 +443,19 @@ docker compose up -d bot maintenance db-backup
 docker compose logs --tail 80 bot
 ```
 
+使用 GHCR image-based deployment 時，可改用上一個已知可用 image digest：
+
+```bash
+BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<known-good-digest> make deploy-image
+```
+
 注意：
 
 - Alembic migration 已套用後，不在 production 自動 downgrade。
 - 新 migration 導致資料庫不可用時，先停止 bot，再依照 [backup_restore_runbook.md](backup_restore_runbook.md) 選擇備份還原。
 - 正式部署前使用 git tag 標記可回退版本，格式範例為 `prod-2026-05-14`。
 
-## 12. 備份與還原
+## 13. 備份與還原
 
 查看備份狀態：
 
@@ -428,7 +479,7 @@ cat docs/backup_restore_runbook.md
 
 還原流程請以 [backup_restore_runbook.md](backup_restore_runbook.md) 為準。不要在正式 `postgres` service 或正式 `postgres_data` volume 裡做還原測試。
 
-## 13. 常用操作
+## 14. 常用操作
 
 查看服務：
 
@@ -472,7 +523,7 @@ docker compose run --rm bot python -m app.main --cleanup-retention --dry-run
 docker compose run --rm bot python -m app.main --cleanup-retention
 ```
 
-## 14. 常見故障處理
+## 15. 常見故障處理
 
 ### Bot 沒有啟動
 
@@ -543,7 +594,7 @@ docker container prune
 
 不要刪除 Docker volume，除非已確認要清空 PostgreSQL 資料。
 
-## 15. Production Checklist
+## 16. Production Checklist
 
 上線前確認：
 

@@ -1,6 +1,7 @@
 SHELL := /bin/sh
 
 COMPOSE ?= docker compose
+COMPOSE_PROD ?= $(COMPOSE) -f compose.yml -f compose.prod.yml
 UV_IMAGE ?= ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 LOG_SERVICE ?= bot
 LOG_TAIL ?= 80
@@ -43,6 +44,37 @@ deploy: ## Build, migrate, check DB, and start services
 	$(MAKE) migrate
 	$(MAKE) check-db
 	$(MAKE) up
+
+.PHONY: require-bot-image
+require-bot-image:
+	@if [ -z "$(BOT_IMAGE)" ]; then \
+		echo "BOT_IMAGE is required. Example: BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest> make deploy-image"; \
+		exit 1; \
+	fi
+
+.PHONY: pull-image
+pull-image: require-bot-image ## Pull bot and maintenance images from BOT_IMAGE
+	BOT_IMAGE="$(BOT_IMAGE)" $(COMPOSE_PROD) pull bot maintenance
+
+.PHONY: migrate-image
+migrate-image: require-bot-image ## Apply migrations using BOT_IMAGE
+	BOT_IMAGE="$(BOT_IMAGE)" $(COMPOSE_PROD) run --rm bot alembic upgrade head
+
+.PHONY: check-db-image
+check-db-image: require-bot-image ## Check database connectivity using BOT_IMAGE
+	BOT_IMAGE="$(BOT_IMAGE)" $(COMPOSE_PROD) run --rm bot python -m app.main --check-db
+
+.PHONY: up-image
+up-image: require-bot-image ## Start long-running services using BOT_IMAGE
+	BOT_IMAGE="$(BOT_IMAGE)" $(COMPOSE_PROD) up -d bot maintenance db-backup
+
+.PHONY: deploy-image
+deploy-image: require-bot-image ## Pull BOT_IMAGE, migrate, check DB, and start services
+	$(MAKE) up-db
+	$(MAKE) pull-image BOT_IMAGE="$(BOT_IMAGE)"
+	$(MAKE) migrate-image BOT_IMAGE="$(BOT_IMAGE)"
+	$(MAKE) check-db-image BOT_IMAGE="$(BOT_IMAGE)"
+	$(MAKE) up-image BOT_IMAGE="$(BOT_IMAGE)"
 
 .PHONY: down
 down: ## Stop and remove Docker Compose services

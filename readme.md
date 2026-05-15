@@ -26,7 +26,7 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget USDT-FUTURES 的交易信號執�
 - Encrypted API credential storage，使用 Fernet 加密保存 Bitget API Key、Secret Key、Passphrase。
 - Admin alerts, health checks, audit trail，提供 `/admin_health`、`/admin_audit`、啟動與異常告警。
 - Docker-first deployment with retention and backup，包含 log rotation、DB retention、每日 PostgreSQL 備份。
-- CI with Ruff, pytest, PostgreSQL integration tests, Dependabot，維持可重複驗證的工程流程。
+- CI/CD with Ruff, pytest, PostgreSQL integration tests, GHCR image publishing, Dependabot，維持可重複驗證的工程流程。
 
 ## Architecture
 
@@ -46,6 +46,9 @@ flowchart TD
 
     ci["GitHub Actions CI"] --> test["test service<br/>Ruff + pytest + DB integration"]
     test --> db
+    ci --> ghcr["GHCR<br/>multi-arch release image"]
+    ghcr --> deploy["VPS / Oracle Docker Compose CD<br/>deploy by image digest"]
+    deploy --> bot
 
     classDef actor fill:#111827,stroke:#38bdf8,color:#f8fafc;
     classDef runtime fill:#0f172a,stroke:#60a5fa,color:#f8fafc;
@@ -56,7 +59,8 @@ flowchart TD
     class users,admins actor;
     class bot,maintenance,backup,test ops;
     class db,files storage;
-    class bitget,channels,ci external;
+    class bitget,channels,ci,ghcr external;
+    class deploy ops;
 ```
 
 ## Demo Flow
@@ -108,6 +112,7 @@ sequenceDiagram
 | Testing               | pytest 9.0.3 + opt-in PostgreSQL integration tests                     |
 | Lint / format         | Ruff 0.15.12                                                           |
 | CI                    | GitHub Actions with Docker Compose-first checks                        |
+| CD                    | GHCR multi-arch image + VPS/Oracle Docker Compose deploy by digest     |
 | Dependency automation | Dependabot weekly updates; GitHub Actions patch/minor auto-merge       |
 
 ## Core Capabilities
@@ -126,6 +131,7 @@ sequenceDiagram
 - Exchange execution is validated against Bitget contract rules before confirmation and again before order submission.
 - Operations are part of the product surface: health checks, audit events, retention cleanup, backups, and restore documentation are included.
 - CI mirrors the Docker Compose runtime path, including PostgreSQL integration tests instead of relying on host-local services.
+- CD publishes immutable multi-arch images to GHCR and deploys production by image digest after environment approval.
 
 ## Quick Start
 
@@ -193,7 +199,7 @@ docker compose run --rm test python -m pytest
 docker compose run --rm test python -m pytest --run-db
 ```
 
-GitHub Actions 以相同 Docker Compose 流程執行 Ruff、pytest、PostgreSQL integration tests、`py_compile` 與 whitespace 檢查。Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 squash merge，Python dependency PR 維持人工 review。
+GitHub Actions 以相同 Docker Compose 流程執行 Ruff、pytest、PostgreSQL integration tests、`py_compile` 與 whitespace 檢查。CI 通過後，release workflow 會發布 multi-arch image 到 GHCR，並在 `production` environment approval 後部署到 VPS / Oracle Docker Compose runtime。Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 squash merge，Python dependency PR 維持人工 review。
 
 更新 Python 依賴時，使用 Dockerized uv 更新 lockfile：
 
@@ -232,6 +238,7 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 ├── tests/                  # pytest unit and PostgreSQL integration tests
 ├── docs/                   # command, trading, deployment, backup, readiness docs, screenshots
 ├── compose.yml             # postgres, bot, test, maintenance, db-backup services
+├── compose.prod.yml        # image-based production override for GHCR deployments
 ├── Dockerfile
 ├── Makefile
 ├── pyproject.toml
