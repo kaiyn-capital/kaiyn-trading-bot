@@ -140,4 +140,4 @@ jobs:
           BOT_IMAGE="$DEPLOY_IMAGE" make deploy-image
           docker compose ps
           docker compose logs --tail 80 bot
-REMOTE
+          REMOTE
