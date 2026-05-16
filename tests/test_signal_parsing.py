@@ -4,9 +4,7 @@ from app.order_flow import parse_signal_args
 
 
 def test_parse_signal_with_labeled_prices_and_remark():
-    signal = parse_signal_args(
-        "BTCUSDT short entry[80200 81000] sl[81700] tp[77777 75000] 等待回踩后执行".split()
-    )
+    signal = parse_signal_args("BTCUSDT short entry[80200 81000] sl[81700] tp[77777 75000] 等待回踩后执行".split())
 
     assert signal.symbol == "BTCUSDT"
     assert signal.direction == "short"
