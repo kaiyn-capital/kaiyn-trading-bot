@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     DateTime,
@@ -20,7 +21,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(Integer, unique=True, index=True)
+    telegram_id = Column(BigInteger, unique=True, index=True)
     username = Column(String, nullable=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
@@ -102,7 +103,7 @@ class PendingOrder(Base):
     id = Column(Integer, primary_key=True, index=True)
     token = Column(String, unique=True, nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    telegram_id = Column(Integer, nullable=False, index=True)
+    telegram_id = Column(BigInteger, nullable=False, index=True)
 
     # Signal and computed order data
     symbol = Column(String, nullable=False)
@@ -213,7 +214,7 @@ class ChannelGroup(Base):
     thread_title = Column(String, nullable=True)  # 管理員填寫的話題備註名稱
 
     # 管理信息
-    added_by_user_id = Column(Integer, nullable=False)  # 添加此頻道的管理員 ID
+    added_by_user_id = Column(BigInteger, nullable=False)  # 添加此頻道的管理員 ID
     description = Column(String, nullable=True)  # 頻道描述
 
     # 時間戳
@@ -234,7 +235,7 @@ class SystemLog(Base):
 
     # 用戶相關
     user_id = Column(Integer, nullable=True)
-    telegram_id = Column(Integer, nullable=True)
+    telegram_id = Column(BigInteger, nullable=True)
 
     # 額外信息
     extra_data = Column(Text, nullable=True)
