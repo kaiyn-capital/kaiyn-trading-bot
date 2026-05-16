@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 from .order_flow import OrderExecutionResult, OrderPreview, SignalDraft
 
@@ -107,17 +108,21 @@ def signal_usage_message() -> str:
     )
 
 
+def _format_signal_price(value: float) -> str:
+    return format(Decimal(str(value)).normalize(), "f")
+
+
 def signal_message(signal: SignalDraft, sender_username: str) -> str:
     direction_text = "多 Long" if signal.direction == "long" else "空 Short"
-    tp_text = "/".join([str(int(tp)) for tp in signal.take_profit_levels])
+    tp_text = "/".join([_format_signal_price(tp) for tp in signal.take_profit_levels])
     signal_time = datetime.now(UTC_PLUS_8).strftime("%Y-%m-%d %H:%M:%S")
 
     text = f"🚨 **交易信号** by @{sender_username}\n\n"
     text += f"**Symbol：** {signal.symbol}\n"
     text += f"**Direction：** {direction_text}\n"
-    text += f"**Entry：** {int(signal.entry_upper)}-{int(signal.entry_lower)}\n"
+    text += f"**Entry：** {_format_signal_price(signal.entry_upper)}-{_format_signal_price(signal.entry_lower)}\n"
     text += f"**TP：** {tp_text}\n"
-    text += f"**SL：** {int(signal.stop_loss)}\n"
+    text += f"**SL：** {_format_signal_price(signal.stop_loss)}\n"
     if signal.remark:
         text += f"{escape_markdown(signal.remark)}\n"
     text += "\n"
