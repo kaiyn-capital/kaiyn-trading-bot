@@ -3,8 +3,10 @@ import pytest
 from app.order_flow import parse_signal_args
 
 
-def test_parse_signal_with_multiple_take_profits_and_remark():
-    signal = parse_signal_args("BTCUSDT short 80200 81000 81700 77777 75000 等待回踩后执行".split())
+def test_parse_signal_with_labeled_prices_and_remark():
+    signal = parse_signal_args(
+        "BTCUSDT short entry[80200 81000] sl[81700] tp[77777 75000] 等待回踩后执行".split()
+    )
 
     assert signal.symbol == "BTCUSDT"
     assert signal.direction == "short"
@@ -15,27 +17,54 @@ def test_parse_signal_with_multiple_take_profits_and_remark():
     assert signal.remark == "等待回踩后执行"
 
 
-def test_parse_signal_without_remark():
-    signal = parse_signal_args("ETHUSDT long 3200 3250 3150 3400 3500 3600".split())
+def test_parse_signal_with_single_entry_price():
+    signal = parse_signal_args("PUMPUSDT long entry[0.00179] sl[0.00156] tp[0.0022 0.00268]".split())
 
-    assert signal.symbol == "ETHUSDT"
+    assert signal.symbol == "PUMPUSDT"
     assert signal.direction == "long"
-    assert signal.take_profit_levels == [3400, 3500, 3600]
+    assert signal.entry_lower == 0.00179
+    assert signal.entry_upper == 0.00179
+    assert signal.stop_loss == 0.00156
+    assert signal.take_profit_levels == [0.0022, 0.00268]
     assert signal.remark == ""
 
 
-def test_parse_signal_uppercases_symbol_and_lowercases_direction():
-    signal = parse_signal_args("btcusdt LONG 80200 81000 79000 83000".split())
+def test_parse_signal_supports_case_insensitive_labels_and_spaced_brackets():
+    signal = parse_signal_args("ethusdt LONG TP [3400 3500] ENTRY [3200 3250] SL [3150]".split())
 
-    assert signal.symbol == "BTCUSDT"
+    assert signal.symbol == "ETHUSDT"
     assert signal.direction == "long"
+    assert signal.entry_lower == 3200
+    assert signal.entry_upper == 3250
+    assert signal.stop_loss == 3150
+    assert signal.take_profit_levels == [3400, 3500]
 
 
-def test_parse_signal_requires_minimum_arguments():
+def test_parse_signal_treats_text_outside_labels_as_remark():
+    signal = parse_signal_args("PUMPUSDT long 等待 entry[0.00179] sl[0.00156] tp[0.0022] 回踩后执行".split())
+
+    assert signal.remark == "等待 回踩后执行"
+
+
+def test_parse_signal_rejects_old_positional_format():
     with pytest.raises(ValueError):
-        parse_signal_args("BTCUSDT short 80200 81000 81700".split())
+        parse_signal_args("BTCUSDT short 80200 81000 81700 77777".split())
 
 
-def test_parse_signal_rejects_invalid_numeric_fields():
+@pytest.mark.parametrize(
+    "command",
+    [
+        "BTCUSDT short entry[80200 81000] sl[81700]",
+        "BTCUSDT short entry[80200 81000] tp[77777]",
+        "BTCUSDT short sl[81700] tp[77777]",
+        "BTCUSDT short entry[80200 81000 81100] sl[81700] tp[77777]",
+        "BTCUSDT short entry[80200] sl[81700 81800] tp[77777]",
+        "BTCUSDT short entry[80200] sl[81700] tp[]",
+        "BTCUSDT short entry[80200] entry[81000] sl[81700] tp[77777]",
+        "BTCUSDT neutral entry[80200] sl[81700] tp[77777]",
+        "BTCUSDT short entry[bad] sl[81700] tp[77777]",
+    ],
+)
+def test_parse_signal_rejects_invalid_labeled_format(command):
     with pytest.raises(ValueError):
-        parse_signal_args("BTCUSDT short bad 81000 81700 77777".split())
+        parse_signal_args(command.split())

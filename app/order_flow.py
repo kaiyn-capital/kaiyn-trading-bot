@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import ROUND_DOWN, Decimal, InvalidOperation
@@ -250,26 +251,64 @@ def apply_order_validation(preview: OrderPreview, validation: OrderValidationRes
     )
 
 
+_SIGNAL_PRICE_GROUP_PATTERN = re.compile(r"\b(entry|sl|tp)\s*\[([^\]]*)\]", re.IGNORECASE)
+
+
+def _parse_signal_price_group(raw_prices: str) -> list[float]:
+    prices = raw_prices.split()
+    if not prices:
+        raise ValueError("missing signal price group values")
+
+    try:
+        return [float(price) for price in prices]
+    except ValueError as exc:
+        raise ValueError("invalid signal price") from exc
+
+
 def parse_signal_args(args: Sequence[str]) -> SignalDraft:
-    if len(args) < 6:
+    if len(args) < 3:
         raise ValueError("missing signal arguments")
 
     symbol = args[0].upper()
     direction = args[1].lower()
-    entry_lower = float(args[2])
-    entry_upper = float(args[3])
-    stop_loss = float(args[4])
+    if direction not in {"long", "short"}:
+        raise ValueError("invalid signal direction")
 
-    take_profits = []
-    remark_start_index = None
-    for index in range(5, len(args)):
-        try:
-            take_profits.append(float(args[index]))
-        except ValueError:
-            remark_start_index = index
-            break
+    payload = " ".join(args[2:]).strip()
+    matches = list(_SIGNAL_PRICE_GROUP_PATTERN.finditer(payload))
+    if not matches:
+        raise ValueError("missing labeled signal groups")
 
-    remark = " ".join(args[remark_start_index:]).strip() if remark_start_index is not None else ""
+    groups: dict[str, list[float]] = {}
+    remark_parts = []
+    last_end = 0
+    for match in matches:
+        label = match.group(1).lower()
+        if label in groups:
+            raise ValueError("duplicate signal group")
+
+        remark_parts.append(payload[last_end : match.start()])
+        groups[label] = _parse_signal_price_group(match.group(2))
+        last_end = match.end()
+
+    remark_parts.append(payload[last_end:])
+    remark = " ".join(" ".join(remark_parts).split())
+
+    if set(groups) != {"entry", "sl", "tp"}:
+        raise ValueError("missing signal price group")
+
+    entry_prices = groups["entry"]
+    stop_losses = groups["sl"]
+    take_profits = groups["tp"]
+
+    if len(entry_prices) not in {1, 2}:
+        raise ValueError("entry group must contain one or two prices")
+    if len(stop_losses) != 1:
+        raise ValueError("sl group must contain one price")
+
+    entry_lower = min(entry_prices)
+    entry_upper = max(entry_prices)
+    stop_loss = stop_losses[0]
 
     return SignalDraft(
         symbol=symbol,

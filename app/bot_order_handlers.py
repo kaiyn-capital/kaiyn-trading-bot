@@ -43,7 +43,7 @@ class OrderHandlersMixin:
             return
 
         args = context.args
-        if len(args) < 6:
+        if len(args) < 3:
             await update.message.reply_text(signal_usage_message(), parse_mode="Markdown")
             return
 
@@ -124,7 +124,7 @@ class OrderHandlersMixin:
             )
 
         except ValueError:
-            await update.message.reply_text("❌ 价格格式错误，请输入有效数字")
+            await update.message.reply_text("❌ 格式错误，请使用 entry[] sl[] tp[]，并输入有效数字")
         except Exception as e:
             logger.error(f"Send signal error: {e}")
             await emit_audit_event(

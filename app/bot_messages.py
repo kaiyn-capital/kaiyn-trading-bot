@@ -101,15 +101,23 @@ def signal_usage_message() -> str:
     return (
         "📊 **发送交易信号 - 格式**\n\n"
         "使用方法：\n"
-        "`/send_signal 交易对 方向 低进场价 高进场价 止损价 止盈价1 [止盈价2] [止盈价3] [止盈价4] [备注文字]`\n\n"
+        "`/send_signal 交易对 方向 entry[进场价1 进场价2] sl[止损价] tp[止盈价1 止盈价2] [备注文字]`\n\n"
         "例如：\n"
-        "`/send_signal BTCUSDT long 115000 115500 114200 117500 110500 123500 130000`\n"
-        "`/send_signal ETHUSDT short 3200 3250 3300 3100 3000 2900 等待回踩后执行`"
+        "`/send_signal PUMPUSDT long entry[0.00179] sl[0.00156] tp[0.0022 0.00268]`\n"
+        "`/send_signal BTCUSDT short entry[80200 81000] sl[81700] tp[77777 75000] 等待回踩后执行`"
     )
 
 
 def _format_signal_price(value: float) -> str:
     return format(Decimal(str(value)).normalize(), "f")
+
+
+def _format_signal_entry(signal: SignalDraft) -> str:
+    lower = _format_signal_price(signal.entry_lower)
+    upper = _format_signal_price(signal.entry_upper)
+    if lower == upper:
+        return lower
+    return f"{upper}-{lower}"
 
 
 def signal_message(signal: SignalDraft, sender_username: str) -> str:
@@ -120,7 +128,7 @@ def signal_message(signal: SignalDraft, sender_username: str) -> str:
     text = f"🚨 **交易信号** by @{sender_username}\n\n"
     text += f"**Symbol：** {signal.symbol}\n"
     text += f"**Direction：** {direction_text}\n"
-    text += f"**Entry：** {_format_signal_price(signal.entry_upper)}-{_format_signal_price(signal.entry_lower)}\n"
+    text += f"**Entry：** {_format_signal_entry(signal)}\n"
     text += f"**TP：** {tp_text}\n"
     text += f"**SL：** {_format_signal_price(signal.stop_loss)}\n"
     if signal.remark:

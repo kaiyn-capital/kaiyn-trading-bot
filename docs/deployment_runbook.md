@@ -307,7 +307,7 @@ git diff --check
 - `/admin`
 - `/admin_health`
 - `/admin_audit`
-- `/send_signal BTCUSDT short 80200 81000 81700 77777 75000 等待回踩後執行`
+- `/send_signal BTCUSDT short entry[80200 81000] sl[81700] tp[77777 75000] 等待回踩後執行`
 - 確認信號已轉發到指定群組或 topic。
 - 點「市价下单」與「挂单」，至少確認可進入 pending order 確認畫面。
 
