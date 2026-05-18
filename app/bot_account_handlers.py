@@ -345,6 +345,11 @@ class AccountHandlersMixin:
 
     async def handle_global_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Route plain text messages for active setup sessions."""
+        chat = getattr(update, "effective_chat", None)
+        chat_type = getattr(chat, "type", None)
+        if not (chat_type == "private" or getattr(chat_type, "value", None) == "private"):
+            return
+
         user = await self._get_or_create_user(update)
 
         if user.telegram_id in self.user_sessions:

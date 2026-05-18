@@ -3,7 +3,13 @@ import logging
 from datetime import datetime
 from typing import Dict, Optional
 
-from telegram import BotCommand, Update
+from telegram import (
+    BotCommand,
+    BotCommandScopeAllGroupChats,
+    BotCommandScopeAllPrivateChats,
+    BotCommandScopeDefault,
+    Update,
+)
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -63,40 +69,51 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
     def _setup_handlers(self):
         """Register Telegram handlers."""
-        self.application.add_handler(CommandHandler("start", self.start_command))
-        self.application.add_handler(CommandHandler("help", self.help_command))
-        self.application.add_handler(CommandHandler("status", self.status_command))
-        self.application.add_handler(CommandHandler("balance", self.balance_command))
-        self.application.add_handler(CommandHandler("settings", self.settings_command))
+        private_chat = filters.ChatType.PRIVATE
+        private_text = private_chat & filters.TEXT & ~filters.COMMAND
+
+        self.application.add_handler(CommandHandler("start", self.start_command, filters=private_chat))
+        self.application.add_handler(CommandHandler("help", self.help_command, filters=private_chat))
+        self.application.add_handler(CommandHandler("status", self.status_command, filters=private_chat))
+        self.application.add_handler(CommandHandler("balance", self.balance_command, filters=private_chat))
+        self.application.add_handler(CommandHandler("settings", self.settings_command, filters=private_chat))
 
         api_conv_handler = ConversationHandler(
-            entry_points=[CommandHandler("setapi", self.set_api_start)],
+            entry_points=[CommandHandler("setapi", self.set_api_start, filters=private_chat)],
             states={
-                WAITING_API_KEY: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_api_key)],
-                WAITING_SECRET_KEY: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_secret_key)],
-                WAITING_PASSPHRASE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_passphrase)],
+                WAITING_API_KEY: [MessageHandler(private_text, self.set_api_key)],
+                WAITING_SECRET_KEY: [MessageHandler(private_text, self.set_secret_key)],
+                WAITING_PASSPHRASE: [MessageHandler(private_text, self.set_passphrase)],
             },
             fallbacks=[],
         )
         self.application.add_handler(api_conv_handler)
 
-        self.application.add_handler(CommandHandler("admin", self.admin_command))
-        self.application.add_handler(CommandHandler("admin_health", self.admin_health_command))
-        self.application.add_handler(CommandHandler("admin_audit", self.admin_audit_command))
-        self.application.add_handler(CommandHandler("admin_users", self.admin_users_command))
-        self.application.add_handler(CommandHandler("admin_broadcast", self.admin_broadcast_command))
-        self.application.add_handler(CommandHandler("admin_channels", self.admin_channels_command))
-        self.application.add_handler(CommandHandler("add_channel", self.add_channel_command))
-        self.application.add_handler(CommandHandler("send_signal", self.send_signal_command))
-        self.application.add_handler(CommandHandler("send_to_channel", self.send_to_channel_command))
-        self.application.add_handler(CommandHandler("set_channel_topic", self.set_channel_topic_command))
-        self.application.add_handler(CommandHandler("clear_channel_topic", self.clear_channel_topic_command))
-        self.application.add_handler(CommandHandler("add_trader", self.add_trader_command))
+        self.application.add_handler(CommandHandler("admin", self.admin_command, filters=private_chat))
+        self.application.add_handler(CommandHandler("admin_health", self.admin_health_command, filters=private_chat))
+        self.application.add_handler(CommandHandler("admin_audit", self.admin_audit_command, filters=private_chat))
+        self.application.add_handler(CommandHandler("admin_users", self.admin_users_command, filters=private_chat))
+        self.application.add_handler(
+            CommandHandler("admin_broadcast", self.admin_broadcast_command, filters=private_chat)
+        )
+        self.application.add_handler(
+            CommandHandler("admin_channels", self.admin_channels_command, filters=private_chat)
+        )
+        self.application.add_handler(CommandHandler("add_channel", self.add_channel_command, filters=private_chat))
+        self.application.add_handler(CommandHandler("send_signal", self.send_signal_command, filters=private_chat))
+        self.application.add_handler(
+            CommandHandler("send_to_channel", self.send_to_channel_command, filters=private_chat)
+        )
+        self.application.add_handler(
+            CommandHandler("set_channel_topic", self.set_channel_topic_command, filters=private_chat)
+        )
+        self.application.add_handler(
+            CommandHandler("clear_channel_topic", self.clear_channel_topic_command, filters=private_chat)
+        )
+        self.application.add_handler(CommandHandler("add_trader", self.add_trader_command, filters=private_chat))
 
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
-        self.application.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_global_message, block=False)
-        )
+        self.application.add_handler(MessageHandler(private_text, self.handle_global_message, block=False))
         self.application.add_error_handler(self.error_handler)
 
         asyncio.create_task(self.setup_commands())
@@ -113,10 +130,22 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         ]
 
         try:
-            await self.application.bot.set_my_commands(commands)
-            logger.info("Bot commands set successfully")
+            await self.application.bot.delete_my_commands(scope=BotCommandScopeDefault())
+            await self.application.bot.delete_my_commands(scope=BotCommandScopeAllGroupChats())
+            await self.application.bot.set_my_commands(commands, scope=BotCommandScopeAllPrivateChats())
+            logger.info("Bot commands set for private chats")
         except Exception as e:
             logger.error(f"Failed to set bot commands: {e}")
+
+    def _is_private_chat_update(self, update: Update | None) -> bool:
+        """Return whether the update came from a one-to-one private chat."""
+        chat = getattr(update, "effective_chat", None)
+        chat_type = getattr(chat, "type", None)
+        return chat_type == "private" or getattr(chat_type, "value", None) == "private"
+
+    def _is_group_order_callback(self, data: str | None) -> bool:
+        """Return whether a group callback is allowed to start the order flow."""
+        return isinstance(data, str) and data.startswith("place_order_")
 
     async def _get_or_create_user(self, update: Update) -> User:
         """Get or create the current Telegram user."""
@@ -195,10 +224,15 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Route all inline keyboard callbacks."""
         query = update.callback_query
+        data = query.data
+
+        if not self._is_private_chat_update(update) and not self._is_group_order_callback(data):
+            await query.answer("请到与机器人的私人聊天操作", show_alert=True)
+            return
+
         await query.answer()
 
         user = await self._get_or_create_user(update)
-        data = query.data
 
         try:
             if data == "setup_api":
@@ -246,7 +280,13 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
         except Exception as e:
             logger.error(f"Button callback error: {e}")
-            await query.edit_message_text("❌ 操作失败，请重试")
+            if self._is_private_chat_update(update):
+                await query.edit_message_text("❌ 操作失败，请重试")
+            else:
+                try:
+                    await query.answer("操作失败，请到与机器人的私人聊天查看或重试", show_alert=True)
+                except Exception:
+                    pass
 
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle uncaught Telegram update errors."""
@@ -281,7 +321,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         except Exception as e:
             logger.error(f"Failed to log error: {e}")
 
-        if update and update.effective_chat:
+        if update and update.effective_chat and self._is_private_chat_update(update):
             try:
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
