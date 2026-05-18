@@ -163,9 +163,9 @@ The `test` service is only for checks and should not be kept running in producti
 ## Documentation
 
 - `readme.md`: public project overview and main setup instructions.
-- `docs/commands.md`: Telegram command reference and signal syntax.
-- `docs/trading_flow.md`: order flow, pending orders, validation, and schema summary.
-- `docs/deployment_runbook.md`: DigitalOcean VPS deployment runbook.
-- `docs/backup_restore_runbook.md`: PostgreSQL backup restore verification.
-- `docs/production_readiness.md`: production readiness implementation record.
-- `docs/deployment_engineering.md`: engineering rollout record for lint, CI, Dependabot, and deployment.
+- `references/commands.md`: Telegram command reference and signal syntax.
+- `references/trading_flow.md`: order flow, pending orders, validation, and schema summary.
+- `references/deployment_runbook.md`: DigitalOcean VPS deployment runbook.
+- `references/backup_restore_runbook.md`: PostgreSQL backup restore verification.
+- `references/production_readiness.md`: production readiness implementation record.
+- `references/deployment_engineering.md`: engineering rollout record for lint, CI, Dependabot, and deployment.

@@ -15,21 +15,23 @@
 [![pytest](https://img.shields.io/badge/tests-pytest%209.0.3-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
 [![Dependabot](https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot&logoColor=white)](./.github/dependabot.yml)
 
-Kaiyn Trading Bot 是整合 Telegram 與 Bitget USDT-FUTURES 的交易信號執行機器人。專案以 production-ready 實務運行規格設計，涵蓋交易確認流程、交易所規則驗證、加密憑證保存、審計紀錄、備份還原與 CI/CD。
+> 🌐 [中文版 README](readme_zh.md)
 
-使用者可透過 Telegram 設定加密 API 憑證、設定固定 1R 風險金額，並從交易信號按鈕送出市價單或 GTC 限價單。
+Kaiyn Trading Bot is a Telegram-integrated trading signal execution bot for Bitget USDT-FUTURES. The project is designed to production-ready standards, covering order confirmation flows, exchange rule validation, encrypted credential storage, audit trails, backup and restore, and CI/CD.
 
-> 風險提醒：本專案會連接真實交易所 API 並送出合約訂單。Bitget API 應只授予交易權限，不授予提幣權限。
+Users can configure encrypted API credentials via Telegram, set a fixed 1R risk amount, and submit market or GTC limit orders from trading signal buttons.
+
+> **Risk Disclaimer:** This project connects to live exchange APIs and submits real futures orders. Bitget API keys should be granted trading permissions only — do not grant withdrawal permissions.
 
 ## Highlights
 
-- PostgreSQL-backed pending orders with row locking，避免使用者重複點擊造成重複送單。
-- Bitget contract-rule validation before execution，送單前檢查交易對狀態、最小下單量、名義價值、精度與單筆上限。
-- Market / GTC limit order flow with fixed 1R sizing，支援市價下單與限價掛單確認流程。
-- Encrypted API credential storage，使用 Fernet 加密保存 Bitget API Key、Secret Key、Passphrase。
-- Admin alerts, health checks, audit trail，提供 `/admin_health`、`/admin_audit`、啟動與異常告警。
-- Docker-first deployment with retention and backup，包含 log rotation、DB retention、每日 PostgreSQL 備份。
-- CI/CD with Ruff, pytest, PostgreSQL integration tests, GHCR image publishing, VPS SSH deployment, Dependabot。
+- PostgreSQL-backed pending orders with row locking to prevent duplicate submissions from repeated clicks.
+- Bitget contract-rule validation before execution — checks symbol status, minimum order size, notional value, precision, and per-order limits before submitting.
+- Market / GTC limit order flow with fixed 1R sizing, supporting both market orders and limit order confirmation flows.
+- Encrypted API credential storage using Fernet encryption for Bitget API Key, Secret Key, and Passphrase.
+- Admin alerts, health checks, and audit trail via `/admin_health`, `/admin_audit`, startup notifications, and exception alerts.
+- Docker-first deployment with retention and backup, including log rotation, DB retention cleanup, and daily PostgreSQL backups.
+- CI/CD with Ruff, pytest, PostgreSQL integration tests, GHCR image publishing, VPS SSH deployment, and Dependabot.
 
 ## Architecture
 
@@ -101,22 +103,22 @@ sequenceDiagram
 
 ## Tech Stack
 
-| Area                  | Choice                                                                 |
-| --------------------- | ---------------------------------------------------------------------- |
-| Runtime               | Python 3.11                                                            |
-| Bot framework         | `python-telegram-bot` 22.7                                             |
-| Exchange integration  | Bitget USDT-FUTURES REST API via `httpx` 0.28.1                        |
-| Database              | PostgreSQL 16 + SQLAlchemy asyncio 2.0.49 + `asyncpg` 0.29.0           |
-| Schema migration      | Alembic 1.18.4                                                         |
-| Credential security   | `cryptography` Fernet 48.0.0                                           |
-| Deployment            | Docker Compose services: `postgres`, `bot`, `maintenance`, `db-backup` |
-| Dependency lock       | uv lockfile + `uv sync --locked`                                       |
-| Long-term operations  | Docker log rotation, file log rotation, DB retention, daily SQL backup |
-| Testing               | pytest 9.0.3 + opt-in PostgreSQL integration tests                     |
-| Lint / format         | Ruff 0.15.12                                                           |
-| CI                    | GitHub Actions with Docker Compose-first checks                        |
-| CD                    | GHCR multi-arch image + VPS SSH deployment by digest                   |
-| Dependency automation | Dependabot weekly updates; GitHub Actions patch/minor auto-merge       |
+| Area | Choice |
+| --- | --- |
+| Runtime | Python 3.11 |
+| Bot framework | `python-telegram-bot` 22.7 |
+| Exchange integration | Bitget USDT-FUTURES REST API via `httpx` 0.28.1 |
+| Database | PostgreSQL 16 + SQLAlchemy asyncio 2.0.49 + `asyncpg` 0.29.0 |
+| Schema migration | Alembic 1.18.4 |
+| Credential security | `cryptography` Fernet 48.0.0 |
+| Deployment | Docker Compose services: `postgres`, `bot`, `maintenance`, `db-backup` |
+| Dependency lock | uv lockfile + `uv sync --locked` |
+| Long-term operations | Docker log rotation, file log rotation, DB retention, daily SQL backup |
+| Testing | pytest 9.0.3 + opt-in PostgreSQL integration tests |
+| Lint / format | Ruff 0.15.12 |
+| CI | GitHub Actions with Docker Compose-first checks |
+| CD | GHCR multi-arch image + VPS SSH deployment by digest |
+| Dependency automation | Dependabot weekly updates; GitHub Actions patch/minor auto-merge |
 
 ## Core Capabilities
 
@@ -138,26 +140,26 @@ sequenceDiagram
 
 ## Quick Start
 
-建立 `.env`：
+Create `.env`:
 
 ```bash
 cp .env.template .env
 ```
 
-產生 Fernet 加密金鑰，並填入 `.env` 的 `ENCRYPTION_KEY`：
+Generate a Fernet encryption key and set it as `ENCRYPTION_KEY` in `.env`:
 
 ```bash
 make build
 make generate-key
 ```
 
-啟動 PostgreSQL、套用 migration，並啟動 Bot：
+Start PostgreSQL, apply migrations, and launch the Bot:
 
 ```bash
 make deploy
 ```
 
-等效 Docker Compose 展開命令：
+Equivalent Docker Compose commands:
 
 ```bash
 docker compose build
@@ -167,31 +169,31 @@ docker compose run --rm bot python -m app.main --check-db
 docker compose up -d bot maintenance db-backup
 ```
 
-完整 DigitalOcean 部署流程見 [deployment_runbook.md](docs/deployment_runbook.md)；Coolify 可選部署方案見 [coolify_runbook.md](docs/coolify_runbook.md)。
+For the full DigitalOcean deployment procedure, see [deployment_runbook.md](references/deployment_runbook.md). For the optional Coolify deployment variant, see [coolify_runbook.md](references/coolify_runbook.md).
 
 ## Configuration
 
-正式環境以 `.env` 注入設定，範例來源為 [.env.template](.env.template)。
+Production configuration is injected via `.env`. See [.env.template](.env.template) for a reference of all variables.
 
 | Variable | Purpose |
-| -------- | ------- |
+| --- | --- |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot token |
-| `TELEGRAM_ADMIN_IDS` | 管理員 Telegram ID 清單 |
-| `ENCRYPTION_KEY` | Fernet key，用於加密 Bitget API 憑證 |
+| `TELEGRAM_ADMIN_IDS` | Comma-separated list of admin Telegram IDs |
+| `ENCRYPTION_KEY` | Fernet key for encrypting Bitget API credentials |
 | `DATABASE_URL` | PostgreSQL async connection URL |
 | `BITGET_API_URL` | Bitget API base URL |
-| `RETENTION_DAYS` | DB 累積紀錄與備份保留天數 |
-| `ADMIN_ALERT_*` / `BITGET_ALERT_*` | 管理員告警與 Bitget 連續錯誤門檻 |
+| `RETENTION_DAYS` | Number of days to retain accumulated records and backups |
+| `ADMIN_ALERT_*` / `BITGET_ALERT_*` | Admin alert and Bitget consecutive error thresholds |
 
 ## Testing & CI
 
-Docker-first 驗證指令：
+Docker-first verification:
 
 ```bash
 make verify
 ```
 
-等效 Docker Compose 展開命令：
+Equivalent Docker Compose commands:
 
 ```bash
 docker compose build test
@@ -202,11 +204,11 @@ docker compose run --rm test python -m pytest
 docker compose run --rm test python -m pytest --run-db
 ```
 
-GitHub Actions 以相同 Docker Compose 流程執行 Ruff、pytest、PostgreSQL integration tests、`py_compile` 與 whitespace 檢查。CI 通過後，release workflow 會發布 multi-arch image 到 GHCR，並在 `production` environment approval 後透過 SSH 部署 image digest 到 VPS。Coolify 文件保留為可選部署方案。
+GitHub Actions runs the same Docker Compose flow for Ruff, pytest, PostgreSQL integration tests, `py_compile`, and whitespace checks. After CI passes, the release workflow publishes a multi-arch image to GHCR and deploys it to the VPS via SSH after `production` environment approval. Coolify documentation is retained as an optional deployment variant.
 
-Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 squash merge，Python dependency PR 維持人工 review。
+Dependabot checks Python packages and GitHub Actions weekly. GitHub Actions patch/minor PRs can be auto-squash-merged after CI and branch protection pass. Python dependency PRs require manual review.
 
-更新 Python 依賴時，使用 Dockerized uv 更新 lockfile：
+To update the Python dependency lockfile using Dockerized uv:
 
 ```bash
 docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-slim uv lock
@@ -214,25 +216,25 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 
 ## Operations
 
-- `maintenance` service 每日清理超過 30 天的累積紀錄。
-- `db-backup` service 每日產生 gzip SQL 備份並保留 30 天。
-- Docker container logs 與 Bot file logs 都配置 rotation。
-- `/admin_health` 提供 DB、backup、cleanup、Bitget API 與近期錯誤狀態。
-- `/admin_audit [limit]` 查詢管理員、發單員與下單關鍵操作摘要。
+- The `maintenance` service runs daily cleanup of records older than 30 days.
+- The `db-backup` service produces daily gzip SQL backups and retains them for 30 days.
+- Both Docker container logs and Bot file logs are configured with rotation.
+- `/admin_health` reports DB, backup, cleanup, Bitget API, and recent error status.
+- `/admin_audit [limit]` displays a summary of admin, signal sender, and order execution events.
 
-備份還原驗證見 [backup_restore_runbook.md](docs/backup_restore_runbook.md)。
+For backup restore verification, see [backup_restore_runbook.md](references/backup_restore_runbook.md).
 
 ## Documentation
 
 | Document | Description |
-| -------- | ----------- |
-| [commands.md](docs/commands.md) | Telegram command reference, signal syntax, topic forwarding, smoke tests |
-| [trading_flow.md](docs/trading_flow.md) | Order flow, pending orders, exchange-rule validation, error categories, schema summary |
-| [deployment_runbook.md](docs/deployment_runbook.md) | DigitalOcean VPS deployment, update, rollback, troubleshooting |
-| [coolify_runbook.md](docs/coolify_runbook.md) | Optional Coolify deployment variant with GHCR image pipeline |
-| [backup_restore_runbook.md](docs/backup_restore_runbook.md) | PostgreSQL backup restore verification |
-| [production_readiness.md](docs/production_readiness.md) | Production readiness design record |
-| [deployment_engineering.md](docs/deployment_engineering.md) | CI, Dependabot, lint/format, deployment engineering baseline |
+| --- | --- |
+| [commands.md](references/commands.md) | Telegram command reference, signal syntax, topic forwarding, smoke tests |
+| [trading_flow.md](references/trading_flow.md) | Order flow, pending orders, exchange-rule validation, error categories, schema summary |
+| [deployment_runbook.md](references/deployment_runbook.md) | DigitalOcean VPS deployment, update, rollback, troubleshooting |
+| [coolify_runbook.md](references/coolify_runbook.md) | Optional Coolify deployment variant with GHCR image pipeline |
+| [backup_restore_runbook.md](references/backup_restore_runbook.md) | PostgreSQL backup restore verification |
+| [production_readiness.md](references/production_readiness.md) | Production readiness design record |
+| [deployment_engineering.md](references/deployment_engineering.md) | CI, Dependabot, lint/format, deployment engineering baseline |
 
 ## Project Structure
 
@@ -241,7 +243,8 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 ├── app/                    # Telegram bot, Bitget client, order flow, repositories
 ├── alembic/                # Alembic migration environment and versions
 ├── tests/                  # pytest unit and PostgreSQL integration tests
-├── docs/                   # command, trading, deployment, backup, readiness docs, screenshots
+├── docs/                   # GitHub Pages site (index.html, CNAME, assets)
+├── references/             # command, trading, deployment, backup, readiness documentation
 ├── compose.yml             # postgres, bot, test, maintenance, db-backup services
 ├── compose.prod.yml        # image-based production override for GHCR deployments
 ├── compose.coolify.yml     # optional Coolify Docker Compose application
@@ -254,8 +257,8 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 
 ## Security Notes
 
-- `.env`、資料庫資料、logs、backups 不提交到 git。
-- Runtime logs 採摘要化策略，不輸出 API key、secret、passphrase 或完整交易所 response。
-- PostgreSQL 備份包含加密後的 API 憑證與交易紀錄，需以敏感資料保護。
-- `ENCRYPTION_KEY` 遺失後，既有加密 API 憑證無法解密。
-- Telegram channel/group forwarding 需要 Bot 具備相應管理權限。
+- `.env`, database data, logs, and backups are not committed to Git.
+- Runtime logs use a summarization strategy and do not output API keys, secrets, passphrases, or full exchange responses.
+- PostgreSQL backups contain encrypted API credentials and trade records — treat them as sensitive data.
+- If `ENCRYPTION_KEY` is lost, existing encrypted API credentials cannot be decrypted.
+- Telegram channel/group forwarding requires the Bot to have the appropriate admin permissions.
