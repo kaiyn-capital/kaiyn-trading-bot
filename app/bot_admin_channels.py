@@ -6,12 +6,13 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from .audit import emit_audit_event
+from .bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
 from .config import Config
 
 logger = logging.getLogger(__name__)
 
 
-class AdminChannelsMixin:
+class AdminChannelsMixin(UserSessionMixin):
     async def delete_channel_by_number(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Delete a channel by its displayed number."""
         user = await self._get_or_create_user(update)
@@ -20,12 +21,20 @@ class AdminChannelsMixin:
             await update.message.reply_text("❌ 您没有管理员权限")
             return
 
+        if await self._reply_if_session_expired(update, user.telegram_id):
+            return
+
         try:
+            session_data = self.get_active_user_session(user.telegram_id)
+            if not session_data:
+                await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
+                return
+
             channel_number = int(update.message.text.strip())
-            session_data = self.user_sessions.get(user.telegram_id, {})
             channels_data = session_data.get("channels_data", [])
 
             if not channels_data or channel_number < 1 or channel_number > len(channels_data):
+                self.update_user_session(user.telegram_id, {"step": "delete_channel"})
                 await emit_audit_event(
                     self,
                     user,
@@ -74,6 +83,7 @@ class AdminChannelsMixin:
             self.user_sessions.pop(user.telegram_id, None)
 
         except ValueError:
+            self.update_user_session(user.telegram_id, {"step": "delete_channel"})
             await emit_audit_event(
                 self,
                 user,
@@ -501,7 +511,7 @@ class AdminChannelsMixin:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
-            self.user_sessions[user.telegram_id] = {"channels_data": channels_data}
+            self.set_user_session(user.telegram_id, {"channels_data": channels_data})
 
             await query.edit_message_text(manage_text, reply_markup=reply_markup, parse_mode="HTML")
 
@@ -510,14 +520,17 @@ class AdminChannelsMixin:
             await query.edit_message_text(f"❌ 获取频道列表失败\n\n错误详情: {str(e)}\n\n请检查数据库连接状态。")
 
     async def _handle_delete_channel_start_callback(self, query, user):
+        session_data = self.get_active_user_session(user.telegram_id)
+        if not session_data or not session_data.get("channels_data"):
+            self.user_sessions.pop(user.telegram_id, None)
+            await query.edit_message_text(SESSION_EXPIRED_MESSAGE)
+            return
+
         await query.edit_message_text(
             "🗑️ **删除频道**\n\n请输入要删除的频道编号：",
             parse_mode="Markdown",
         )
-        if user.telegram_id in self.user_sessions:
-            self.user_sessions[user.telegram_id]["step"] = "delete_channel"
-        else:
-            self.user_sessions[user.telegram_id] = {"step": "delete_channel"}
+        self.update_user_session(user.telegram_id, {"step": "delete_channel"})
 
     async def _handle_return_admin_channels_callback(self, query, user):
         try:

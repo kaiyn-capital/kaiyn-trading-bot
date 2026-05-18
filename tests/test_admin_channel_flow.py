@@ -1,8 +1,9 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from app.bot_admin_handlers import AdminHandlersMixin
+from app.bot_sessions import SESSION_EXPIRED_MESSAGE
 from app.database import channel_to_dict
 from app.models import ChannelGroup
 
@@ -15,6 +16,14 @@ class FakeMessage:
     async def reply_text(self, text, **kwargs):
         self.replies.append({"text": text, "kwargs": kwargs})
         return SimpleNamespace(edit_text=self.reply_text)
+
+
+class FakeQuery:
+    def __init__(self):
+        self.edits = []
+
+    async def edit_message_text(self, text, **kwargs):
+        self.edits.append({"text": text, "kwargs": kwargs})
 
 
 class FakeChannelRepo:
@@ -111,12 +120,15 @@ class FakeBot:
 class FakeAdminHandler(AdminHandlersMixin):
     def __init__(self, channel_repo, system_log_repo=None, user_repo=None):
         self.channel_repo = channel_repo
-        self.user_sessions = {
-            123: {
+        self.user_sessions = {}
+        self.now = datetime(2026, 5, 18, 12, 0, 0)
+        self.set_user_session(
+            123,
+            {
                 "step": "delete_channel",
                 "channels_data": [{"chat_id": "-1001", "title": "test_kaiyn"}],
-            }
-        }
+            },
+        )
         self.user = SimpleNamespace(telegram_id=123)
         self.user_repo = user_repo or FakeUserRepo()
         self.system_log_repo = system_log_repo or FakeSystemLogRepo()
@@ -125,6 +137,9 @@ class FakeAdminHandler(AdminHandlersMixin):
 
     async def _get_or_create_user(self, update):
         return self.user
+
+    def _session_now(self):
+        return self.now
 
     async def _audit_action(self, user, action, details=None):
         self.audit_events.append({"telegram_id": user.telegram_id, "action": action, "details": details or {}})
@@ -161,6 +176,32 @@ def test_delete_channel_success_reply_does_not_use_markdown(monkeypatch):
     assert "parse_mode" not in update.message.replies[-1]["kwargs"]
     assert handler.audit_events[-1]["action"] == "admin_delete_channel"
     assert handler.audit_events[-1]["details"]["status"] == "success"
+
+
+def test_expired_delete_channel_session_does_not_delete(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+    channel_repo = FakeChannelRepo()
+    handler = FakeAdminHandler(channel_repo)
+    handler.now = handler.now + timedelta(seconds=301)
+    update = make_update("1")
+
+    asyncio.run(handler.delete_channel_by_number(update, make_context()))
+
+    assert channel_repo.deactivated_chat_id is None
+    assert handler.user_sessions == {}
+    assert update.message.replies == [{"text": SESSION_EXPIRED_MESSAGE, "kwargs": {}}]
+
+
+def test_expired_channel_data_does_not_enter_delete_number_flow(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+    handler = FakeAdminHandler(FakeChannelRepo())
+    handler.now = handler.now + timedelta(seconds=301)
+    query = FakeQuery()
+
+    asyncio.run(handler._handle_delete_channel_start_callback(query, handler.user))
+
+    assert handler.user_sessions == {}
+    assert query.edits == [{"text": SESSION_EXPIRED_MESSAGE, "kwargs": {}}]
 
 
 def test_add_channel_reactivates_inactive_existing_channel(monkeypatch):

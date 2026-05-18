@@ -10,13 +10,14 @@ from .bot_keyboards import (
     trading_settings_keyboard,
 )
 from .bot_messages import help_message, settings_message, welcome_message
+from .bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
 from .bot_states import WAITING_API_KEY, WAITING_PASSPHRASE, WAITING_SECRET_KEY
 from .log_sanitizer import summarize_balance_response
 
 logger = logging.getLogger(__name__)
 
 
-class AccountHandlersMixin:
+class AccountHandlersMixin(UserSessionMixin):
     async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
         return None
 
@@ -146,8 +147,7 @@ class AccountHandlersMixin:
             )
             return ConversationHandler.END
 
-        self.user_sessions.pop(user.telegram_id, None)
-        self.user_sessions[user.telegram_id] = {"step": "api_key"}
+        self.set_user_session(user.telegram_id, {"step": "api_key"})
 
         await update.message.reply_text(
             "🔐 **设置 Bitget API**\n\n"
@@ -163,6 +163,14 @@ class AccountHandlersMixin:
     async def set_api_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Store API key during setup."""
         user = await self._get_or_create_user(update)
+        if await self._reply_if_session_expired(update, user.telegram_id):
+            return ConversationHandler.END
+
+        session = self.get_active_user_session(user.telegram_id)
+        if not session:
+            await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
+            return ConversationHandler.END
+
         api_key = update.message.text.strip()
 
         try:
@@ -175,11 +183,10 @@ class AccountHandlersMixin:
                 chat_id=update.effective_chat.id,
                 text="❌ API Key 格式不正确，请重新输入：",
             )
+            self.update_user_session(user.telegram_id, {"step": "api_key"})
             return WAITING_API_KEY
 
-        session = self.user_sessions.setdefault(user.telegram_id, {})
-        session["api_key"] = api_key
-        session["step"] = "secret_key"
+        self.update_user_session(user.telegram_id, {"api_key": api_key, "step": "secret_key"})
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -191,6 +198,14 @@ class AccountHandlersMixin:
     async def set_secret_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Store secret key during setup."""
         user = await self._get_or_create_user(update)
+        if await self._reply_if_session_expired(update, user.telegram_id):
+            return ConversationHandler.END
+
+        session = self.get_active_user_session(user.telegram_id)
+        if not session:
+            await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
+            return ConversationHandler.END
+
         secret_key = update.message.text.strip()
 
         try:
@@ -203,11 +218,10 @@ class AccountHandlersMixin:
                 chat_id=update.effective_chat.id,
                 text="❌ Secret Key 格式不正确，请重新输入：",
             )
+            self.update_user_session(user.telegram_id, {"step": "secret_key"})
             return WAITING_SECRET_KEY
 
-        session = self.user_sessions.setdefault(user.telegram_id, {})
-        session["secret_key"] = secret_key
-        session["step"] = "passphrase"
+        self.update_user_session(user.telegram_id, {"secret_key": secret_key, "step": "passphrase"})
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -219,6 +233,14 @@ class AccountHandlersMixin:
     async def set_passphrase(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Store passphrase and finish API setup."""
         user = await self._get_or_create_user(update)
+        if await self._reply_if_session_expired(update, user.telegram_id):
+            return ConversationHandler.END
+
+        session = self.get_active_user_session(user.telegram_id)
+        if not session:
+            await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
+            return ConversationHandler.END
+
         passphrase = update.message.text.strip()
 
         try:
@@ -231,13 +253,14 @@ class AccountHandlersMixin:
                 chat_id=update.effective_chat.id,
                 text="❌ Passphrase 不能为空，请重新输入：",
             )
+            self.update_user_session(user.telegram_id, {"step": "passphrase"})
             return WAITING_PASSPHRASE
 
-        session = self.user_sessions.get(user.telegram_id, {})
         api_key = session.get("api_key")
         secret_key = session.get("secret_key")
 
         if not all([api_key, secret_key]):
+            self.user_sessions.pop(user.telegram_id, None)
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ 设置过程中出现错误，请重新开始。",
@@ -300,7 +323,7 @@ class AccountHandlersMixin:
         current_risk = getattr(user, "fixed_risk_amount", None)
 
         if current_risk is None:
-            self.user_sessions[user.telegram_id] = {"step": "risk_amount"}
+            self.set_user_session(user.telegram_id, {"step": "risk_amount"})
 
             await query.edit_message_text(
                 "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n请输入定 R 金额 u（数字）：",
@@ -322,6 +345,13 @@ class AccountHandlersMixin:
     async def set_risk_amount(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Store fixed risk amount."""
         user = await self._get_or_create_user(update)
+        if await self._reply_if_session_expired(update, user.telegram_id):
+            return
+
+        if not self.get_active_user_session(user.telegram_id):
+            await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
+            return
+
         amount_text = update.message.text.strip()
 
         try:
@@ -341,6 +371,7 @@ class AccountHandlersMixin:
 
         except ValueError:
             await update.message.reply_text("❌ 输入格式不正确，请输入有效数字：\n\n例如：50 或 100.5")
+            self.update_user_session(user.telegram_id, {"step": "risk_amount"})
             return
 
     async def handle_global_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -352,8 +383,11 @@ class AccountHandlersMixin:
 
         user = await self._get_or_create_user(update)
 
-        if user.telegram_id in self.user_sessions:
-            session = self.user_sessions[user.telegram_id]
+        if await self._reply_if_session_expired(update, user.telegram_id):
+            return
+
+        session = self.get_active_user_session(user.telegram_id)
+        if session:
             step = session.get("step")
 
             if step == "api_key":
@@ -388,8 +422,7 @@ class AccountHandlersMixin:
             )
             return
 
-        self.user_sessions.pop(user.telegram_id, None)
-        self.user_sessions[user.telegram_id] = {"step": "api_key"}
+        self.set_user_session(user.telegram_id, {"step": "api_key"})
 
         await query.edit_message_text(
             "🔐 **设置 Bitget API**\n\n"
@@ -484,8 +517,7 @@ class AccountHandlersMixin:
 
     async def _handle_confirm_modify_api(self, query, user):
         """Handle API modification confirmation."""
-        self.user_sessions.pop(user.telegram_id, None)
-        self.user_sessions[user.telegram_id] = {"step": "api_key"}
+        self.set_user_session(user.telegram_id, {"step": "api_key"})
 
         await query.edit_message_text(
             "🔐 **修改 Bitget API**\n\n"
@@ -498,7 +530,7 @@ class AccountHandlersMixin:
 
     async def _handle_confirm_change_risk(self, query, user):
         """Handle fixed risk amount change confirmation."""
-        self.user_sessions[user.telegram_id] = {"step": "risk_amount"}
+        self.set_user_session(user.telegram_id, {"step": "risk_amount"})
 
         await query.edit_message_text(
             "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n请输入定 R 金额 u（数字）：",
