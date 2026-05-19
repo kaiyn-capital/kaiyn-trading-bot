@@ -36,6 +36,7 @@ GTC 限價掛單：
 - K 線預設使用 Bitget `USDT-FUTURES` market candle，週期 `SIGNAL_CHART_GRANULARITY=1H`，數量 `SIGNAL_CHART_CANDLE_LIMIT=120`。
 - 圖上的 entry 使用下單邏輯中的較差價格：Long 使用 entry 區間較高點，Short 使用 entry 區間較低點。
 - 多個 TP 時，主風險報酬框使用最遠 TP，其餘 TP 以輔助線顯示。
+- 圖表輸出使用黑底與簡化時間軸，只顯示少量短日期標籤以避免 Telegram 預覽產生過多底部留白。
 
 ## Position Sizing
 
