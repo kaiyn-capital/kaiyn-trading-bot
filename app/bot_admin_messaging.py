@@ -4,7 +4,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from .audit import emit_audit_event, summarize_message_text
-from .config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +11,8 @@ logger = logging.getLogger(__name__)
 class AdminMessagingMixin:
     async def admin_broadcast_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Broadcast a message to managed channels."""
-        user = await self._get_or_create_user(update)
-
-        if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您没有管理员权限")
+        user = await self._require_admin(update)
+        if user is None:
             return
 
         message_text = " ".join(context.args)
@@ -81,10 +78,8 @@ class AdminMessagingMixin:
 
     async def send_to_channel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Send a message to a specific channel."""
-        user = await self._get_or_create_user(update)
-
-        if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您没有管理员权限")
+        user = await self._require_admin(update)
+        if user is None:
             return
 
         args = context.args

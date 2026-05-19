@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.bot_order_handlers import OrderHandlersMixin
 from app.order_flow import execute_order
+from app.order_interaction_service import ConfirmedOrderRequest, TelegramOrderFlowService
 
 
 class FakeBitgetAPIError(Exception):
@@ -125,50 +125,64 @@ class FakeQuery:
         self.answers.append(text)
 
 
-class FakeOrderHandler(OrderHandlersMixin):
+class FakeBot:
     def __init__(self):
-        self.user_repo = FakeUserRepo()
-        self.trade_repo = FakeTradeRepo()
-        self.trade_manager = FakeOrderTradeManager()
-        self.pending_order_repo = FakePendingOrderRepo()
-        self.system_log_repo = FakeSystemLogRepo()
-        self.private_messages = []
-        self.audit_events = []
+        self.messages = []
 
-    async def _send_private_message(self, query, user, text, reply_markup=None):
-        self.private_messages.append(text)
+    async def send_message(self, chat_id, text, **kwargs):
+        self.messages.append({"chat_id": chat_id, "text": text, "kwargs": kwargs})
+
+
+class FakeAuditOwner:
+    def __init__(self):
+        self.audit_events = []
 
     async def _audit_action(self, user, action, details=None):
         self.audit_events.append({"action": action, "details": details or {}})
 
 
-def test_execute_order_handler_marks_pending_failed_and_sends_user_message():
-    handler = FakeOrderHandler()
+def test_order_flow_service_marks_pending_failed_and_sends_user_message():
+    bot = FakeBot()
+    pending_order_repo = FakePendingOrderRepo()
+    system_log_repo = FakeSystemLogRepo()
+    audit_owner = FakeAuditOwner()
+    service = TelegramOrderFlowService(
+        bot=bot,
+        user_repo=FakeUserRepo(),
+        pending_order_repo=pending_order_repo,
+        trade_repo=FakeTradeRepo(),
+        trade_manager=FakeOrderTradeManager(),
+        system_log_repo=system_log_repo,
+        audit_owner=audit_owner,
+        failure_alert_handler=None,
+    )
     query = FakeQuery()
     user = SimpleNamespace(telegram_id=123)
 
     result = asyncio.run(
-        handler._execute_order(
-            query=query,
-            user=user,
-            symbol="BTCUSDT",
-            direction="long",
-            quantity=0.01,
-            stop_loss=79000,
-            position_value=800,
-            current_price=80000,
-            order_mode="market",
-            pending_order_token="tok_123",
+        service.execute_order(
+            ConfirmedOrderRequest(
+                query=query,
+                user=user,
+                symbol="BTCUSDT",
+                direction="long",
+                quantity=0.01,
+                stop_loss=79000,
+                position_value=800,
+                current_price=80000,
+                order_mode="market",
+                pending_order_token="tok_123",
+            )
         )
     )
 
     assert result is False
-    assert handler.pending_order_repo.failed[-1]["token"] == "tok_123"
-    assert "category=exchange_rejected" in handler.pending_order_repo.failed[-1]["error_message"]
-    assert "交易所拒绝下单" in handler.private_messages[-1]
-    logged_error = handler.system_log_repo.logs[-1]["extra_data"]["classified_error"]
+    assert pending_order_repo.failed[-1]["token"] == "tok_123"
+    assert "category=exchange_rejected" in pending_order_repo.failed[-1]["error_message"]
+    assert "交易所拒绝下单" in bot.messages[-1]["text"]
+    logged_error = system_log_repo.logs[-1]["extra_data"]["classified_error"]
     assert logged_error["category"] == "exchange_rejected"
     assert logged_error["raw_code"] == "43012"
-    assert handler.audit_events[-1]["action"] == "order_failed"
-    assert handler.audit_events[-1]["details"]["error_category"] == "exchange_rejected"
-    assert handler.audit_events[-1]["details"]["pending_order_token"] == "***_123"
+    assert audit_owner.audit_events[-1]["action"] == "order_failed"
+    assert audit_owner.audit_events[-1]["details"]["error_category"] == "exchange_rejected"
+    assert audit_owner.audit_events[-1]["details"]["pending_order_token"] == "***_123"

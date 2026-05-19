@@ -38,7 +38,10 @@ class FakeChannelRepo:
         self.active_channels = [
             {
                 "chat_id": "-1001",
+                "chat_type": "channel",
                 "title": "test_kaiyn",
+                "username": "test_kaiyn",
+                "auto_forward_signals": True,
                 "message_thread_id": None,
                 "thread_title": None,
             }
@@ -147,9 +150,6 @@ class FakeAdminHandler(AdminHandlersMixin):
     def _get_sender_username(self, update):
         return "admin"
 
-    def _escape_html(self, text):
-        return super()._escape_html(text)
-
 
 def make_update(text="1"):
     return SimpleNamespace(message=FakeMessage(text))
@@ -202,6 +202,45 @@ def test_expired_channel_data_does_not_enter_delete_number_flow(monkeypatch):
 
     assert handler.user_sessions == {}
     assert query.edits == [{"text": SESSION_EXPIRED_MESSAGE, "kwargs": {}}]
+
+
+def test_admin_channels_command_returns_html_and_keyboard(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+    handler = FakeAdminHandler(FakeChannelRepo())
+    update = make_update("")
+
+    asyncio.run(handler.admin_channels_command(update, make_context()))
+
+    reply = update.message.replies[-1]
+    assert reply["kwargs"]["parse_mode"] == "HTML"
+    assert reply["kwargs"]["reply_markup"].inline_keyboard[0][0].callback_data == "add_new_channel"
+    assert "📺 <b>已管理的频道/群组</b>" in reply["text"]
+    assert "<b>test_kaiyn</b>" in reply["text"]
+    assert "ID: <code>-1001</code>" in reply["text"]
+    assert "指定话题: 未设置" in reply["text"]
+
+
+def test_manage_channels_callback_sets_session_and_returns_keyboard(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+    handler = FakeAdminHandler(FakeChannelRepo())
+    query = FakeQuery()
+
+    asyncio.run(handler._handle_manage_channels_callback(query, handler.user))
+
+    session = handler.get_active_user_session(handler.user.telegram_id)
+    assert session["channels_data"] == [
+        {
+            "id": 1,
+            "chat_id": "-1001",
+            "title": "test_kaiyn",
+            "username": "test_kaiyn",
+        }
+    ]
+    edit = query.edits[-1]
+    assert edit["kwargs"]["parse_mode"] == "HTML"
+    assert edit["kwargs"]["reply_markup"].inline_keyboard[0][0].callback_data == "delete_channel_start"
+    assert "📺 <b>管理频道</b>" in edit["text"]
+    assert "1. test_kaiyn (@test_kaiyn)" in edit["text"]
 
 
 def test_add_channel_reactivates_inactive_existing_channel(monkeypatch):

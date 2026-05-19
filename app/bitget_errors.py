@@ -5,6 +5,27 @@ from typing import Any, Optional
 import httpx
 
 
+class BitgetAPIError(Exception):
+    """Structured error raised for Bitget API responses and transport failures."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        data: dict | None = None,
+        http_status: int | None = None,
+        endpoint: str | None = None,
+        method: str | None = None,
+    ):
+        self.code = code
+        self.message = message
+        self.data = data or {}
+        self.http_status = http_status
+        self.endpoint = endpoint
+        self.method = method
+        super().__init__(f"Bitget API Error [{code}]: {message}")
+
+
 class BitgetErrorCategory(str, Enum):
     USER_CONFIG = "user_config"
     TRADING_PAIR = "trading_pair"
@@ -251,7 +272,7 @@ def _contains_any(text: str, needles: list[str]) -> bool:
 
 
 def _looks_like_bitget_api_error(exc: Exception) -> bool:
-    return exc.__class__.__name__ == "BitgetAPIError"
+    return isinstance(exc, BitgetAPIError) or exc.__class__.__name__ == "BitgetAPIError"
 
 
 def _string_or_none(value) -> Optional[str]:

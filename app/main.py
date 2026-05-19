@@ -88,7 +88,7 @@ async def check_requirements():
 
 async def main():
     """主函數"""
-    print("�� 啟動 Bitget Telegram 交易機器人...")
+    print("🚀 啟動 Bitget Telegram 交易機器人...")
 
     # 設置日誌
     setup_logging()

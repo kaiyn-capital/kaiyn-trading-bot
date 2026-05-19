@@ -4,7 +4,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from .audit import AUDIT_MODULE, format_audit_log_entry
-from .config import Config
 from .health import build_admin_health_report
 
 logger = logging.getLogger(__name__)
@@ -13,10 +12,8 @@ logger = logging.getLogger(__name__)
 class AdminMonitoringMixin:
     async def admin_audit_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show recent operator audit events for admins."""
-        user = await self._get_or_create_user(update)
-
-        if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您没有管理员权限")
+        user = await self._require_admin(update)
+        if user is None:
             return
 
         try:
@@ -44,10 +41,8 @@ class AdminMonitoringMixin:
 
     async def admin_health_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show health details for admins."""
-        user = await self._get_or_create_user(update)
-
-        if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您没有管理员权限")
+        user = await self._require_admin(update)
+        if user is None:
             return
 
         try:

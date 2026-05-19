@@ -4,6 +4,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 from .bitget_errors import classify_bitget_exception
+from .bot_account_formatters import format_usdt_balance_text
+from .bot_api_setup_service import TelegramApiSetupService
 from .bot_keyboards import (
     main_menu_keyboard,
     status_actions_keyboard,
@@ -11,7 +13,7 @@ from .bot_keyboards import (
 )
 from .bot_messages import help_message, settings_message, welcome_message
 from .bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
-from .bot_states import WAITING_API_KEY, WAITING_PASSPHRASE, WAITING_SECRET_KEY
+from .bot_states import WAITING_API_KEY
 from .log_sanitizer import summarize_balance_response
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,17 @@ logger = logging.getLogger(__name__)
 class AccountHandlersMixin(UserSessionMixin):
     async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
         return None
+
+    def _api_setup_service(self) -> TelegramApiSetupService:
+        return TelegramApiSetupService(
+            user_repo=self.user_repo,
+            trade_manager=self.trade_manager,
+            encryption_manager=self.encryption_manager,
+            session_owner=self,
+            get_or_create_user=self._get_or_create_user,
+            log_user_action=self._log_user_action,
+            record_bitget_failure_alert=self._record_bitget_failure_alert,
+        )
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start."""
@@ -110,7 +123,7 @@ class AccountHandlersMixin(UserSessionMixin):
 
             if balance_data.get("code") == "00000" and balance_data.get("data"):
                 assets = balance_data["data"]
-                balance_text = self._format_usdt_balance_text(assets, raw_limit=500, compact=True)
+                balance_text = format_usdt_balance_text(assets, raw_limit=500, compact=True)
 
                 keyboard = [
                     [InlineKeyboardButton("🔄 刷新余额", callback_data="refresh_balance")],
@@ -162,150 +175,15 @@ class AccountHandlersMixin(UserSessionMixin):
 
     async def set_api_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Store API key during setup."""
-        user = await self._get_or_create_user(update)
-        if await self._reply_if_session_expired(update, user.telegram_id):
-            return ConversationHandler.END
-
-        session = self.get_active_user_session(user.telegram_id)
-        if not session:
-            await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
-            return ConversationHandler.END
-
-        api_key = update.message.text.strip()
-
-        try:
-            await update.message.delete()
-        except Exception as e:
-            logger.warning(f"Failed to delete API key message: {e}")
-
-        if not api_key or len(api_key) < 10:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ API Key 格式不正确，请重新输入：",
-            )
-            self.update_user_session(user.telegram_id, {"step": "api_key"})
-            return WAITING_API_KEY
-
-        self.update_user_session(user.telegram_id, {"api_key": api_key, "step": "secret_key"})
-
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="✅ API Key 已保存\n\n**第 2 步：Secret Key**\n请发送您的 Secret Key",
-        )
-
-        return WAITING_SECRET_KEY
+        return await self._api_setup_service().set_api_key(update, context)
 
     async def set_secret_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Store secret key during setup."""
-        user = await self._get_or_create_user(update)
-        if await self._reply_if_session_expired(update, user.telegram_id):
-            return ConversationHandler.END
-
-        session = self.get_active_user_session(user.telegram_id)
-        if not session:
-            await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
-            return ConversationHandler.END
-
-        secret_key = update.message.text.strip()
-
-        try:
-            await update.message.delete()
-        except Exception as e:
-            logger.warning(f"Failed to delete secret key message: {e}")
-
-        if not secret_key or len(secret_key) < 10:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ Secret Key 格式不正确，请重新输入：",
-            )
-            self.update_user_session(user.telegram_id, {"step": "secret_key"})
-            return WAITING_SECRET_KEY
-
-        self.update_user_session(user.telegram_id, {"secret_key": secret_key, "step": "passphrase"})
-
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="✅ Secret Key 已保存\n\n**第 3 步：Passphrase**\n请发送您的 Passphrase",
-        )
-
-        return WAITING_PASSPHRASE
+        return await self._api_setup_service().set_secret_key(update, context)
 
     async def set_passphrase(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Store passphrase and finish API setup."""
-        user = await self._get_or_create_user(update)
-        if await self._reply_if_session_expired(update, user.telegram_id):
-            return ConversationHandler.END
-
-        session = self.get_active_user_session(user.telegram_id)
-        if not session:
-            await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
-            return ConversationHandler.END
-
-        passphrase = update.message.text.strip()
-
-        try:
-            await update.message.delete()
-        except Exception as e:
-            logger.warning(f"Failed to delete passphrase message: {e}")
-
-        if not passphrase:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ Passphrase 不能为空，请重新输入：",
-            )
-            self.update_user_session(user.telegram_id, {"step": "passphrase"})
-            return WAITING_PASSPHRASE
-
-        api_key = session.get("api_key")
-        secret_key = session.get("secret_key")
-
-        if not all([api_key, secret_key]):
-            self.user_sessions.pop(user.telegram_id, None)
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ 设置过程中出现错误，请重新开始。",
-            )
-            return ConversationHandler.END
-
-        try:
-            test_msg = await context.bot.send_message(chat_id=update.effective_chat.id, text="🔄 正在测试 API 连接...")
-
-            credentials = self.encryption_manager.encrypt_api_credentials(api_key, secret_key, passphrase)
-            is_connected, message = await self.trade_manager.test_api_connection(credentials)
-
-            if is_connected:
-                await self.user_repo.update_user_api_credentials(
-                    user.id, credentials[0], credentials[1], credentials[2]
-                )
-
-                await self._log_user_action(user, "api_setup_success")
-
-                await test_msg.edit_text(
-                    "✅ **API 设置成功！**\n\n"
-                    "您的 API 密钥已加密保存，现在可以开始使用交易功能。\n\n"
-                    "使用 `/status` 检查连接状态\n"
-                    "使用 `/settings` 设置交易参数（1R愿意承受止损金额）",
-                    parse_mode="Markdown",
-                )
-            else:
-                await test_msg.edit_text(
-                    f"❌ **API 连接测试失败**\n\n错误信息: {message}\n\n请检查您的 API 凭证是否正确，然后重新设置。",
-                    parse_mode="Markdown",
-                )
-
-        except Exception as e:
-            logger.error(f"API setup failed: {e}")
-            classified = classify_bitget_exception(e)
-            await self._record_bitget_failure_alert(classified, "set_passphrase", {"telegram_id": user.telegram_id})
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=f"❌ {classified.user_message}",
-            )
-
-        finally:
-            self.user_sessions.pop(user.telegram_id, None)
-
-        return ConversationHandler.END
+        return await self._api_setup_service().set_passphrase(update, context)
 
     async def settings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /settings."""
@@ -486,7 +364,7 @@ class AccountHandlersMixin(UserSessionMixin):
 
             if balance_data.get("code") == "00000" and balance_data.get("data"):
                 assets = balance_data["data"]
-                balance_text = self._format_usdt_balance_text(assets, raw_limit=300, compact=False)
+                balance_text = format_usdt_balance_text(assets, raw_limit=300, compact=False)
 
                 keyboard = [
                     [InlineKeyboardButton("🔄 刷新", callback_data="refresh_balance")],
@@ -536,50 +414,3 @@ class AccountHandlersMixin(UserSessionMixin):
             "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n请输入定 R 金额 u（数字）：",
             parse_mode="Markdown",
         )
-
-    def _format_usdt_balance_text(self, assets, raw_limit: int, compact: bool) -> str:
-        """Format account balance API payload for display."""
-        balance_text = "💰 **U本位合约账户余额**\n\n"
-        found_assets = False
-
-        if isinstance(assets, list):
-            for asset in assets:
-                coin = asset.get("coin") or asset.get("marginCoin") or asset.get("currency", "")
-                if coin == "USDT":
-                    available = float(asset.get("available") or asset.get("availableBalance") or asset.get("equity", 0))
-                    frozen = float(asset.get("frozen") or asset.get("locked") or asset.get("freezeBalance", 0))
-                    total = available + frozen
-
-                    if total > 0:
-                        balance_text += "**USDT:**\n"
-                        balance_text += f"  可用: {available:.4f}\n"
-                        balance_text += f"  冻结: {frozen:.4f}\n"
-                        balance_text += f"  总计: {total:.4f}\n\n"
-                        found_assets = True
-                        break
-        elif isinstance(assets, dict):
-            if "USDT" in assets:
-                usdt_data = assets["USDT"]
-                available = float(
-                    usdt_data.get("available") or usdt_data.get("availableBalance") or usdt_data.get("equity", 0)
-                )
-                frozen = float(usdt_data.get("frozen") or usdt_data.get("locked") or usdt_data.get("freezeBalance", 0))
-                total = available + frozen
-
-                if total > 0:
-                    balance_text += "**USDT:**\n"
-                    balance_text += f"  可用: {available:.4f}\n"
-                    balance_text += f"  冻结: {frozen:.4f}\n"
-                    balance_text += f"  总计: {total:.4f}\n\n"
-                    found_assets = True
-
-        if not found_assets:
-            empty_text = "暂无 USDT 资产或余额为零" if compact else "暂无 USDT 资产或余额为零"
-            balance_text += f"{empty_text}\n\n"
-            balance_text += f"📊 **原始API数据：**\n```\n{str(assets)[:raw_limit]}...\n```\n\n"
-
-        if compact:
-            balance_text += "ℹ️ **说明：** 仅显示 U 本位合约账户的 USDT 余额"
-        else:
-            balance_text += "ℹ️ **说明：** 仅显示 U 本位合约账户的 USDT 余额"
-        return balance_text

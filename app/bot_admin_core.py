@@ -6,7 +6,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from .audit import emit_audit_event
-from .config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -14,10 +13,8 @@ logger = logging.getLogger(__name__)
 class AdminCoreMixin:
     async def add_trader_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Add a signal sender."""
-        user = await self._get_or_create_user(update)
-
-        if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您没有管理员权限")
+        user = await self._require_admin(update)
+        if user is None:
             return
 
         if not context.args:
@@ -77,10 +74,8 @@ class AdminCoreMixin:
 
     async def admin_users_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """List active users for admins."""
-        user = await self._get_or_create_user(update)
-
-        if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您没有管理员权限")
+        user = await self._require_admin(update)
+        if user is None:
             return
 
         try:
@@ -111,10 +106,8 @@ class AdminCoreMixin:
 
     async def admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show admin panel."""
-        user = await self._get_or_create_user(update)
-
-        if not Config.is_admin(user.telegram_id):
-            await update.message.reply_text("❌ 您没有管理员权限")
+        user = await self._require_admin(update)
+        if user is None:
             return
 
         try:

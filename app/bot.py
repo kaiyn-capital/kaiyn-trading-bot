@@ -25,6 +25,7 @@ from .audit import record_audit_event
 from .bitget_api import BitgetTradeManager
 from .bot_account_handlers import AccountHandlersMixin
 from .bot_admin_handlers import AdminHandlersMixin
+from .bot_admin_permissions import ADMIN_PERMISSION_DENIED_MESSAGE
 from .bot_order_handlers import OrderHandlersMixin
 from .bot_states import WAITING_API_KEY, WAITING_PASSPHRASE, WAITING_SECRET_KEY
 from .config import Config
@@ -46,6 +47,15 @@ logger = logging.getLogger(__name__)
 
 class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
     """Telegram bot entry point and handler registry."""
+
+    ADMIN_CALLBACKS = frozenset(
+        {
+            "add_new_channel",
+            "manage_channels",
+            "delete_channel_start",
+            "return_admin_channels",
+        }
+    )
 
     def __init__(self):
         self.token = Config.TELEGRAM_BOT_TOKEN
@@ -147,6 +157,10 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         """Return whether a group callback is allowed to start the order flow."""
         return isinstance(data, str) and data.startswith("place_order_")
 
+    def _is_admin_callback(self, data: str | None) -> bool:
+        """Return whether a callback is restricted to admins."""
+        return isinstance(data, str) and data in self.ADMIN_CALLBACKS
+
     async def _get_or_create_user(self, update: Update) -> User:
         """Get or create the current Telegram user."""
         telegram_user = update.effective_user
@@ -221,6 +235,62 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         except Exception as exc:
             logger.error(f"Failed to record Bitget alert: {exc}")
 
+    def _exact_callback_handlers(self):
+        return {
+            "setup_api": self._handle_setup_api_callback,
+            "check_status": self._handle_status_callback,
+            "check_balance": self._handle_balance_callback,
+            "refresh_balance": self._handle_balance_callback,
+            "trading_settings": self._handle_trading_settings_callback,
+            "set_risk_amount": self._handle_set_risk_start_callback,
+            "confirm_modify_api": self._handle_confirm_modify_api,
+            "cancel_modify_api": self._handle_cancel_modify_api_callback,
+            "confirm_change_risk": self._handle_confirm_change_risk,
+            "cancel_change_risk": self._handle_cancel_change_risk_callback,
+            "return_start": self._handle_return_start_callback,
+            "cancel_order": self._handle_cancel_order_callback,
+            "add_new_channel": self._handle_add_new_channel_callback,
+            "manage_channels": self._handle_manage_channels_callback,
+            "delete_channel_start": self._handle_delete_channel_start_callback,
+            "return_admin_channels": self._handle_return_admin_channels_callback,
+        }
+
+    def _prefix_callback_handlers(self):
+        return (
+            ("place_order_", self._handle_place_order_callback),
+            ("confirm_order_", self._handle_confirm_pending_order_callback),
+            ("cancel_order_", self._handle_cancel_pending_order_callback),
+        )
+
+    async def _dispatch_button_callback(self, query, user, data: str | None) -> bool:
+        if not isinstance(data, str):
+            return False
+
+        exact_handler = self._exact_callback_handlers().get(data)
+        if exact_handler:
+            await exact_handler(query, user)
+            return True
+
+        for prefix, prefix_handler in self._prefix_callback_handlers():
+            if data.startswith(prefix):
+                await prefix_handler(query, user, data)
+                return True
+
+        return False
+
+    async def _handle_cancel_modify_api_callback(self, query, user):
+        await query.answer("已取消")
+        await query.edit_message_text("✅ 已取消修改 API 设置")
+
+    async def _handle_cancel_change_risk_callback(self, query, user):
+        await query.answer("已取消")
+        self.user_sessions.pop(user.telegram_id, None)
+        await query.edit_message_text("✅ 已取消更改风险设置")
+
+    async def _handle_cancel_order_callback(self, query, user):
+        await query.answer("已取消下单")
+        await self._send_private_message(query, user, "✅ 已取消下单")
+
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Route all inline keyboard callbacks."""
         query = update.callback_query
@@ -230,52 +300,16 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             await query.answer("请到与机器人的私人聊天操作", show_alert=True)
             return
 
-        await query.answer()
-
         user = await self._get_or_create_user(update)
 
         try:
-            if data == "setup_api":
-                await self._handle_setup_api_callback(query, user)
-            elif data == "check_status":
-                await self._handle_status_callback(query, user)
-            elif data == "check_balance" or data == "refresh_balance":
-                await self._handle_balance_callback(query, user)
-            elif data == "trading_settings":
-                await self._handle_trading_settings_callback(query, user)
-            elif data == "set_risk_amount":
-                await self._handle_set_risk_start_callback(query, user)
-            elif data.startswith("place_order_"):
-                await self._handle_place_order_callback(query, user, data)
-            elif data == "confirm_modify_api":
-                await self._handle_confirm_modify_api(query, user)
-            elif data == "cancel_modify_api":
-                await query.answer("已取消")
-                await query.edit_message_text("✅ 已取消修改 API 设置")
-            elif data == "confirm_change_risk":
-                await self._handle_confirm_change_risk(query, user)
-            elif data == "cancel_change_risk":
-                await query.answer("已取消")
-                self.user_sessions.pop(user.telegram_id, None)
-                await query.edit_message_text("✅ 已取消更改风险设置")
-            elif data == "return_start":
-                await self._handle_return_start_callback(query, user)
-            elif data.startswith("confirm_order_"):
-                await self._handle_confirm_pending_order_callback(query, user, data)
-            elif data.startswith("cancel_order_"):
-                await self._handle_cancel_pending_order_callback(query, user, data)
-            elif data == "cancel_order":
-                await query.answer("已取消下单")
-                await self._send_private_message(query, user, "✅ 已取消下单")
-            elif data == "add_new_channel":
-                await self._handle_add_new_channel_callback(query, user)
-            elif data == "manage_channels":
-                await self._handle_manage_channels_callback(query, user)
-            elif data == "delete_channel_start":
-                await self._handle_delete_channel_start_callback(query, user)
-            elif data == "return_admin_channels":
-                await self._handle_return_admin_channels_callback(query, user)
-            else:
+            if self._is_admin_callback(data) and not self._is_admin_user(user):
+                await query.answer(ADMIN_PERMISSION_DENIED_MESSAGE, show_alert=True)
+                return
+
+            await query.answer()
+            handled = await self._dispatch_button_callback(query, user, data)
+            if not handled:
                 await query.edit_message_text("❓ 未知操作")
 
         except Exception as e:

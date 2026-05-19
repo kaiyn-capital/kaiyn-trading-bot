@@ -25,15 +25,75 @@ class FakeBot:
         self.messages = []
 
     async def send_message(self, chat_id, text, **kwargs):
-        self.messages.append({"chat_id": chat_id, "text": text, "kwargs": kwargs})
+        message = FakeSentMessage(chat_id, text, kwargs)
+        self.messages.append(message)
+        return message
+
+
+class FakeSentMessage:
+    def __init__(self, chat_id, text, kwargs):
+        self.chat_id = chat_id
+        self.text = text
+        self.kwargs = kwargs
+        self.edits = []
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    async def edit_text(self, text, **kwargs):
+        self.edits.append({"text": text, "kwargs": kwargs})
 
 
 class FakeUserRepo:
     def __init__(self):
         self.risk_updates = []
+        self.api_updates = []
 
     async def update_user_risk_amount(self, user_id, amount):
         self.risk_updates.append({"user_id": user_id, "amount": amount})
+        return True
+
+    async def update_user_api_credentials(
+        self,
+        user_id,
+        encrypted_api_key,
+        encrypted_secret_key,
+        encrypted_passphrase,
+    ):
+        self.api_updates.append(
+            {
+                "user_id": user_id,
+                "encrypted_api_key": encrypted_api_key,
+                "encrypted_secret_key": encrypted_secret_key,
+                "encrypted_passphrase": encrypted_passphrase,
+            }
+        )
+        return True
+
+
+class FakeEncryptionManager:
+    def encrypt_api_credentials(self, api_key, secret_key, passphrase):
+        return (
+            f"encrypted:{api_key}",
+            f"encrypted:{secret_key}",
+            f"encrypted:{passphrase}",
+        )
+
+
+class FakeTradeManager:
+    def __init__(self, *, is_connected=True):
+        self.is_connected = is_connected
+        self.connection_tests = []
+        self.invalidated_user_ids = []
+
+    async def test_api_connection(self, credentials):
+        self.connection_tests.append(credentials)
+        if self.is_connected:
+            return True, "API 連接成功"
+        return False, "invalid credentials"
+
+    async def invalidate_user_client(self, user_id):
+        self.invalidated_user_ids.append(user_id)
         return True
 
 
@@ -43,12 +103,21 @@ class FakeAccountHandler(AccountHandlersMixin):
         self.now = datetime(2026, 5, 18, 12, 0, 0)
         self.user = SimpleNamespace(id=1, telegram_id=123)
         self.user_repo = FakeUserRepo()
+        self.encryption_manager = FakeEncryptionManager()
+        self.trade_manager = FakeTradeManager()
+        self.logged_actions = []
 
     def _session_now(self):
         return self.now
 
     async def _get_or_create_user(self, update):
         return self.user
+
+    async def _log_user_action(self, user, action):
+        self.logged_actions.append({"user_id": user.id, "action": action})
+
+    async def _record_bitget_failure_alert(self, classified, operation, context):
+        pass
 
 
 def make_update(text):
@@ -175,6 +244,70 @@ def test_expired_passphrase_session_does_not_use_partial_credentials():
     assert update.message.deleted is False
     assert update.message.replies == [{"text": SESSION_EXPIRED_MESSAGE, "kwargs": {}}]
     assert context.bot.messages == []
+
+
+def test_successful_api_setup_invalidates_cached_trade_client():
+    handler = FakeAccountHandler()
+    handler.set_user_session(
+        123,
+        {
+            "step": "passphrase",
+            "api_key": "valid-api-key-123",
+            "secret_key": "valid-secret-key-123",
+        },
+    )
+    update = make_update("valid-passphrase")
+    context = make_context()
+
+    result = asyncio.run(handler.set_passphrase(update, context))
+
+    assert result == -1
+    assert update.message.deleted is True
+    assert handler.user_sessions == {}
+    assert handler.trade_manager.connection_tests == [
+        (
+            "encrypted:valid-api-key-123",
+            "encrypted:valid-secret-key-123",
+            "encrypted:valid-passphrase",
+        )
+    ]
+    assert handler.user_repo.api_updates == [
+        {
+            "user_id": 1,
+            "encrypted_api_key": "encrypted:valid-api-key-123",
+            "encrypted_secret_key": "encrypted:valid-secret-key-123",
+            "encrypted_passphrase": "encrypted:valid-passphrase",
+        }
+    ]
+    assert handler.trade_manager.invalidated_user_ids == [1]
+    assert handler.logged_actions == [{"user_id": 1, "action": "api_setup_success"}]
+    assert context.bot.messages[0].text == "🔄 正在测试 API 连接..."
+    assert context.bot.messages[0].edits[-1]["text"].startswith("✅ **API 设置成功！**")
+
+
+def test_failed_api_setup_does_not_invalidate_cached_trade_client():
+    handler = FakeAccountHandler()
+    handler.trade_manager = FakeTradeManager(is_connected=False)
+    handler.set_user_session(
+        123,
+        {
+            "step": "passphrase",
+            "api_key": "valid-api-key-123",
+            "secret_key": "valid-secret-key-123",
+        },
+    )
+    update = make_update("valid-passphrase")
+    context = make_context()
+
+    result = asyncio.run(handler.set_passphrase(update, context))
+
+    assert result == -1
+    assert update.message.deleted is True
+    assert handler.user_sessions == {}
+    assert handler.user_repo.api_updates == []
+    assert handler.trade_manager.invalidated_user_ids == []
+    assert handler.logged_actions == []
+    assert context.bot.messages[0].edits[-1]["text"].startswith("❌ **API 连接测试失败**")
 
 
 def test_expired_risk_amount_session_does_not_update_amount_and_only_prompts_once():

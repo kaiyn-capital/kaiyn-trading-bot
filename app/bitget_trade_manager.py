@@ -1,0 +1,181 @@
+import logging
+from typing import Dict, List, Tuple
+
+from .bitget_client import BitgetAPIClient
+from .bitget_errors import BitgetAPIError, classify_bitget_exception
+from .bitget_public_market import BitgetPublicMarket
+from .encryption import EncryptionManager
+from .log_sanitizer import summarize_order_response
+
+logger = logging.getLogger(__name__)
+
+
+class BitgetTradeManager:
+    """Higher-level Bitget trading operations for bot users."""
+
+    def __init__(self, encryption_manager: EncryptionManager):
+        self.encryption_manager = encryption_manager
+        self._clients = {}
+        self.public_market = BitgetPublicMarket()
+
+    def _get_client(self, user_id: int, encrypted_credentials: Tuple[str, str, str]) -> BitgetAPIClient:
+        if user_id not in self._clients:
+            api_key, secret_key, passphrase = self.encryption_manager.decrypt_api_credentials(*encrypted_credentials)
+            self._clients[user_id] = BitgetAPIClient(api_key, secret_key, passphrase)
+
+        return self._clients[user_id]
+
+    async def invalidate_user_client(self, user_id: int) -> bool:
+        """Remove and close a cached authenticated client for one user."""
+        client = self._clients.pop(user_id, None)
+        if not client:
+            return False
+
+        try:
+            await client.close()
+        except Exception:
+            logger.warning("Failed to close cached Bitget client for user_id=%s", user_id, exc_info=True)
+
+        return True
+
+    async def test_api_connection(self, encrypted_credentials: Tuple[str, str, str]) -> Tuple[bool, str]:
+        client = None
+        try:
+            api_key, secret_key, passphrase = self.encryption_manager.decrypt_api_credentials(*encrypted_credentials)
+            client = BitgetAPIClient(api_key, secret_key, passphrase)
+
+            result = await client.get_account_assets()
+
+            if result.get("code") == "00000":
+                return True, "API 連接成功"
+            else:
+                return False, f"API 錯誤: {result.get('msg', 'Unknown error')}"
+
+        except BitgetAPIError as e:
+            classified = classify_bitget_exception(e)
+            return False, classified.user_message
+        except Exception as e:
+            logger.error(f"API 連接測試失敗: {e}")
+            classified = classify_bitget_exception(e)
+            return False, classified.user_message
+        finally:
+            if client:
+                await client.close()
+
+    async def get_account_balance(self, user_id: int, encrypted_credentials: Tuple[str, str, str]) -> Dict:
+        client = self._get_client(user_id, encrypted_credentials)
+        return await client.get_account_assets()
+
+    async def get_user_uid(self, encrypted_credentials: Tuple[str, str, str]) -> str:
+        try:
+            api_key, secret_key, passphrase = self.encryption_manager.decrypt_api_credentials(*encrypted_credentials)
+            client = BitgetAPIClient(api_key, secret_key, passphrase)
+
+            result = await client.get_account_uid()
+            await client.close()
+
+            if result.get("code") == "00000" and result.get("data"):
+                return result["data"].get("userId", "Unknown")
+            else:
+                return "Unknown"
+
+        except Exception as e:
+            logger.error(f"Failed to get user UID: {e}")
+            return "Unknown"
+
+    async def get_market_price(self, symbol: str) -> float:
+        return await self.public_market.get_market_price(symbol)
+
+    async def get_trading_pairs(self, product_type: str = "USDT-FUTURES", force_refresh: bool = False) -> List[Dict]:
+        return await self.public_market.get_trading_pairs(product_type, force_refresh=force_refresh)
+
+    async def get_contract_rules(self, symbol: str, product_type: str = "USDT-FUTURES") -> Dict:
+        return await self.public_market.get_contract_rules(symbol, product_type)
+
+    async def place_market_order(
+        self,
+        user_id: int,
+        encrypted_credentials: Tuple[str, str, str],
+        symbol: str,
+        side: str,
+        size: str,
+        client_order_id: str = None,
+        margin_coin: str = "USDT",
+        trade_side: str = "open",
+        stop_loss_price: float = None,
+        take_profit_price: float = None,
+    ) -> Dict:
+        client = self._get_client(user_id, encrypted_credentials)
+
+        result = await client.place_order(
+            symbol=symbol,
+            side=side,
+            order_type="market",
+            size=size,
+            client_order_id=client_order_id,
+            margin_coin=margin_coin,
+            margin_mode="crossed",
+            trade_side=trade_side,
+            stop_loss_price=str(stop_loss_price) if stop_loss_price else None,
+            take_profit_price=str(take_profit_price) if take_profit_price else None,
+        )
+        logger.info("Market order placed summary: %s", summarize_order_response(result))
+        return result
+
+    async def place_limit_order(
+        self,
+        user_id: int,
+        encrypted_credentials: Tuple[str, str, str],
+        symbol: str,
+        side: str,
+        size: str,
+        price: str,
+        client_order_id: str = None,
+        margin_coin: str = "USDT",
+        trade_side: str = "open",
+        stop_loss_price: float = None,
+        take_profit_price: float = None,
+        force: str = "gtc",
+    ) -> Dict:
+        client = self._get_client(user_id, encrypted_credentials)
+        return await client.place_order(
+            symbol=symbol,
+            side=side,
+            order_type="limit",
+            size=size,
+            price=price,
+            client_order_id=client_order_id,
+            margin_coin=margin_coin,
+            margin_mode="crossed",
+            trade_side=trade_side,
+            stop_loss_price=str(stop_loss_price) if stop_loss_price else None,
+            take_profit_price=str(take_profit_price) if take_profit_price else None,
+            force=force,
+        )
+
+    async def get_order_status(
+        self,
+        user_id: int,
+        encrypted_credentials: Tuple[str, str, str],
+        symbol: str,
+        order_id: str = None,
+        client_order_id: str = None,
+    ) -> Dict:
+        client = self._get_client(user_id, encrypted_credentials)
+        return await client.get_order_info(symbol, order_id, client_order_id)
+
+    async def cancel_order(
+        self,
+        user_id: int,
+        encrypted_credentials: Tuple[str, str, str],
+        symbol: str,
+        order_id: str = None,
+        client_order_id: str = None,
+    ) -> Dict:
+        client = self._get_client(user_id, encrypted_credentials)
+        return await client.cancel_order(symbol, order_id, client_order_id)
+
+    async def cleanup(self):
+        for client in self._clients.values():
+            await client.close()
+        self._clients.clear()
