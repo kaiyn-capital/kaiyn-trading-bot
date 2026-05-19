@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 
 from app.bot_order_handlers import OrderHandlersMixin
+from app.config import Config
 
 
 class FakeMessage:
@@ -15,9 +16,16 @@ class FakeMessage:
 class FakeBot:
     def __init__(self):
         self.sent_messages = []
+        self.sent_photos = []
+        self.fail_photo = False
 
     async def send_message(self, **kwargs):
         self.sent_messages.append(kwargs)
+
+    async def send_photo(self, **kwargs):
+        if self.fail_photo:
+            raise RuntimeError("photo failed")
+        self.sent_photos.append(kwargs)
 
 
 class FakeChannelRepo:
@@ -54,6 +62,14 @@ class FakeOrderHandler(OrderHandlersMixin):
     async def _audit_action(self, user, action, details=None):
         self.audit_events.append({"action": action, "details": details or {}})
 
+    async def _create_signal_chart(self, signal):
+        return b"fake-png"
+
+
+class FailingChartOrderHandler(FakeOrderHandler):
+    async def _create_signal_chart(self, signal):
+        raise RuntimeError("chart failed")
+
 
 def make_update():
     return SimpleNamespace(message=FakeMessage())
@@ -66,7 +82,8 @@ def make_context():
     )
 
 
-def test_send_signal_forwards_to_configured_topic():
+def test_send_signal_forwards_to_configured_topic(monkeypatch):
+    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
     handler = FakeOrderHandler()
     update = make_update()
     context = make_context()
@@ -78,7 +95,8 @@ def test_send_signal_forwards_to_configured_topic():
     assert first_message["message_thread_id"] == 456
 
 
-def test_send_signal_without_topic_omits_message_thread_id():
+def test_send_signal_without_topic_omits_message_thread_id(monkeypatch):
+    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
     handler = FakeOrderHandler()
     update = make_update()
     context = make_context()
@@ -90,7 +108,8 @@ def test_send_signal_without_topic_omits_message_thread_id():
     assert "message_thread_id" not in second_message
 
 
-def test_send_signal_records_audit_summary():
+def test_send_signal_records_audit_summary(monkeypatch):
+    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
     handler = FakeOrderHandler()
     update = make_update()
     context = make_context()
@@ -103,4 +122,59 @@ def test_send_signal_records_audit_summary():
     assert audit["details"]["direction"] == "short"
     assert audit["details"]["remark"] == "等待回踩后执行"
     assert audit["details"]["target_count"] == 2
+    assert audit["details"]["sent_count"] == 2
+    assert audit["details"]["chart_status"] == "disabled"
+
+
+def test_send_signal_sends_chart_photo_to_configured_topic(monkeypatch):
+    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
+    monkeypatch.setattr(Config, "SIGNAL_CHART_TIMEOUT_SECONDS", 1.0)
+    handler = FakeOrderHandler()
+    update = make_update()
+    context = make_context()
+
+    asyncio.run(handler.send_signal_command(update, context))
+
+    first_photo = context.bot.sent_photos[0]
+    assert first_photo["chat_id"] == "-1001"
+    assert first_photo["message_thread_id"] == 456
+    assert first_photo["caption"].startswith("🚨 **交易信号**")
+    assert first_photo["parse_mode"] == "Markdown"
+    assert first_photo["reply_markup"] is not None
+    assert not context.bot.sent_messages
+    assert handler.audit_events[-1]["details"]["chart_status"] == "generated"
+
+
+def test_send_signal_falls_back_to_text_when_photo_send_fails(monkeypatch):
+    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
+    monkeypatch.setattr(Config, "SIGNAL_CHART_TIMEOUT_SECONDS", 1.0)
+    handler = FakeOrderHandler()
+    update = make_update()
+    context = make_context()
+    context.bot.fail_photo = True
+
+    asyncio.run(handler.send_signal_command(update, context))
+
+    assert len(context.bot.sent_messages) == 2
+    assert context.bot.sent_messages[0]["message_thread_id"] == 456
+    assert context.bot.sent_messages[0]["text"].startswith("🚨 **交易信号**")
+    audit = handler.audit_events[-1]
+    assert audit["details"]["sent_count"] == 2
+    assert audit["details"]["chart_send_fallback_count"] == 2
+
+
+def test_send_signal_falls_back_to_text_when_chart_generation_fails(monkeypatch):
+    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
+    monkeypatch.setattr(Config, "SIGNAL_CHART_TIMEOUT_SECONDS", 1.0)
+    handler = FailingChartOrderHandler()
+    update = make_update()
+    context = make_context()
+
+    asyncio.run(handler.send_signal_command(update, context))
+
+    assert len(context.bot.sent_messages) == 2
+    assert not context.bot.sent_photos
+    audit = handler.audit_events[-1]
+    assert audit["details"]["chart_status"] == "failed"
+    assert audit["details"]["chart_error"] == "RuntimeError"
     assert audit["details"]["sent_count"] == 2

@@ -182,6 +182,7 @@ docker compose up -d bot maintenance db-backup
 | `ENCRYPTION_KEY` | Fernet 金鑰，用於加密 Bitget API 憑證 |
 | `DATABASE_URL` | PostgreSQL 非同步連線 URL |
 | `BITGET_API_URL` | Bitget API 基礎 URL |
+| `SIGNAL_CHART_*` | `/send_signal` 附圖功能開關、K 線週期、K 線數量與 timeout |
 | `RETENTION_DAYS` | 累積紀錄與備份保留天數 |
 | `ADMIN_ALERT_*` / `BITGET_ALERT_*` | 管理員告警與 Bitget 連續錯誤門檻 |
 

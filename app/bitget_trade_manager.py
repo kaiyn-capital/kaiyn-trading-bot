@@ -6,6 +6,7 @@ from .bitget_errors import BitgetAPIError, classify_bitget_exception
 from .bitget_public_market import BitgetPublicMarket
 from .encryption import EncryptionManager
 from .log_sanitizer import summarize_order_response
+from .market_types import MarketCandle
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,15 @@ class BitgetTradeManager:
 
     async def get_contract_rules(self, symbol: str, product_type: str = "USDT-FUTURES") -> Dict:
         return await self.public_market.get_contract_rules(symbol, product_type)
+
+    async def get_candles(
+        self,
+        symbol: str,
+        granularity: str = "1H",
+        limit: int = 120,
+        product_type: str = "USDT-FUTURES",
+    ) -> list[MarketCandle]:
+        return await self.public_market.get_candles(symbol, granularity, limit, product_type)
 
     async def place_market_order(
         self,

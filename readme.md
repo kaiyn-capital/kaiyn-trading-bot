@@ -182,6 +182,7 @@ Production configuration is injected via `.env`. See [.env.template](.env.templa
 | `ENCRYPTION_KEY` | Fernet key for encrypting Bitget API credentials |
 | `DATABASE_URL` | PostgreSQL async connection URL |
 | `BITGET_API_URL` | Bitget API base URL |
+| `SIGNAL_CHART_*` | Optional `/send_signal` chart generation toggle, granularity, candle limit, and timeout |
 | `RETENTION_DAYS` | Number of days to retain accumulated records and backups |
 | `ADMIN_ALERT_*` / `BITGET_ALERT_*` | Admin alert and Bitget consecutive error thresholds |
 

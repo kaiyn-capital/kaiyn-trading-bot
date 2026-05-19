@@ -12,6 +12,13 @@ def _env_bool(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_float(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return float(value)
+
+
 class Config:
     # Telegram Bot
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -53,6 +60,10 @@ class Config:
     BITGET_ALERT_WINDOW_SECONDS = int(os.getenv("BITGET_ALERT_WINDOW_SECONDS", "600"))
     BACKUP_STALE_HOURS = int(os.getenv("BACKUP_STALE_HOURS", "36"))
     MAINTENANCE_STALE_HOURS = int(os.getenv("MAINTENANCE_STALE_HOURS", "36"))
+    SIGNAL_CHART_ENABLED = _env_bool("SIGNAL_CHART_ENABLED", True)
+    SIGNAL_CHART_GRANULARITY = os.getenv("SIGNAL_CHART_GRANULARITY", "1H")
+    SIGNAL_CHART_CANDLE_LIMIT = int(os.getenv("SIGNAL_CHART_CANDLE_LIMIT", "120"))
+    SIGNAL_CHART_TIMEOUT_SECONDS = _env_float("SIGNAL_CHART_TIMEOUT_SECONDS", 8.0)
 
     # Trading Limits
     MAX_DAILY_TRADES = int(os.getenv("MAX_DAILY_TRADES", "10"))

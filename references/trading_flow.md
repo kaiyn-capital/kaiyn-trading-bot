@@ -5,7 +5,7 @@
 ## Signal Flow
 
 1. 管理員或發單員使用 `/send_signal` 發送交易信號。
-2. Bot 將信號轉發到已啟用的頻道或群組，並附上「市价下单」與「挂单」按鈕。
+2. Bot 會嘗試從 Bitget 取得 K 線並產生黑底風險報酬圖，然後將信號轉發到已啟用的頻道或群組，並附上「市价下单」與「挂单」按鈕；附圖失敗時會退回純文字轉發。
 3. 使用者點擊任一下單方式後，Bot 檢查 API 設定與固定風險金額 1R。
 4. Bot 取得 Bitget 當前市價與 USDT-FUTURES 合約規則，計算倉位名義價值與數量。
 5. Bot 檢查交易對狀態、最小下單量、最小名義價值、數量/價格精度、單筆上限與止損方向。
@@ -29,6 +29,13 @@ GTC 限價掛單：
 - 送出 GTC limit order 並同時帶止損。
 - 成功後 `trades.status` 記為 `pending`。
 - 掛單價格已可能立即成交時，Bot 切換到市價下單確認流程並提示原因。
+
+## Signal Chart
+
+- 附圖功能由 `SIGNAL_CHART_ENABLED` 控制，預設開啟。
+- K 線預設使用 Bitget `USDT-FUTURES` market candle，週期 `SIGNAL_CHART_GRANULARITY=1H`，數量 `SIGNAL_CHART_CANDLE_LIMIT=120`。
+- 圖上的 entry 使用下單邏輯中的較差價格：Long 使用 entry 區間較高點，Short 使用 entry 區間較低點。
+- 多個 TP 時，主風險報酬框使用最遠 TP，其餘 TP 以輔助線顯示。
 
 ## Position Sizing
 
