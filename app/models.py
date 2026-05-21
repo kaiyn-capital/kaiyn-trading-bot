@@ -58,6 +58,7 @@ class User(Base):
     trades = relationship("Trade", back_populates="user")
     notifications = relationship("NotificationLog", back_populates="user")
     pending_orders = relationship("PendingOrder", back_populates="user")
+    signal_records = relationship("SignalRecord", back_populates="user")
 
 
 class Trade(Base):
@@ -130,6 +131,63 @@ class PendingOrder(Base):
     # 關聯
     user = relationship("User", back_populates="pending_orders")
     trade = relationship("Trade", back_populates="pending_orders")
+
+
+class SignalRecord(Base):
+    __tablename__ = "signal_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(16), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    sender_telegram_id = Column(BigInteger, nullable=False, index=True)
+    sender_username = Column(String, nullable=True)
+
+    symbol = Column(String, nullable=False, index=True)
+    direction = Column(String, nullable=False)
+    entry_lower = Column(Float, nullable=False)
+    entry_upper = Column(Float, nullable=False)
+    stop_loss = Column(Float, nullable=False)
+    take_profit_levels = Column(Text, nullable=False)
+    remark = Column(Text, nullable=True)
+    signal_text = Column(Text, nullable=False)
+    granularity = Column(String, nullable=False)
+
+    status = Column(String, default="preview_pending", nullable=False, index=True)
+    chart_status = Column(String, nullable=True)
+    chart_error = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    confirmed_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="signal_records")
+    channel_messages = relationship(
+        "SignalChannelMessage",
+        back_populates="signal_record",
+        cascade="all, delete-orphan",
+    )
+
+    def set_take_profit_levels(self, levels: list[float]):
+        self.take_profit_levels = json.dumps(levels, ensure_ascii=False)
+
+    def get_take_profit_levels(self) -> list[float]:
+        if not self.take_profit_levels:
+            return []
+        return [float(level) for level in json.loads(self.take_profit_levels)]
+
+
+class SignalChannelMessage(Base):
+    __tablename__ = "signal_channel_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    signal_record_id = Column(Integer, ForeignKey("signal_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    chat_id = Column(String, nullable=False, index=True)
+    message_thread_id = Column(Integer, nullable=True)
+    telegram_message_id = Column(Integer, nullable=False)
+    sent_as = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    signal_record = relationship("SignalRecord", back_populates="channel_messages")
 
 
 class NotificationLog(Base):

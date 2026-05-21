@@ -99,8 +99,10 @@ class BitgetTradeManager:
         granularity: str = "1H",
         limit: int = 120,
         product_type: str = "USDT-FUTURES",
+        start_time=None,
+        end_time=None,
     ) -> list[MarketCandle]:
-        return await self.public_market.get_candles(symbol, granularity, limit, product_type)
+        return await self.public_market.get_candles(symbol, granularity, limit, product_type, start_time, end_time)
 
     async def place_market_order(
         self,

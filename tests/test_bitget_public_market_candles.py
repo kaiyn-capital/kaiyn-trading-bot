@@ -1,5 +1,5 @@
 import asyncio
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 
@@ -82,6 +82,29 @@ def test_get_candles_uses_bitget_contract_candle_endpoint(monkeypatch):
         "productType": "USDT-FUTURES",
         "kLineType": "MARKET",
     }
+
+
+def test_get_candles_accepts_time_window(monkeypatch):
+    response = FakeResponse(
+        200,
+        {
+            "code": "00000",
+            "data": [["1000", "100", "102", "98", "101", "1.5", "150"]],
+        },
+    )
+    client = FakeAsyncClient(response)
+    monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda timeout: client)
+
+    asyncio.run(
+        BitgetPublicMarket().get_candles(
+            "BTCUSDT",
+            start_time=datetime(2026, 5, 21, 1, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 5, 21, 2, 0, tzinfo=timezone.utc),
+        )
+    )
+
+    assert client.requests[0]["params"]["startTime"] == "1779325200000"
+    assert client.requests[0]["params"]["endTime"] == "1779328800000"
 
 
 def test_get_candles_raises_bitget_error_on_api_error(monkeypatch):

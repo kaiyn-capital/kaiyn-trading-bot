@@ -12,6 +12,7 @@ from .repositories import (
     ChannelRepository,
     NotificationRepository,
     PendingOrderRepository,
+    SignalRecordRepository,
     SystemLogRepository,
     TradeRepository,
     UserRepository,
@@ -25,6 +26,7 @@ __all__ = [
     "DatabaseManager",
     "NotificationRepository",
     "PendingOrderRepository",
+    "SignalRecordRepository",
     "SystemLogRepository",
     "TradeRepository",
     "UserRepository",
@@ -34,6 +36,7 @@ __all__ = [
     "get_db_manager",
     "get_notification_repo",
     "get_pending_order_repo",
+    "get_signal_record_repo",
     "get_system_log_repo",
     "get_trade_repo",
     "get_user_repo",
@@ -137,12 +140,13 @@ pending_order_repo = None
 notification_repo = None
 system_log_repo = None
 channel_repo = None
+signal_record_repo = None
 
 
 def init_database(database_url: str = None):
     """初始化資料庫連線物件，不建立資料表。"""
     global db_manager, user_repo, trade_repo, pending_order_repo
-    global notification_repo, system_log_repo, channel_repo
+    global notification_repo, system_log_repo, channel_repo, signal_record_repo
 
     if database_url is None:
         database_url = Config.DATABASE_URL
@@ -157,6 +161,7 @@ def init_database(database_url: str = None):
     notification_repo = NotificationRepository(db_manager)
     system_log_repo = SystemLogRepository(db_manager)
     channel_repo = ChannelRepository(db_manager)
+    signal_record_repo = SignalRecordRepository(db_manager)
 
     logger.info("Database manager initialized successfully")
 
@@ -208,6 +213,13 @@ def get_channel_repo() -> ChannelRepository:
     if channel_repo is None:
         init_database()
     return channel_repo
+
+
+def get_signal_record_repo() -> SignalRecordRepository:
+    """獲取交易信號倉庫"""
+    if signal_record_repo is None:
+        init_database()
+    return signal_record_repo
 
 
 async def health_check() -> bool:

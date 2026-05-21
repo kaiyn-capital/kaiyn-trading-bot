@@ -66,6 +66,15 @@ def signal_preview_keyboard(token: str) -> InlineKeyboardMarkup:
     )
 
 
+def chart_update_preview_keyboard(token: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ 确认转发", callback_data=f"confirm_chart_update_{token}")],
+            [InlineKeyboardButton("❌ 取消", callback_data=f"cancel_chart_update_{token}")],
+        ]
+    )
+
+
 def pending_order_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [

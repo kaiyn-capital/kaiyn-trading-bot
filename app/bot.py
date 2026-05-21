@@ -33,6 +33,7 @@ from .database import (
     get_channel_repo,
     get_notification_repo,
     get_pending_order_repo,
+    get_signal_record_repo,
     get_system_log_repo,
     get_trade_repo,
     get_user_repo,
@@ -66,6 +67,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         self.notification_repo = get_notification_repo()
         self.system_log_repo = get_system_log_repo()
         self.channel_repo = get_channel_repo()
+        self.signal_record_repo = get_signal_record_repo()
 
         self.encryption_manager = create_encryption_manager(Config.ENCRYPTION_KEY)
         self.trade_manager = BitgetTradeManager(self.encryption_manager)
@@ -111,6 +113,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         )
         self.application.add_handler(CommandHandler("add_channel", self.add_channel_command, filters=private_chat))
         self.application.add_handler(CommandHandler("send_signal", self.send_signal_command, filters=private_chat))
+        self.application.add_handler(CommandHandler("update_chart", self.update_chart_command, filters=private_chat))
         self.application.add_handler(
             CommandHandler("send_to_channel", self.send_to_channel_command, filters=private_chat)
         )
@@ -257,6 +260,8 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
     def _prefix_callback_handlers(self):
         return (
+            ("confirm_chart_update_", self._handle_confirm_chart_update_callback),
+            ("cancel_chart_update_", self._handle_cancel_chart_update_callback),
             ("confirm_signal_", self._handle_confirm_signal_callback),
             ("cancel_signal_", self._handle_cancel_signal_callback),
             ("place_order_", self._handle_place_order_callback),

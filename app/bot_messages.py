@@ -71,6 +71,7 @@ def help_message() -> str:
 **交易功能：**
 • `/settings` - 设置交易参数（1R 愿意承受止损金额）
 • `/balance` - 查看账户余额
+• `/update_chart` - 更新既有交易信号图表（原发单者或管理员）
 • 📊 **信号交易** - 当管理员发送交易信号时可一键下单
 
 **管理员功能：**（仅管理员可用）
@@ -120,7 +121,7 @@ def _format_signal_entry(signal: SignalDraft) -> str:
     return f"{upper}-{lower}"
 
 
-def signal_message(signal: SignalDraft, sender_username: str) -> str:
+def signal_message(signal: SignalDraft, sender_username: str, signal_id: str | None = None) -> str:
     direction_text = "多 Long" if signal.direction == "long" else "空 Short"
     tp_text = "/".join([_format_signal_price(tp) for tp in signal.take_profit_levels])
     signal_time = datetime.now(UTC_PLUS_8).strftime("%Y-%m-%d %H:%M:%S")
@@ -134,7 +135,19 @@ def signal_message(signal: SignalDraft, sender_username: str) -> str:
     if signal.remark:
         text += f"{escape_markdown(signal.remark)}\n"
     text += "\n"
+    if signal_id:
+        text += f"交易id: `{signal_id}`\n"
     text += f"⏰ {signal_time} UTC+8"
+    return text
+
+
+def chart_update_message(signal_id: str, remark: str = "") -> str:
+    update_time = datetime.now(UTC_PLUS_8).strftime("%Y-%m-%d %H:%M:%S")
+    text = ""
+    if remark:
+        text += f"{escape_markdown(remark)}\n\n"
+    text += f"交易id: `{signal_id}`\n"
+    text += f"⏰ {update_time} UTC+8"
     return text
 
 

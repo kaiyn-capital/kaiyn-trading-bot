@@ -33,6 +33,12 @@ def parse_bitget_candles_payload(raw_candles: list[list[str]]) -> list[MarketCan
     return sorted(candles, key=lambda candle: candle.timestamp)
 
 
+def _datetime_to_millis(value: datetime) -> int:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return int(value.timestamp() * 1000)
+
+
 class BitgetPublicMarket:
     """Public Bitget market data and contract-rule cache."""
 
@@ -177,6 +183,8 @@ class BitgetPublicMarket:
         granularity: str = "1H",
         limit: int = 120,
         product_type: str = "USDT-FUTURES",
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
     ) -> list[MarketCandle]:
         normalized_symbol = symbol.upper()
         endpoint = "/api/v2/mix/market/candles"
@@ -187,6 +195,10 @@ class BitgetPublicMarket:
             "productType": product_type,
             "kLineType": "MARKET",
         }
+        if start_time is not None:
+            params["startTime"] = str(_datetime_to_millis(start_time))
+        if end_time is not None:
+            params["endTime"] = str(_datetime_to_millis(end_time))
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:

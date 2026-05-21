@@ -5,16 +5,29 @@
 ## Signal Flow
 
 1. 管理員或發單員使用 `/send_signal` 建立交易信號。
-2. Bot 會嘗試從 Bitget 取得 K 線並產生黑底風險報酬圖，然後在私人聊天回傳轉發預覽與「确认转发 / 取消」按鈕；附圖失敗時會退回純文字預覽。
-3. 發單者需在 session TTL 內確認預覽；逾時、取消或被新的 `/send_signal` 預覽覆蓋時，不會轉發到群組。
-4. 發單者確認後，Bot 將信號轉發到已啟用的頻道或群組，並附上「市价下单」與「挂单」按鈕。
-5. 使用者點擊任一下單方式後，Bot 檢查 API 設定與固定風險金額 1R。
-6. Bot 取得 Bitget 當前市價與 USDT-FUTURES 合約規則，計算倉位名義價值與數量。
-7. Bot 檢查交易對狀態、最小下單量、最小名義價值、數量/價格精度、單筆上限與止損方向。
-8. 驗證通過後，Bot 將待確認訂單寫入 `pending_orders`，並發送確認/取消按鈕。
-9. 使用者確認後，Bot 使用 row lock 將 pending order 標為 `processing`，避免重複下單。
-10. 送單前 Bot 重新取得市價與合約規則再驗證一次。
-11. Bitget 下單完成後，Bot 更新 `trades` 與 `pending_orders` 狀態。
+2. Bot 產生永久 `交易id`，建立 `signal_records(status="preview_pending")`，並把 `交易id` 放入預覽文字。
+3. Bot 會嘗試從 Bitget 取得 K 線並產生黑底風險報酬圖，然後在私人聊天回傳轉發預覽與「确认转发 / 取消」按鈕；附圖失敗時會退回純文字預覽。
+4. 發單者需在 session TTL 內確認預覽；取消或被新的預覽覆蓋時，不會轉發到群組，紀錄會標記為 `cancelled` 或 `replaced`。
+5. 發單者確認後，Bot 將信號轉發到已啟用的頻道或群組，並附上「市价下单」與「挂单」按鈕。
+6. 每個成功轉發的群組/topic 會保存 Telegram `message_id` 到 `signal_channel_messages`，供 `/update_chart` 回覆原始發單信息。
+7. 使用者點擊任一下單方式後，Bot 檢查 API 設定與固定風險金額 1R。
+8. Bot 取得 Bitget 當前市價與 USDT-FUTURES 合約規則，計算倉位名義價值與數量。
+9. Bot 檢查交易對狀態、最小下單量、最小名義價值、數量/價格精度、單筆上限與止損方向。
+10. 驗證通過後，Bot 將待確認訂單寫入 `pending_orders`，並發送確認/取消按鈕。
+11. 使用者確認後，Bot 使用 row lock 將 pending order 標為 `processing`，避免重複下單。
+12. 送單前 Bot 重新取得市價與合約規則再驗證一次。
+13. Bitget 下單完成後，Bot 更新 `trades` 與 `pending_orders` 狀態。
+
+## Chart Update Flow
+
+1. 原發單者或管理員使用 `/update_chart 交易id [備註文字]`。
+2. Bot 讀取 `signal_records`，驗證交易 ID 存在、原信號狀態為 `sent`，且操作者是原發單者或管理員。
+3. Bot 讀取該信號原始成功轉發過的 `signal_channel_messages`；不會發到後來新增的群組。
+4. Bot 重新取得目前 K 線並生成更新圖表，將原始 entry、SL、TP 與風險報酬框延伸到最新位置。
+5. Bot 在私人聊天回傳更新圖表預覽與「确认转发 / 取消」按鈕；確認前不會發到群組。
+6. 確認後 Bot 逐一發到原始群組/topic，優先用 Telegram `reply_to_message_id` 回覆原發單訊息。
+7. 若回覆失敗，Bot 會在同一群組/topic 普通發送更新圖表；若圖片發送本身失敗，該目標計為失敗。
+8. 若 K 線資料不足以覆蓋原始發單時間，Bot 不產生近似圖並提示使用者。
 
 ## Order Modes
 
@@ -40,6 +53,7 @@ GTC 限價掛單：
 - 多個 TP 時，主風險報酬框使用最遠 TP，其餘 TP 以輔助線顯示。
 - 圖表輸出使用黑底與簡化時間軸，只顯示少量短日期標籤以避免 Telegram 預覽產生過多底部留白。
 - 信號圖表會先出現在私人聊天預覽，確認轉發後同一份圖表會發到已啟用自動轉發的頻道或群組。
+- `/update_chart` 圖表會以原始發單時間作為風險報酬框起點，並延伸到目前最新 K 線；暫不依浮盈/浮虧改變框顏色。
 
 ## Position Sizing
 
@@ -100,6 +114,8 @@ Schema 由 Alembic migration 管理。
 | `users` | Telegram 使用者、加密 API 憑證、交易設定、發單員權限 |
 | `trades` | 交易紀錄、Bitget 訂單 ID、狀態與錯誤訊息 |
 | `pending_orders` | 待確認訂單、callback token、order mode、掛單價、entry 區間、計算結果、狀態與過期時間 |
+| `signal_records` | 永久交易信號 ID、原發單者、信號參數、原始文字與 lifecycle 狀態 |
+| `signal_channel_messages` | 每筆信號成功轉發到的群組/topic 與 Telegram message ID |
 | `notification_logs` | 通知紀錄 |
 | `trading_pairs` | 交易對與限制資料 |
 | `channel_groups` | Telegram 頻道或群組，以及可選的 `message_thread_id` topic 設定 |

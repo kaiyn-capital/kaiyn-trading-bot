@@ -35,6 +35,7 @@
 | Command | Purpose |
 | ------- | ------- |
 | `/send_signal ...` | 建立交易信號轉發預覽，確認後發送到已啟用自動轉發的頻道或群組 |
+| `/update_chart 交易id [備註文字]` | 更新既有交易信號圖表，確認後回覆原始群組訊息 |
 
 ## Signal Syntax
 
@@ -58,8 +59,30 @@
 - `entry[]`、`sl[]`、`tp[]` 標籤大小寫不敏感，三組順序可互換，但不可重複。
 - 三組標籤外的文字會合併為備註。
 - 備註顯示在交易信號的 `SL` 下方。
+- 每筆確認轉發的信號會顯示永久 `交易id`，用於後續 `/update_chart`。
 - 信號底部時間戳使用 UTC+8。
 - `/send_signal` 會先在私人聊天回傳預覽與「确认转发 / 取消」按鈕；預覽 5 分鐘內未確認、被新預覽覆蓋或取消時，不會轉發到群組。
+
+## Update Chart Syntax
+
+```text
+/update_chart 交易id [備註文字]
+```
+
+範例：
+
+```text
+/update_chart abc1234 TP1 到達，留意移動止損
+```
+
+行為規則：
+
+- 只有原發單者或管理員可以更新該筆交易信號。
+- Bot 會重新取得目前 K 線，將原本 entry、SL、TP 與風險報酬框延伸到最新圖表位置。
+- Bot 會先在私人聊天回傳更新圖表預覽與「确认转发 / 取消」按鈕；預覽 TTL 沿用一般 session TTL。
+- 確認後只會發回原始信號成功轉發過的群組/topic，並嘗試回覆原始發單信息。
+- 若原始訊息已不存在、無法回覆或 Telegram 拒絕 reply，Bot 會改為在同一群組/topic 普通發送。
+- 若 Bitget K 線資料已不足以覆蓋原始發單時間，Bot 不會產生近似圖。
 
 ## Topic Forwarding
 
@@ -84,7 +107,7 @@
 
 `[話題名稱]` 是管理員自訂備註名稱，只用於 `/admin_channels` 顯示，不要求與 Telegram 話題實際名稱一致。
 
-指定 topic 僅套用於 `/send_signal` 交易信號自動轉發；`/admin_broadcast` 與 `/send_to_channel` 維持發到群組本身。
+指定 topic 套用於 `/send_signal` 交易信號自動轉發；`/update_chart` 會沿用原始信號成功轉發時保存的群組/topic。`/admin_broadcast` 與 `/send_to_channel` 維持發到群組本身。
 
 ## Post-deploy Smoke Test
 

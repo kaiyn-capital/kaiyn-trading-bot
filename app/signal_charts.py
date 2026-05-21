@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from io import BytesIO
 
 import matplotlib
@@ -13,6 +14,10 @@ from .market_types import MarketCandle  # noqa: E402
 from .order_types import SignalDraft  # noqa: E402
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+FLOATING_PNL_ALPHA = 0.42
+FLOATING_LONG_PROFIT_COLOR = "#0f766e"
+FLOATING_SHORT_PROFIT_COLOR = "#991b1b"
+FLOATING_LOSS_COLOR = "#4b3036"
 
 
 @dataclass(frozen=True)
@@ -21,6 +26,15 @@ class SignalChartLevels:
     stop_loss: float
     target: float
     other_targets: tuple[float, ...]
+
+
+@dataclass(frozen=True)
+class FloatingPnlOverlay:
+    lower: float
+    upper: float
+    color: str
+    alpha: float
+    state: str
 
 
 def select_signal_chart_levels(signal: SignalDraft) -> SignalChartLevels:
@@ -50,6 +64,25 @@ def select_signal_chart_levels(signal: SignalDraft) -> SignalChartLevels:
 
 
 def render_signal_chart(signal: SignalDraft, candles: list[MarketCandle], granularity: str) -> bytes:
+    return _render_signal_chart(signal, candles, granularity, signal_time=None, show_current_overlay=False)
+
+
+def render_signal_update_chart(
+    signal: SignalDraft,
+    candles: list[MarketCandle],
+    granularity: str,
+    signal_time: datetime,
+) -> bytes:
+    return _render_signal_chart(signal, candles, granularity, signal_time=signal_time, show_current_overlay=True)
+
+
+def _render_signal_chart(
+    signal: SignalDraft,
+    candles: list[MarketCandle],
+    granularity: str,
+    signal_time: datetime | None,
+    show_current_overlay: bool,
+) -> bytes:
     if len(candles) < 2:
         raise ValueError("not enough candles to render chart")
 
@@ -97,7 +130,14 @@ def render_signal_chart(signal: SignalDraft, candles: list[MarketCandle], granul
         )
         ax = axes[0]
         _style_axes(ax)
-        _draw_signal_overlay(ax, data, signal, levels)
+        _draw_signal_overlay(
+            ax,
+            data,
+            signal,
+            levels,
+            signal_time=signal_time,
+            show_current_overlay=show_current_overlay,
+        )
         _draw_header(ax, signal, granularity)
         _format_time_axis(ax, data)
 
@@ -169,10 +209,17 @@ def _draw_header(ax, signal: SignalDraft, granularity: str) -> None:
     )
 
 
-def _draw_signal_overlay(ax, data: pd.DataFrame, signal: SignalDraft, levels: SignalChartLevels) -> None:
+def _draw_signal_overlay(
+    ax,
+    data: pd.DataFrame,
+    signal: SignalDraft,
+    levels: SignalChartLevels,
+    signal_time: datetime | None = None,
+    show_current_overlay: bool = False,
+) -> None:
     candle_count = len(data.index)
-    visible_extra = max(12, int(candle_count * 0.22))
-    x_start = candle_count - 1
+    visible_extra = max(10, int(candle_count * 0.08 if signal_time is not None else candle_count * 0.18))
+    x_start = _find_signal_anchor_index(data, signal_time) if signal_time is not None else candle_count - 1
     x_end = candle_count + visible_extra * 0.72
 
     x_left, _ = ax.get_xlim()
@@ -188,6 +235,19 @@ def _draw_signal_overlay(ax, data: pd.DataFrame, signal: SignalDraft, levels: Si
     ax.fill_between([x_start, x_end], levels.entry, levels.target, color=reward_color, alpha=0.72, linewidth=0)
     ax.fill_between([x_start, x_end], levels.stop_loss, levels.entry, color=risk_color, alpha=0.78, linewidth=0)
 
+    if show_current_overlay:
+        current_price = float(data["Close"].iloc[-1])
+        overlay = select_floating_pnl_overlay(signal, levels, current_price)
+        if overlay:
+            ax.fill_between(
+                [x_start, x_end],
+                overlay.lower,
+                overlay.upper,
+                color=overlay.color,
+                alpha=overlay.alpha,
+                linewidth=0,
+            )
+
     ax.hlines(levels.target, x_start, x_end, colors=reward_edge, linewidth=1.15)
     ax.hlines(levels.entry, x_start, x_end, colors=line_color, linewidth=1.1)
     ax.hlines(levels.stop_loss, x_start, x_end, colors=line_color, linewidth=1.1)
@@ -202,6 +262,77 @@ def _draw_signal_overlay(ax, data: pd.DataFrame, signal: SignalDraft, levels: Si
     _draw_price_tag(ax, levels.target, reward_edge)
     _draw_price_tag(ax, levels.entry, line_color)
     _draw_price_tag(ax, levels.stop_loss, line_color)
+
+
+def select_floating_pnl_overlay(
+    signal: SignalDraft,
+    levels: SignalChartLevels,
+    current_price: float,
+) -> FloatingPnlOverlay | None:
+    tolerance = max(abs(levels.entry) * 1e-9, 1e-12)
+    if abs(current_price - levels.entry) <= tolerance:
+        return None
+
+    if signal.direction == "long":
+        if current_price > levels.entry:
+            lower = levels.entry
+            upper = min(current_price, levels.target)
+            color = FLOATING_LONG_PROFIT_COLOR
+            state = "profit"
+        else:
+            lower = max(current_price, levels.stop_loss)
+            upper = levels.entry
+            color = FLOATING_LOSS_COLOR
+            state = "loss"
+    elif signal.direction == "short":
+        if current_price < levels.entry:
+            lower = max(current_price, levels.target)
+            upper = levels.entry
+            color = FLOATING_SHORT_PROFIT_COLOR
+            state = "profit"
+        else:
+            lower = levels.entry
+            upper = min(current_price, levels.stop_loss)
+            color = FLOATING_LOSS_COLOR
+            state = "loss"
+    else:
+        return None
+
+    if upper <= lower:
+        return None
+
+    return FloatingPnlOverlay(
+        lower=lower,
+        upper=upper,
+        color=color,
+        alpha=FLOATING_PNL_ALPHA,
+        state=state,
+    )
+
+
+def _find_signal_anchor_index(data: pd.DataFrame, signal_time: datetime | None) -> int:
+    if signal_time is None:
+        return len(data.index) - 1
+
+    normalized_time = _ensure_aware_utc(signal_time)
+    timestamps = [_ensure_aware_utc(timestamp.to_pydatetime()) for timestamp in data.index]
+    anchor_index = None
+    for index, timestamp in enumerate(timestamps):
+        if timestamp <= normalized_time:
+            anchor_index = index
+        else:
+            break
+
+    if anchor_index is None:
+        raise ValueError("candles do not cover signal time")
+
+    return anchor_index
+
+
+def _ensure_aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _set_price_limits(ax, data: pd.DataFrame, levels: SignalChartLevels) -> None:
