@@ -409,15 +409,31 @@ PRODUCTION_SSH_KNOWN_HOSTS
 PRODUCTION_APP_DIR
 ```
 
+VPS 的 production worktree remote 也應指向目前 GitHub repository。若專案轉移到 organization，請在 VPS 上執行一次：
+
+```bash
+cd $PRODUCTION_APP_DIR
+git remote set-url origin https://github.com/kaiyn-capital/kaiyn-trading-bot.git
+```
+
+若 GHCR package 是 private，VPS Docker client 必須能讀取新的 organization package。請用具備 `read:packages` 權限的 GitHub token，在 VPS 上以 production deploy user 執行一次：
+
+```bash
+printf '%s' '<github_pat_with_read_packages>' | docker login ghcr.io -u <github-username-or-machine-user> --password-stdin
+```
+
+若不想在 VPS 保存 GHCR login，也可以把 `ghcr.io/kaiyn-capital/kaiyn-trading-bot` package 設為 public。
+
 遠端部署流程：
 
 ```text
 cd $PRODUCTION_APP_DIR
 git status must be clean
+git remote set-url origin https://github.com/kaiyn-capital/kaiyn-trading-bot.git
 git fetch origin main
 git checkout main
 git merge --ff-only $DEPLOY_SHA
-BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest> make deploy-image
+BOT_IMAGE=ghcr.io/kaiyn-capital/kaiyn-trading-bot@sha256:<digest> make deploy-image
 docker compose ps
 docker compose logs --tail 80 bot
 ```
@@ -434,7 +450,7 @@ pull GHCR image by digest
 手動執行同一套 image-based deployment：
 
 ```bash
-BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest> make deploy-image
+BOT_IMAGE=ghcr.io/kaiyn-capital/kaiyn-trading-bot@sha256:<digest> make deploy-image
 ```
 
 `compose.prod.yml` 使用 Docker Compose `!reset` 移除 build 設定，VPS Docker Compose plugin 需支援 Compose `2.24.4+`。Coolify 方案保留為可選部署變體，完整設定見 [coolify_runbook.md](coolify_runbook.md)。
@@ -459,7 +475,7 @@ docker compose logs --tail 80 bot
 使用 GHCR image-based deployment 時，可改用上一個已知可用 image digest：
 
 ```bash
-BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<known-good-digest> make deploy-image
+BOT_IMAGE=ghcr.io/kaiyn-capital/kaiyn-trading-bot@sha256:<known-good-digest> make deploy-image
 ```
 
 注意：

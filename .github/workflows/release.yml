@@ -116,6 +116,7 @@ jobs:
           SSH_PORT: ${{ secrets.PRODUCTION_SSH_PORT }}
           SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
           APP_DIR: ${{ secrets.PRODUCTION_APP_DIR }}
+          REPOSITORY_URL: https://github.com/${{ github.repository }}.git
         run: |
           set -euo pipefail
           : "${SSH_HOST:?Missing PRODUCTION_SSH_HOST}"
@@ -123,12 +124,13 @@ jobs:
           : "${APP_DIR:?Missing PRODUCTION_APP_DIR}"
           : "${DEPLOY_IMAGE:?Missing DEPLOY_IMAGE}"
           : "${DEPLOY_SHA:?Missing DEPLOY_SHA}"
+          : "${REPOSITORY_URL:?Missing REPOSITORY_URL}"
           SSH_PORT="${SSH_PORT:-22}"
           ssh -i ~/.ssh/production_key -p "$SSH_PORT" \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             "$SSH_USER@$SSH_HOST" \
-            "APP_DIR='$APP_DIR' DEPLOY_IMAGE='$DEPLOY_IMAGE' DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'REMOTE'
+            "APP_DIR='$APP_DIR' DEPLOY_IMAGE='$DEPLOY_IMAGE' DEPLOY_SHA='$DEPLOY_SHA' REPOSITORY_URL='$REPOSITORY_URL' bash -s" <<'REMOTE'
           set -euo pipefail
 
           cd "$APP_DIR"
@@ -139,6 +141,7 @@ jobs:
             exit 1
           fi
 
+          git remote set-url origin "$REPOSITORY_URL"
           git fetch origin main
           git checkout main
           git merge --ff-only "$DEPLOY_SHA"
