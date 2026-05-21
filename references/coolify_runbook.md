@@ -17,7 +17,7 @@ CI passed
 
 在 Coolify 建立 Docker Compose application：
 
-- Source：GitHub repository `kylekkkk61/kaiyn-trading-bot`
+- Source：GitHub repository `kaiyn-capital/kaiyn-trading-bot`
 - Compose file：`compose.coolify.yml`
 - Auto deploy：關閉
 - Deployment trigger：使用 API / webhook，由 GitHub Actions 控制
@@ -25,12 +25,14 @@ CI passed
 
 Coolify application 應部署在既有 DigitalOcean Droplet 上。若 Droplet 已用手動 Docker Compose 跑過 production DB，搬到 Coolify stack 前先做 SQL backup，並用 [backup_restore_runbook.md](backup_restore_runbook.md) 還原到 Coolify-managed PostgreSQL volume。
 
+若 GHCR package 是 private，Coolify 或所在主機的 Docker runtime 必須設定可讀取 `ghcr.io/kaiyn-capital/kaiyn-trading-bot` 的 registry credentials。需要的 GitHub token 權限至少包含 `read:packages`。
+
 ## 2. Required Coolify Variables
 
 Coolify application variables 必須包含：
 
 ```text
-BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot:main
+BOT_IMAGE=ghcr.io/kaiyn-capital/kaiyn-trading-bot:main
 TELEGRAM_BOT_TOKEN=<production telegram token>
 TELEGRAM_ADMIN_IDS=<comma separated admin ids>
 ENCRYPTION_KEY=<fernet key>
@@ -57,7 +59,7 @@ SIGNAL_CHART_CANDLE_LIMIT=120
 SIGNAL_CHART_TIMEOUT_SECONDS=8
 ```
 
-`BOT_IMAGE` 會由 GitHub Actions release workflow 自動更新為 `ghcr.io/kylekkkk61/kaiyn-trading-bot:sha-<commit>`。
+`BOT_IMAGE` 會由 GitHub Actions release workflow 自動更新為 `ghcr.io/kaiyn-capital/kaiyn-trading-bot:sha-<commit>`。
 
 ## 3. Database Migration
 
@@ -104,7 +106,7 @@ COOLIFY_WEBHOOK
 3. `PATCH /api/v1/applications/{uuid}/envs` 更新：
 
    ```text
-   BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot:sha-<commit>
+   BOT_IMAGE=ghcr.io/kaiyn-capital/kaiyn-trading-bot:sha-<commit>
    ```
 
 4. `GET $COOLIFY_WEBHOOK` 觸發 Coolify deploy。
@@ -118,7 +120,7 @@ COOLIFY_WEBHOOK
 1. 在 Coolify application variables 將 `BOT_IMAGE` 改成：
 
    ```text
-   ghcr.io/kylekkkk61/kaiyn-trading-bot:sha-<commit>
+   ghcr.io/kaiyn-capital/kaiyn-trading-bot:sha-<commit>
    ```
 
 2. 按 Deploy。
@@ -126,7 +128,7 @@ COOLIFY_WEBHOOK
 Rollback 使用上一個已知可用 commit tag：
 
 ```text
-ghcr.io/kylekkkk61/kaiyn-trading-bot:sha-<known-good-commit>
+ghcr.io/kaiyn-capital/kaiyn-trading-bot:sha-<known-good-commit>
 ```
 
 Alembic migration 不自動 downgrade。若新 migration 造成資料庫不可用，依 [backup_restore_runbook.md](backup_restore_runbook.md) 還原資料庫。

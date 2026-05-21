@@ -105,11 +105,11 @@ Release workflow：
 ```text
 CI passed
 -> build linux/amd64 + linux/arm64 Docker image
--> push ghcr.io/kylekkkk61/kaiyn-trading-bot:sha-<commit>
--> push ghcr.io/kylekkkk61/kaiyn-trading-bot:main
+-> push ghcr.io/kaiyn-capital/kaiyn-trading-bot:sha-<commit>
+-> push ghcr.io/kaiyn-capital/kaiyn-trading-bot:main
 -> wait for production environment approval
 -> SSH to production VPS
--> deploy ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest>
+-> deploy ghcr.io/kaiyn-capital/kaiyn-trading-bot@sha256:<digest>
 ```
 
 Production deployment 使用 `compose.yml` + `compose.prod.yml` 與 `make deploy-image`。`bot` 與 `maintenance` 由 GHCR image digest 啟動；`postgres` 與 `db-backup` 保留 Docker Compose service model。
@@ -124,6 +124,8 @@ PRODUCTION_SSH_KEY
 PRODUCTION_SSH_KNOWN_HOSTS
 PRODUCTION_APP_DIR
 ```
+
+VPS Docker client 需能讀取 `ghcr.io/kaiyn-capital/kaiyn-trading-bot`。若 GHCR package 維持 private，production deploy user 需先以具備 `read:packages` 權限的 GitHub token 執行 `docker login ghcr.io`；若 package 設為 public，則不需要在 VPS 保存 GHCR login。
 
 建議 `production` environment 設定 required reviewer，讓 production deploy 在 image 發布後等待人工 approval。
 
