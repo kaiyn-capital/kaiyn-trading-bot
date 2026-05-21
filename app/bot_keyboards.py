@@ -57,6 +57,15 @@ def signal_order_keyboard(
     )
 
 
+def signal_preview_keyboard(token: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("✅ 确认转发", callback_data=f"confirm_signal_{token}")],
+            [InlineKeyboardButton("❌ 取消", callback_data=f"cancel_signal_{token}")],
+        ]
+    )
+
+
 def pending_order_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [

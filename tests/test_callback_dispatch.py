@@ -92,6 +92,23 @@ def test_button_callback_dispatches_prefix_callbacks():
     assert routed == [{"query": update.callback_query, "user": user, "data": "confirm_order_token"}]
 
 
+def test_button_callback_dispatches_signal_preview_prefix_callbacks():
+    user = make_user()
+    bot = make_bot(user)
+    routed = []
+
+    async def handle_confirm_signal(query, callback_user, data):
+        routed.append({"query": query, "user": callback_user, "data": data})
+
+    bot._handle_confirm_signal_callback = handle_confirm_signal
+    update = make_update("confirm_signal_token")
+
+    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+
+    assert update.callback_query.answers == [{"text": None, "kwargs": {}}]
+    assert routed == [{"query": update.callback_query, "user": user, "data": "confirm_signal_token"}]
+
+
 def test_cancel_modify_api_callback_keeps_existing_response():
     bot = make_bot(make_user())
     update = make_update("cancel_modify_api")

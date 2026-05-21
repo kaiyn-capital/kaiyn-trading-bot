@@ -257,6 +257,8 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
     def _prefix_callback_handlers(self):
         return (
+            ("confirm_signal_", self._handle_confirm_signal_callback),
+            ("cancel_signal_", self._handle_cancel_signal_callback),
             ("place_order_", self._handle_place_order_callback),
             ("confirm_order_", self._handle_confirm_pending_order_callback),
             ("cancel_order_", self._handle_cancel_pending_order_callback),
