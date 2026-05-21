@@ -48,7 +48,7 @@ deploy: ## Build, migrate, check DB, and start services
 .PHONY: require-bot-image
 require-bot-image:
 	@if [ -z "$(BOT_IMAGE)" ]; then \
-		echo "BOT_IMAGE is required. Example: BOT_IMAGE=ghcr.io/kylekkkk61/kaiyn-trading-bot@sha256:<digest> make deploy-image"; \
+		echo "BOT_IMAGE is required. Example: BOT_IMAGE=ghcr.io/kaiyn-capital/kaiyn-trading-bot@sha256:<digest> make deploy-image"; \
 		exit 1; \
 	fi
 

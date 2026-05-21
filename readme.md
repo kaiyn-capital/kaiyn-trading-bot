@@ -1,6 +1,6 @@
 # Kaiyn Trading Bot
 
-[![CI](https://github.com/kylekkkk61/kaiyn-trading-bot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kylekkkk61/kaiyn-trading-bot/actions/workflows/ci.yml)
+[![CI](https://github.com/kaiyn-capital/kaiyn-trading-bot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kaiyn-capital/kaiyn-trading-bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![uv](https://img.shields.io/badge/dependencies-uv-261230?logo=astral&logoColor=white)](https://docs.astral.sh/uv/)
 [![Docker Compose](https://img.shields.io/badge/Docker%20Compose-runtime-2496ED?logo=docker&logoColor=white)](./compose.yml)
