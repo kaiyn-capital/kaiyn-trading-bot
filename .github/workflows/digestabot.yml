@@ -1,0 +1,34 @@
+name: Digestabot
+
+# Refreshes pinned container image digests that Dependabot cannot reach,
+# notably the gitleaks image in secret-scan.yml. Only lines already pinned
+# with @sha256: are updated.
+
+on:
+  schedule:
+    # Monday 01:00 UTC (09:00 Asia/Taipei), aligned with dependabot.yml.
+    - cron: "0 1 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: digestabot
+  cancel-in-progress: false
+
+jobs:
+  update-digests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: chainguard-dev/digestabot@v1.3.1
+        with:
+          include-files: "*.yml,*.yaml"
+          use-gitsign: false
+          commit-message: "chore(deps): update image digests"
+          title-for-pr: "chore(deps): update image digests"
+          branch-for-pr: "deps/update-image-digests"
+          labels-for-pr: "dependencies, ci"

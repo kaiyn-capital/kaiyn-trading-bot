@@ -1,0 +1,16 @@
+title = "kaiyn-trading-bot gitleaks config"
+
+# Extend the default gitleaks rules so we still catch real provider tokens.
+[extend]
+useDefault = true
+
+# Test fixtures contain placeholder values such as "valid-api-key-123" that
+# trigger the generic-api-key rule. They are not real secrets, so we exclude
+# the tests/ tree from scanning. Real provider-specific tokens (AWS, GitHub,
+# Stripe, etc.) would still be caught elsewhere by their dedicated rules if
+# they ever leak into source code.
+[[allowlists]]
+description = "Ignore test fixtures"
+paths = [
+  '''tests/.*''',
+]
