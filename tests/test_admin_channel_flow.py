@@ -419,4 +419,4 @@ def test_admin_health_replies_report(monkeypatch):
     asyncio.run(handler.admin_health_command(update, make_context()))
 
     assert "系统健康检查" in update.message.replies[-1]["text"]
-    assert update.message.replies[-1]["kwargs"]["parse_mode"] == "Markdown"
+    assert update.message.replies[-1]["kwargs"]["parse_mode"] == "HTML"

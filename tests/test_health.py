@@ -123,7 +123,39 @@ def test_admin_health_report_includes_core_sections():
         now=datetime(2026, 5, 13, 12, 0, 0),
     )
 
-    assert "系统健康检查" in report
+    assert "<b>系统健康检查</b>" in report
     assert "DB：✅ 正常" in report
     assert "Backup：✅ 备份正常" in report
     assert "Bitget API：✅" in report
+
+
+def test_admin_health_report_escapes_html():
+    report = format_admin_health_report(
+        db_ok=True,
+        backup_health=SimpleNamespace(
+            is_problem=False,
+            message="备份 <test> &正常",
+            timestamp=datetime(2026, 5, 13, 12, 0, 0),
+            filename="backup_&_test.sql.gz",
+        ),
+        maintenance_health=SimpleNamespace(
+            is_problem=False,
+            message="cleanup 正常",
+            timestamp=datetime(2026, 5, 13, 12, 0, 0),
+        ),
+        recent_errors=[
+            SimpleNamespace(
+                created_at=datetime(2026, 5, 13, 12, 0, 0),
+                level="ERROR",
+                message="Error with <script> tag",
+            )
+        ],
+        bitget_counts={"BAD_&_PARAMS": 1},
+        started_at=datetime(2026, 5, 13, 11, 30, 0),
+        now=datetime(2026, 5, 13, 12, 0, 0),
+    )
+
+    assert "备份 &lt;test&gt; &amp;正常" in report
+    assert "backup_&amp;_test.sql.gz" in report
+    assert "Error with &lt;script&gt; tag" in report
+    assert "BAD_&amp;_PARAMS" in report

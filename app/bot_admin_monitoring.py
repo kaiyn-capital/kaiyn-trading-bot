@@ -52,7 +52,7 @@ class AdminMonitoringMixin:
                 started_at=getattr(self, "started_at", None),
                 pending_order_repo=getattr(self, "pending_order_repo", None),
             )
-            await update.message.reply_text(report, parse_mode="Markdown")
+            await update.message.reply_text(report, parse_mode="HTML")
         except Exception as e:
             logger.error(f"Admin health command error: {e}")
             await update.message.reply_text(f"❌ 获取健康状态时发生错误: {str(e)}")
