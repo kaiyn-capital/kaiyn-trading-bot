@@ -50,6 +50,7 @@ class AdminMonitoringMixin:
                 db_manager=self.user_repo.db,
                 system_log_repo=self.system_log_repo,
                 started_at=getattr(self, "started_at", None),
+                pending_order_repo=getattr(self, "pending_order_repo", None),
             )
             await update.message.reply_text(report, parse_mode="Markdown")
         except Exception as e:

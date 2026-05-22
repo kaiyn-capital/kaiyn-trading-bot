@@ -2,7 +2,7 @@ import secrets
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..models import PendingOrder
 
@@ -93,6 +93,33 @@ class PendingOrderRepository:
     async def mark_failed(self, token: str, error_message: str) -> bool:
         """Mark a pending order as failed."""
         return await self._update_status(token, "failed", error_message=error_message)
+
+    async def get_stale_processing_orders(self, cutoff: datetime, limit: int) -> list[PendingOrder]:
+        """Return processing orders that have not changed since cutoff."""
+        async with self.db.get_session() as session:
+            result = await session.execute(
+                select(PendingOrder)
+                .where(
+                    PendingOrder.status == "processing",
+                    PendingOrder.updated_at <= cutoff,
+                )
+                .order_by(PendingOrder.updated_at.asc())
+                .limit(limit)
+            )
+            return list(result.scalars().all())
+
+    async def count_stale_processing_orders(self, cutoff: datetime) -> int:
+        """Count processing orders that have not changed since cutoff."""
+        async with self.db.get_session() as session:
+            result = await session.execute(
+                select(func.count())
+                .select_from(PendingOrder)
+                .where(
+                    PendingOrder.status == "processing",
+                    PendingOrder.updated_at <= cutoff,
+                )
+            )
+            return int(result.scalar_one())
 
     async def cancel_pending_order(self, token: str, telegram_id: int) -> str:
         """Cancel a pending order if it still can be cancelled."""
