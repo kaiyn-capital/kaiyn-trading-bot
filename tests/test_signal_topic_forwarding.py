@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
+import app.bot_order_handlers as bot_order_handlers
 from app.bot_order_handlers import OrderHandlersMixin
 from app.bot_sessions import UserSessionMixin
 from app.config import Config
@@ -52,6 +53,22 @@ class FakeBot:
         self.sent_photos.append(kwargs)
         self.next_message_id += 1
         return SimpleNamespace(message_id=self.next_message_id)
+
+
+class RecordingCandleTradeManager:
+    def __init__(self):
+        self.calls = []
+
+    async def get_candles(self, symbol, granularity, limit, **kwargs):
+        self.calls.append(
+            {
+                "symbol": symbol,
+                "granularity": granularity,
+                "limit": limit,
+                "kwargs": kwargs,
+            }
+        )
+        return []
 
 
 class FakeChannelRepo:
@@ -431,6 +448,22 @@ def test_update_chart_allows_admin_to_update_other_users_signal(monkeypatch):
     asyncio.run(handler.update_chart_command(chart_update, SimpleNamespace(args=[signal_id])))
 
     assert chart_update.message.photos
+
+
+def test_signal_update_chart_uses_configured_candle_limit(monkeypatch):
+    monkeypatch.setattr(Config, "SIGNAL_UPDATE_CANDLE_LIMIT", 200)
+    monkeypatch.setattr(bot_order_handlers, "render_signal_update_chart", lambda *args: b"fake-update-png")
+    handler = FakeOrderHandler()
+    handler.trade_manager = RecordingCandleTradeManager()
+    signal = SimpleNamespace(symbol="BTCUSDT")
+
+    image = asyncio.run(handler._create_signal_update_chart(signal, datetime(2026, 5, 22), "1H"))
+
+    assert image == b"fake-update-png"
+    assert handler.trade_manager.calls[-1]["symbol"] == "BTCUSDT"
+    assert handler.trade_manager.calls[-1]["granularity"] == "1H"
+    assert handler.trade_manager.calls[-1]["limit"] == 200
+    assert "end_time" in handler.trade_manager.calls[-1]["kwargs"]
 
 
 def test_update_chart_rejects_non_owner_non_admin(monkeypatch):
