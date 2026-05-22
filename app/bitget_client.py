@@ -256,8 +256,14 @@ class BitgetAPIClient:
 
         return await self._make_request("POST", "/api/v2/mix/order/cancel-order", data=data)
 
-    async def get_order_info(self, symbol: str, order_id: str = None, client_order_id: str = None) -> Dict:
-        params = {"symbol": symbol}
+    async def get_order_info(
+        self,
+        symbol: str,
+        order_id: str = None,
+        client_order_id: str = None,
+        product_type: str = "USDT-FUTURES",
+    ) -> Dict:
+        params = {"symbol": symbol, "productType": product_type}
 
         if order_id:
             params["orderId"] = order_id
@@ -268,11 +274,22 @@ class BitgetAPIClient:
 
         return await self._make_request("GET", "/api/v2/mix/order/detail", params=params)
 
-    async def get_order_history(self, symbol: str = None, limit: int = 50, product_type: str = "USDT-FUTURES") -> Dict:
+    async def get_order_history(
+        self,
+        symbol: str = None,
+        limit: int = 50,
+        product_type: str = "USDT-FUTURES",
+        order_id: str = None,
+        client_order_id: str = None,
+    ) -> Dict:
         params = {"productType": product_type, "limit": str(limit)}
 
         if symbol:
             params["symbol"] = symbol
+        if order_id:
+            params["orderId"] = order_id
+        elif client_order_id:
+            params["clientOid"] = client_order_id
 
         return await self._make_request("GET", "/api/v2/mix/order/orders-history", params=params)
 

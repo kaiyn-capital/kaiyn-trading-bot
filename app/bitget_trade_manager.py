@@ -172,9 +172,29 @@ class BitgetTradeManager:
         symbol: str,
         order_id: str = None,
         client_order_id: str = None,
+        product_type: str = "USDT-FUTURES",
     ) -> Dict:
         client = self._get_client(user_id, encrypted_credentials)
-        return await client.get_order_info(symbol, order_id, client_order_id)
+        return await client.get_order_info(symbol, order_id, client_order_id, product_type)
+
+    async def get_order_history(
+        self,
+        user_id: int,
+        encrypted_credentials: Tuple[str, str, str],
+        symbol: str = None,
+        limit: int = 50,
+        product_type: str = "USDT-FUTURES",
+        order_id: str = None,
+        client_order_id: str = None,
+    ) -> Dict:
+        client = self._get_client(user_id, encrypted_credentials)
+        return await client.get_order_history(
+            symbol=symbol,
+            limit=limit,
+            product_type=product_type,
+            order_id=order_id,
+            client_order_id=client_order_id,
+        )
 
     async def cancel_order(
         self,

@@ -42,6 +42,7 @@ from .encryption import create_encryption_manager
 from .health import read_backup_health, read_maintenance_health
 from .log_sanitizer import summarize_telegram_update
 from .models import User
+from .order_reconciliation import PendingOrderReconciliationService
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,15 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
         self.application = Application.builder().token(self.token).build()
         self.alert_manager = AdminAlertManager(self.application.bot, self.system_log_repo)
+        self.pending_order_reconciler = PendingOrderReconciliationService(
+            bot=self.application.bot,
+            user_repo=self.user_repo,
+            pending_order_repo=self.pending_order_repo,
+            trade_repo=self.trade_repo,
+            trade_manager=self.trade_manager,
+            system_log_repo=self.system_log_repo,
+            alert_manager=self.alert_manager,
+        )
         self._setup_handlers()
 
     def _setup_handlers(self):
@@ -438,6 +448,11 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             maintenance_health = await read_maintenance_health(self.system_log_repo)
             if maintenance_health.is_problem:
                 await self.alert_manager.alert_maintenance_problem(maintenance_health.message)
+
+            await self.pending_order_reconciler.reconcile_stale_processing_orders(
+                stale_after_seconds=Config.PENDING_ORDER_RECONCILE_AFTER_SECONDS,
+                limit=Config.PENDING_ORDER_RECONCILE_LIMIT,
+            )
         except Exception as exc:
             logger.error(f"Health monitor failed: {exc}")
             await self.alert_manager.alert_db_failure("health_monitor", exc)

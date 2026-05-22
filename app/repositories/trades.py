@@ -75,6 +75,12 @@ class TradeRepository:
             )
             return list(result.scalars().all())
 
+    async def get_by_client_order_id(self, client_order_id: str) -> Optional[Trade]:
+        """Return one trade by deterministic client order id."""
+        async with self.db.get_session() as session:
+            result = await session.execute(select(Trade).where(Trade.client_order_id == client_order_id))
+            return result.scalar_one_or_none()
+
     async def get_daily_trades_count(self, user_id: int) -> int:
         """獲取用戶今日交易次數"""
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)

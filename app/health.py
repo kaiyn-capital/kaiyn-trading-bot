@@ -154,12 +154,14 @@ async def build_admin_health_report(
     db_manager,
     system_log_repo,
     started_at: Optional[datetime],
+    pending_order_repo=None,
     backups_dir: Path = BACKUPS_DIR,
 ) -> tuple[str, dict]:
     now = datetime.utcnow()
     db_ok = await db_manager.health_check()
     backup_health = read_backup_health(backups_dir=backups_dir, now=now)
     maintenance_health = await read_maintenance_health(system_log_repo, now=now)
+    stale_processing_count = await _count_stale_processing_orders(pending_order_repo, now)
     recent_errors = await system_log_repo.get_recent_logs(
         levels=["ERROR", "CRITICAL"],
         since=now - timedelta(hours=24),
@@ -178,6 +180,7 @@ async def build_admin_health_report(
         recent_errors=recent_errors,
         bitget_counts=bitget_counts,
         started_at=started_at,
+        stale_processing_count=stale_processing_count,
         now=now,
     )
     status = {
@@ -185,6 +188,7 @@ async def build_admin_health_report(
         "backup_problem": backup_health.is_problem,
         "maintenance_problem": maintenance_health.is_problem,
         "bitget_counts": bitget_counts,
+        "stale_processing_count": stale_processing_count,
         "recent_error_count": len(recent_errors),
     }
     return report, status
@@ -197,6 +201,7 @@ def format_admin_health_report(
     recent_errors: list,
     bitget_counts: dict[str, int],
     started_at: Optional[datetime],
+    stale_processing_count: Optional[int] = None,
     now: Optional[datetime] = None,
 ) -> str:
     now = now or datetime.utcnow()
@@ -205,6 +210,7 @@ def format_admin_health_report(
     backup_icon = "✅" if not backup_health.is_problem else "❌"
     maintenance_icon = "✅" if not maintenance_health.is_problem else "❌"
     bitget_text = _format_bitget_counts(bitget_counts)
+    processing_text = _format_stale_processing_count(stale_processing_count)
     error_text = _format_recent_errors(recent_errors)
 
     return (
@@ -217,6 +223,7 @@ def format_admin_health_report(
         f"Backup 文件：{backup_health.filename or '无'}\n"
         f"Maintenance：{maintenance_icon} {maintenance_health.message}\n"
         f"Maintenance 时间：{format_utc8(maintenance_health.timestamp)}\n"
+        f"Processing 卡单：{processing_text}\n"
         f"Bitget API：{bitget_text}\n\n"
         f"最近错误：\n{error_text}"
     )
@@ -244,10 +251,29 @@ def _count_bitget_categories(logs: list) -> dict[str, int]:
     return counts
 
 
+async def _count_stale_processing_orders(pending_order_repo, now: datetime) -> Optional[int]:
+    if not pending_order_repo:
+        return None
+    cutoff = now - timedelta(seconds=Config.PENDING_ORDER_RECONCILE_AFTER_SECONDS)
+    try:
+        return await pending_order_repo.count_stale_processing_orders(cutoff)
+    except Exception:
+        return None
+
+
 def _format_bitget_counts(counts: dict[str, int]) -> str:
     if not counts:
         return "✅ 近 24 小时无系统级 API 异常"
     return "⚠️ " + " / ".join(f"{category}: {count}" for category, count in sorted(counts.items()))
+
+
+def _format_stale_processing_count(count: Optional[int]) -> str:
+    if count is None:
+        return "未知"
+    if count == 0:
+        return "✅ 0 笔"
+    threshold_minutes = max(int(Config.PENDING_ORDER_RECONCILE_AFTER_SECONDS / 60), 1)
+    return f"⚠️ {count} 笔超过 {threshold_minutes} 分钟"
 
 
 def _format_recent_errors(errors: list) -> str:

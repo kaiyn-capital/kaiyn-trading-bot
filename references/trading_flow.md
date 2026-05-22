@@ -17,6 +17,7 @@
 11. 使用者確認後，Bot 使用 row lock 將 pending order 標為 `processing`，避免重複下單。
 12. 送單前 Bot 重新取得市價與合約規則再驗證一次。
 13. Bitget 下單完成後，Bot 更新 `trades` 與 `pending_orders` 狀態。
+14. 若 pending order 長時間停在 `processing`，health monitor 只用 `client_order_id` 查 Bitget 補本地狀態；系統不自動重送。
 
 ## Chart Update Flow
 
@@ -104,6 +105,15 @@ GTC 限價掛單：
 | 未知錯誤 | 無法分類的例外 |
 
 使用者只看到簡短原因；`trades.error_message`、`pending_orders.error_message` 與 `system_logs.extra_data` 保留分類、raw code/message 與上下文。系統不自動 retry 送單，避免重複下單風險。
+
+## Processing Reconciliation
+
+- Health monitor 只掃描 `pending_orders.status="processing"` 且 `updated_at` 超過 `PENDING_ORDER_RECONCILE_AFTER_SECONDS` 的訂單，預設 15 分鐘。
+- 查單使用 `build_client_order_id(pending_order.token)` 重建 Bitget `clientOid`，先查 `/api/v2/mix/order/detail`，明確查不到才查 `/api/v2/mix/order/orders-history`。
+- 查到 `live` 或 `partially_filled` 時，`trades.status` 維持 `pending`，`pending_orders.status` 標為 `executed`。
+- 查到 `filled` 時，`trades.status` 標為 `filled`，`pending_orders.status` 標為 `executed`。
+- 查到 `canceled/cancelled`，或 detail/history 都查不到訂單時，`pending_orders.status` 標為 `failed`，並私訊使用者回到原交易信號重新按一次下單。
+- Timeout、network error、API 權限錯誤或未知 Bitget status 不會自動標 failed；系統保留 `processing`、寫入 log 並通知管理員。
 
 ## Schema Summary
 
