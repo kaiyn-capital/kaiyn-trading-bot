@@ -45,6 +45,7 @@ class OrderHandlersMixin:
             system_log_repo=self.system_log_repo,
             audit_owner=self,
             failure_alert_handler=self._record_bitget_failure_alert,
+            signal_record_repo=self.signal_record_repo,
         )
 
     def _signal_record_service(self) -> SignalRecordService:
@@ -323,6 +324,7 @@ class OrderHandlersMixin:
             session.get("chart_status", "disabled"),
             session.get("chart_error"),
             session.get("signal_record_id"),
+            signal_public_id=session.get("signal_public_id"),
         )
         if session.get("signal_record_id"):
             await self._signal_record_service().update_send_status(session["signal_record_id"], result["sent_count"])
