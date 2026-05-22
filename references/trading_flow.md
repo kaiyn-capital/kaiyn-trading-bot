@@ -12,10 +12,10 @@
 6. 每個成功轉發的群組/topic 會保存 Telegram `message_id` 到 `signal_channel_messages`，供 `/update_chart` 回覆原始發單信息。
 7. 使用者點擊任一下單方式後，Bot 檢查 API 設定與固定風險金額 1R。
 8. Bot 取得 Bitget 當前市價與 USDT-FUTURES 合約規則，計算倉位名義價值與數量。
-9. Bot 檢查交易對狀態、最小下單量、最小名義價值、數量/價格精度、單筆上限與止損方向。
+9. Bot 檢查本地 hard risk caps、交易對狀態、最小下單量、最小名義價值、數量/價格精度、單筆上限與止損方向。
 10. 驗證通過後，Bot 將待確認訂單寫入 `pending_orders`，並發送確認/取消按鈕。
 11. 使用者確認後，Bot 使用 row lock 將 pending order 標為 `processing`，避免重複下單。
-12. 送單前 Bot 重新取得市價與合約規則再驗證一次。
+12. 送單前 Bot 重新取得市價與合約規則，並再次檢查本地 hard risk caps。
 13. Bitget 下單完成後，Bot 更新 `trades` 與 `pending_orders` 狀態。
 14. 若 pending order 長時間停在 `processing`，health monitor 只用 `client_order_id` 查 Bitget 補本地狀態；系統不自動重送。
 
@@ -49,7 +49,8 @@ GTC 限價掛單：
 ## Signal Chart
 
 - 附圖功能由 `SIGNAL_CHART_ENABLED` 控制，預設開啟。
-- K 線預設使用 Bitget `USDT-FUTURES` market candle，週期 `SIGNAL_CHART_GRANULARITY=1H`，數量 `SIGNAL_CHART_CANDLE_LIMIT=120`。
+- 發單信號圖 K 線預設使用 Bitget `USDT-FUTURES` market candle，週期 `SIGNAL_CHART_GRANULARITY=1H`，數量 `SIGNAL_CHART_CANDLE_LIMIT=120`。
+- `/update_chart` 圖表 K 線數量由 `SIGNAL_UPDATE_CANDLE_LIMIT` 控制，預設 200。
 - 圖上的 entry 使用下單邏輯中的較差價格：Long 使用 entry 區間較高點，Short 使用 entry 區間較低點。
 - 多個 TP 時，主風險報酬框使用最遠 TP，其餘 TP 以輔助線顯示。
 - 圖表輸出使用黑底與簡化時間軸，只顯示少量短日期標籤以避免 Telegram 預覽產生過多底部留白。
@@ -79,8 +80,10 @@ GTC 限價掛單：
 
 風控邊界：
 
-- 系統不額外設定 1R 全域上限。
-- 系統不額外設定止損距離百分比上下限。
+- 有效最大倉位名義價值取全域 `MAX_POSITION_SIZE` 與使用者 `max_position_size` 的較嚴格值。
+- 有效每日交易次數取全域 `MAX_DAILY_TRADES` 與使用者 `daily_trade_limit` 的較嚴格值。
+- 每日交易次數以 UTC+8 日切計算，只計入非 `failed` 的 trade。
+- 下單預覽與確認送單前都會檢查 hard risk caps；確認送單建立 trade 時會在 DB transaction 內再次檢查每日上限，避免同一使用者併發突破限制。
 - 交易權限與帳戶風控由 Bitget 送單結果判定。
 
 ## Pending Order Status

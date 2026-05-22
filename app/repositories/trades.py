@@ -1,9 +1,12 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from ..models import Trade
+from ..risk_limits import build_daily_trade_limit_error
+
+RISK_LIMIT_ADVISORY_LOCK_NAMESPACE = 724019
 
 
 class TradeRepository:
@@ -24,6 +27,51 @@ class TradeRepository:
     ) -> Trade:
         """創建新交易記錄"""
         async with self.db.get_session() as session:
+            trade = Trade(
+                user_id=user_id,
+                symbol=symbol,
+                side=side,
+                order_type=order_type,
+                quantity=quantity,
+                price=price,
+                client_order_id=client_order_id,
+            )
+            session.add(trade)
+            await session.flush()
+            return trade
+
+    async def create_trade_with_daily_limit(
+        self,
+        user_id: int,
+        symbol: str,
+        side: str,
+        order_type: str,
+        quantity: float,
+        daily_trade_limit: int,
+        day_start_utc: datetime,
+        price: Optional[float] = None,
+        client_order_id: Optional[str] = None,
+    ) -> Trade:
+        """Create a trade after a transaction-scoped per-user daily limit check."""
+        async with self.db.get_session() as session:
+            await session.execute(select(func.pg_advisory_xact_lock(RISK_LIMIT_ADVISORY_LOCK_NAMESPACE, int(user_id))))
+            count_result = await session.execute(
+                select(func.count())
+                .select_from(Trade)
+                .where(
+                    Trade.user_id == user_id,
+                    Trade.created_at >= day_start_utc,
+                    or_(Trade.status.is_(None), Trade.status != "failed"),
+                )
+            )
+            current_count = int(count_result.scalar_one())
+            if current_count >= daily_trade_limit:
+                raise build_daily_trade_limit_error(
+                    current_count=current_count,
+                    daily_trade_limit=daily_trade_limit,
+                    day_start_utc=day_start_utc,
+                )
+
             trade = Trade(
                 user_id=user_id,
                 symbol=symbol,
@@ -81,11 +129,21 @@ class TradeRepository:
             result = await session.execute(select(Trade).where(Trade.client_order_id == client_order_id))
             return result.scalar_one_or_none()
 
+    async def count_daily_non_failed_trades(self, user_id: int, day_start_utc: datetime) -> int:
+        """Count today's trades that still consume daily risk budget."""
+        async with self.db.get_session() as session:
+            result = await session.execute(
+                select(func.count())
+                .select_from(Trade)
+                .where(
+                    Trade.user_id == user_id,
+                    Trade.created_at >= day_start_utc,
+                    or_(Trade.status.is_(None), Trade.status != "failed"),
+                )
+            )
+            return int(result.scalar_one())
+
     async def get_daily_trades_count(self, user_id: int) -> int:
         """獲取用戶今日交易次數"""
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        async with self.db.get_session() as session:
-            result = await session.execute(
-                select(func.count()).select_from(Trade).where(Trade.user_id == user_id, Trade.created_at >= today)
-            )
-            return int(result.scalar_one())
+        return await self.count_daily_non_failed_trades(user_id, today)

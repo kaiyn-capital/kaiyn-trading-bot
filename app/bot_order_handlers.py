@@ -29,7 +29,6 @@ SIGNAL_PREVIEW_PROMPT = "📋 **请确认是否转发以下交易信号**"
 CHART_UPDATE_PREVIEW_STEP = "chart_update_preview"
 CHART_UPDATE_PREVIEW_EXPIRED_MESSAGE = "⏳ 预览已过期或已被新的更新取代，请重新发送 /update_chart"
 CHART_UPDATE_PREVIEW_PROMPT = "📋 **请确认是否转发以下图表更新**"
-SIGNAL_UPDATE_CANDLE_LIMIT = 1000
 
 
 class OrderHandlersMixin:
@@ -246,7 +245,7 @@ class OrderHandlersMixin:
         candles = await self.trade_manager.get_candles(
             signal.symbol,
             granularity,
-            SIGNAL_UPDATE_CANDLE_LIMIT,
+            Config.SIGNAL_UPDATE_CANDLE_LIMIT,
             end_time=datetime.now(timezone.utc),
         )
         return await asyncio.to_thread(render_signal_update_chart, signal, candles, granularity, signal_time)

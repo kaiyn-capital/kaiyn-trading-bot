@@ -9,8 +9,9 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.database import PendingOrderRepository
+from app.database import PendingOrderRepository, TradeRepository
 from app.models import Base, PendingOrder, Trade, User
+from app.risk_limits import RiskLimitExceeded
 
 
 class IntegrationDatabaseManager:
@@ -99,6 +100,23 @@ async def seed_trade(db, user_id):
             quantity=0.01,
             client_order_id=f"test_{uuid.uuid4().hex}",
             status="filled",
+        )
+        session.add(trade)
+        await session.flush()
+        return trade.id
+
+
+async def seed_trade_with_status(db, user_id, status, created_at):
+    async with db.get_session() as session:
+        trade = Trade(
+            user_id=user_id,
+            symbol="BTCUSDT",
+            side="buy",
+            order_type="market",
+            quantity=0.01,
+            client_order_id=f"test_{uuid.uuid4().hex}",
+            status=status,
+            created_at=created_at,
         )
         session.add(trade)
         await session.flush()
@@ -240,5 +258,52 @@ def test_mark_executed_and_failed_pending_order():
 
             assert await repo.mark_failed("missing", "no row") is False
             assert await repo.mark_executed("missing", trade_id) is False
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.integration
+def test_trade_repository_daily_non_failed_count_and_limit_create():
+    async def scenario():
+        async with integration_database() as db:
+            repo = TradeRepository(db)
+            user_id = await seed_user(db)
+            day_start = datetime(2026, 5, 21, 16, 0, 0)
+
+            await seed_trade_with_status(db, user_id, "filled", day_start + timedelta(hours=1))
+            await seed_trade_with_status(db, user_id, "pending", day_start + timedelta(hours=2))
+            await seed_trade_with_status(db, user_id, "failed", day_start + timedelta(hours=3))
+            await seed_trade_with_status(db, user_id, "filled", day_start - timedelta(seconds=1))
+
+            assert await repo.count_daily_non_failed_trades(user_id, day_start) == 2
+
+            trade = await repo.create_trade_with_daily_limit(
+                user_id=user_id,
+                symbol="ETHUSDT",
+                side="buy",
+                order_type="market",
+                quantity=0.1,
+                price=None,
+                client_order_id=f"test_{uuid.uuid4().hex}",
+                daily_trade_limit=3,
+                day_start_utc=day_start,
+            )
+            assert trade.id
+            assert await repo.count_daily_non_failed_trades(user_id, day_start) == 3
+
+            with pytest.raises(RiskLimitExceeded) as error:
+                await repo.create_trade_with_daily_limit(
+                    user_id=user_id,
+                    symbol="SOLUSDT",
+                    side="buy",
+                    order_type="market",
+                    quantity=1,
+                    price=None,
+                    client_order_id=f"test_{uuid.uuid4().hex}",
+                    daily_trade_limit=3,
+                    day_start_utc=day_start,
+                )
+
+            assert "今日下单次数已达上限" in str(error.value)
 
     asyncio.run(scenario())
