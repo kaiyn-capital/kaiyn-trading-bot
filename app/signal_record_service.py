@@ -3,6 +3,7 @@ import string
 
 from .bot_messages import signal_message
 from .config import Config
+from .decimal_utils import to_decimal
 from .order_types import SignalDraft
 
 SIGNAL_PUBLIC_ID_ALPHABET = string.ascii_lowercase + string.digits
@@ -71,9 +72,9 @@ class SignalRecordService:
         return SignalDraft(
             symbol=record["symbol"],
             direction=record["direction"],
-            entry_lower=record["entry_lower"],
-            entry_upper=record["entry_upper"],
-            stop_loss=record["stop_loss"],
-            take_profit_levels=record["take_profit_levels"],
+            entry_lower=to_decimal(record["entry_lower"]),
+            entry_upper=to_decimal(record["entry_upper"]),
+            stop_loss=to_decimal(record["stop_loss"]),
+            take_profit_levels=[to_decimal(tp) for tp in record["take_profit_levels"]],
             remark=record.get("remark") or "",
         )

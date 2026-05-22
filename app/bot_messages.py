@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+from .decimal_utils import decimal_text
 from .order_flow import OrderExecutionResult, OrderPreview, SignalDraft
 
 UTC_PLUS_8 = timezone(timedelta(hours=8))
@@ -86,7 +87,7 @@ def help_message() -> str:
 
 
 def settings_message(risk_amount: float | None) -> str:
-    risk_text = f"{risk_amount} USDT" if risk_amount else "未设置"
+    risk_text = f"{decimal_text(risk_amount)} USDT" if risk_amount else "未设置"
     return f"""
 ⚙️ **交易设置**
 
@@ -109,8 +110,16 @@ def signal_usage_message() -> str:
     )
 
 
-def _format_signal_price(value: float) -> str:
-    return format(Decimal(str(value)).normalize(), "f")
+def _format_signal_price(value) -> str:
+    return decimal_text(value)
+
+
+def _format_usdt(value, places: int = 2) -> str:
+    return f"{Decimal(decimal_text(value)):.{places}f}"
+
+
+def _format_price(value, places: int = 4) -> str:
+    return f"{Decimal(decimal_text(value)):,.{places}f}"
 
 
 def _format_signal_entry(signal: SignalDraft) -> str:
@@ -165,16 +174,16 @@ def order_preview_message(symbol: str, direction: str, preview: OrderPreview) ->
     text += f"**交易对：** {symbol}\n"
     text += f"**方向：** {direction_text}\n"
     text += f"**下单方式：** {order_mode_text}\n"
-    text += f"**当前价格：** ${preview.current_price:,.4f}\n"
+    text += f"**当前价格：** ${_format_price(preview.current_price)}\n"
     if preview.order_mode == "limit":
-        limit_price_text = preview.limit_price_text or f"{preview.limit_price:,.4f}"
+        limit_price_text = preview.limit_price_text or _format_price(preview.limit_price)
         text += f"**挂单价格：** ${limit_price_text}\n"
-    text += f"**止损价格：** ${preview.stop_loss:,.4f}\n"
-    quantity_text = preview.quantity_text or f"{preview.quantity:.6f}"
+    text += f"**止损价格：** ${_format_price(preview.stop_loss)}\n"
+    quantity_text = preview.quantity_text or decimal_text(preview.quantity, 6)
     text += f"**交易数量：** {quantity_text}\n"
-    text += f"**名义价值：** ${preview.position_value:.2f}\n"
-    text += f"**风险金额(1R)：** ${preview.risk_amount:.2f}\n"
-    text += f"**止损距离：** {preview.stop_distance_pct * 100:.2f}%\n\n"
+    text += f"**名义价值：** ${_format_usdt(preview.position_value)}\n"
+    text += f"**风险金额(1R)：** ${_format_usdt(preview.risk_amount)}\n"
+    text += f"**止损距离：** {_format_usdt(preview.stop_distance_pct * Decimal('100'))}%\n\n"
     if preview.order_mode == "limit":
         text += "⚠️ 将送出 GTC 限价挂单，订单送出不代表已成交"
     else:
@@ -185,23 +194,23 @@ def order_preview_message(symbol: str, direction: str, preview: OrderPreview) ->
 def order_success_message(
     result: OrderExecutionResult,
     direction: str,
-    stop_loss: float,
-    current_price: float,
-    risk_amount: float,
+    stop_loss,
+    current_price,
+    risk_amount,
 ) -> str:
     is_limit_order = result.order_type == "limit"
     text = "✅ **挂单已送出**\n\n" if is_limit_order else "✅ **下单成功**\n\n"
     text += f"**币种：** {result.symbol}\n"
     text += f"**方向：** {'做多' if direction == 'long' else '做空'}\n"
     text += f"**下单方式：** {'挂单' if is_limit_order else '市价'}\n"
-    text += f"**仓位名义价值：** ${result.position_value:.2f}\n"
-    text += f"**止损：** ${stop_loss:,.4f}\n"
+    text += f"**仓位名义价值：** ${_format_usdt(result.position_value)}\n"
+    text += f"**止损：** ${_format_price(stop_loss)}\n"
     if is_limit_order:
-        text += f"**挂单价格：** ${result.limit_price:,.4f}\n"
-        text += f"**当前价格：** ${current_price:,.4f}\n"
+        text += f"**挂单价格：** ${_format_price(result.limit_price)}\n"
+        text += f"**当前价格：** ${_format_price(current_price)}\n"
     else:
-        text += f"**进场价格：** ${current_price:,.4f}\n"
-    text += f"**当前 1R 设置：** ${risk_amount:.2f}\n"
+        text += f"**进场价格：** ${_format_price(current_price)}\n"
+    text += f"**当前 1R 设置：** ${_format_usdt(risk_amount)}\n"
     text += f"**订单 ID：** {result.bitget_order_id[:16]}...\n\n"
     text += "✅ 止损已同时设置"
     if is_limit_order:

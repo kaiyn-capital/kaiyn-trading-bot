@@ -1,12 +1,14 @@
 import logging
 import time
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Dict, List
 
 import httpx
 
 from .bitget_errors import BitgetAPIError
 from .config import Config
+from .decimal_utils import to_decimal
 from .market_types import MarketCandle
 
 logger = logging.getLogger(__name__)
@@ -46,7 +48,7 @@ class BitgetPublicMarket:
         self._contracts_cache = {}
         self._contracts_cache_ttl_seconds = contracts_cache_ttl_seconds
 
-    async def get_market_price(self, symbol: str) -> float:
+    async def get_market_price(self, symbol: str) -> Decimal:
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
                 logger.info(f"Getting futures market price for {symbol}")
@@ -62,7 +64,7 @@ class BitgetPublicMarket:
                     if data.get("code") == "00000" and data.get("data"):
                         for item in data["data"]:
                             if item.get("symbol") == symbol:
-                                price = float(item.get("lastPr", 0))
+                                price = to_decimal(item.get("lastPr", 0))
                                 logger.info(f"Found price for {symbol}: {price}")
                                 return price
 

@@ -1,7 +1,7 @@
 from dataclasses import replace
 from decimal import ROUND_DOWN, Decimal, InvalidOperation
-from typing import Optional
 
+from .decimal_utils import decimal_text, to_decimal
 from .order_types import ContractRules, OrderPreview, OrderValidationResult
 
 
@@ -33,13 +33,7 @@ def _floor_to_step(value: Decimal, step: Decimal) -> Decimal:
     return (value / step).to_integral_value(rounding=ROUND_DOWN) * step
 
 
-def _decimal_text(value: Decimal, places: Optional[int] = None) -> str:
-    if places is not None:
-        value = _quantize_for_places(value, places)
-    text = format(value, "f")
-    if "." in text:
-        text = text.rstrip("0").rstrip(".")
-    return text or "0"
+_decimal_text = decimal_text
 
 
 def _price_step(rules: ContractRules) -> Decimal:
@@ -74,11 +68,13 @@ def _validate_contract_rules(rules: ContractRules) -> OrderValidationResult | No
     return None
 
 
-def _select_calculation_price(preview: OrderPreview) -> tuple[Decimal | None, OrderValidationResult | None]:
+def _select_calculation_price(
+    preview: OrderPreview,
+) -> tuple[Decimal | None, OrderValidationResult | None]:
     calculation_price = (
-        Decimal(str(preview.limit_price))
+        to_decimal(preview.limit_price)
         if preview.order_mode == "limit" and preview.limit_price is not None
-        else Decimal(str(preview.current_price))
+        else to_decimal(preview.current_price)
     )
 
     if calculation_price <= 0:
@@ -105,7 +101,7 @@ def _normalize_quantity(
     preview: OrderPreview,
     rules: ContractRules,
 ) -> tuple[Decimal | None, str | None, OrderValidationResult | None]:
-    quantity = Decimal(str(preview.quantity))
+    quantity = to_decimal(preview.quantity)
     if quantity <= 0:
         return None, None, OrderValidationResult(False, "❌ 下单数量错误，无法下单")
 
@@ -146,21 +142,32 @@ def _normalize_limit_price(
     rules: ContractRules,
     direction: str,
     calculation_price: Decimal,
-) -> tuple[Decimal | None, float | None, str | None, OrderValidationResult | None]:
+) -> tuple[Decimal | None, Decimal | None, str | None, OrderValidationResult | None]:
     if preview.order_mode != "limit":
         return calculation_price, None, None, None
 
     if preview.limit_price is None or preview.limit_price <= 0:
-        return None, None, None, OrderValidationResult(False, "❌ 挂单价格错误，无法下单")
+        return (
+            None,
+            None,
+            None,
+            OrderValidationResult(False, "❌ 挂单价格错误，无法下单"),
+        )
 
-    limit_price_decimal = Decimal(str(preview.limit_price))
+    limit_price_decimal = to_decimal(preview.limit_price)
     limit_price_decimal = _floor_to_step(limit_price_decimal, _price_step(rules))
     limit_price_decimal = _quantize_for_places(limit_price_decimal, rules.price_place)
     if limit_price_decimal <= 0:
-        return None, None, None, OrderValidationResult(False, "❌ 挂单价格错误，无法下单")
+        return (
+            None,
+            None,
+            None,
+            OrderValidationResult(False, "❌ 挂单价格错误，无法下单"),
+        )
 
-    if (direction == "long" and limit_price_decimal >= Decimal(str(preview.current_price))) or (
-        direction == "short" and limit_price_decimal <= Decimal(str(preview.current_price))
+    current_price = to_decimal(preview.current_price)
+    if (direction == "long" and limit_price_decimal >= current_price) or (
+        direction == "short" and limit_price_decimal <= current_price
     ):
         return (
             None,
@@ -172,7 +179,12 @@ def _normalize_limit_price(
             ),
         )
 
-    return limit_price_decimal, float(limit_price_decimal), _decimal_text(limit_price_decimal, rules.price_place), None
+    return (
+        limit_price_decimal,
+        limit_price_decimal,
+        _decimal_text(limit_price_decimal, rules.price_place),
+        None,
+    )
 
 
 def _validate_position_value(
@@ -206,7 +218,7 @@ def validate_order_preview(
     if calculation_error:
         return calculation_error
 
-    stop_loss_error = _validate_stop_loss_direction(direction, Decimal(str(preview.stop_loss)), calculation_price)
+    stop_loss_error = _validate_stop_loss_direction(direction, to_decimal(preview.stop_loss), calculation_price)
     if stop_loss_error:
         return stop_loss_error
 
@@ -229,11 +241,11 @@ def validate_order_preview(
 
     return OrderValidationResult(
         is_valid=True,
-        quantity=float(quantity),
+        quantity=quantity,
         quantity_text=quantity_text,
         limit_price=limit_price,
         limit_price_text=limit_price_text,
-        position_value=float(position_value_decimal),
+        position_value=position_value_decimal,
     )
 
 
@@ -243,7 +255,7 @@ def apply_order_validation(preview: OrderPreview, validation: OrderValidationRes
 
     return replace(
         preview,
-        quantity=validation.quantity if validation.quantity is not None else preview.quantity,
+        quantity=(validation.quantity if validation.quantity is not None else preview.quantity),
         quantity_text=validation.quantity_text,
         limit_price=(validation.limit_price if preview.order_mode == "limit" else preview.limit_price),
         limit_price_text=validation.limit_price_text,

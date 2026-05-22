@@ -2,16 +2,24 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
 
+from .decimal_utils import to_decimal, to_decimal_or_none
+
 
 @dataclass(frozen=True)
 class SignalDraft:
     symbol: str
     direction: str
-    entry_lower: float
-    entry_upper: float
-    stop_loss: float
-    take_profit_levels: list[float]
+    entry_lower: Decimal
+    entry_upper: Decimal
+    stop_loss: Decimal
+    take_profit_levels: list[Decimal]
     remark: str = ""
+
+    def __post_init__(self):
+        object.__setattr__(self, "entry_lower", to_decimal(self.entry_lower))
+        object.__setattr__(self, "entry_upper", to_decimal(self.entry_upper))
+        object.__setattr__(self, "stop_loss", to_decimal(self.stop_loss))
+        object.__setattr__(self, "take_profit_levels", [to_decimal(tp) for tp in self.take_profit_levels])
 
 
 @dataclass(frozen=True)
@@ -19,27 +27,43 @@ class OrderCallbackData:
     order_mode: str
     symbol: str
     direction: str
-    entry_lower: float
-    entry_upper: float
-    stop_loss: float
+    entry_lower: Decimal
+    entry_upper: Decimal
+    stop_loss: Decimal
+
+    def __post_init__(self):
+        object.__setattr__(self, "entry_lower", to_decimal(self.entry_lower))
+        object.__setattr__(self, "entry_upper", to_decimal(self.entry_upper))
+        object.__setattr__(self, "stop_loss", to_decimal(self.stop_loss))
 
 
 @dataclass(frozen=True)
 class OrderPreview:
     requested_order_mode: str
     order_mode: str
-    limit_price: Optional[float]
-    entry_lower: float
-    entry_upper: float
-    quantity: float
-    stop_loss: float
-    position_value: float
-    current_price: float
-    risk_amount: float
-    stop_distance_pct: float
+    limit_price: Optional[Decimal]
+    entry_lower: Decimal
+    entry_upper: Decimal
+    quantity: Decimal
+    stop_loss: Decimal
+    position_value: Decimal
+    current_price: Decimal
+    risk_amount: Decimal
+    stop_distance_pct: Decimal
     switch_notice: Optional[str] = None
     quantity_text: Optional[str] = None
     limit_price_text: Optional[str] = None
+
+    def __post_init__(self):
+        object.__setattr__(self, "limit_price", to_decimal_or_none(self.limit_price))
+        object.__setattr__(self, "entry_lower", to_decimal(self.entry_lower))
+        object.__setattr__(self, "entry_upper", to_decimal(self.entry_upper))
+        object.__setattr__(self, "quantity", to_decimal(self.quantity))
+        object.__setattr__(self, "stop_loss", to_decimal(self.stop_loss))
+        object.__setattr__(self, "position_value", to_decimal(self.position_value))
+        object.__setattr__(self, "current_price", to_decimal(self.current_price))
+        object.__setattr__(self, "risk_amount", to_decimal(self.risk_amount))
+        object.__setattr__(self, "stop_distance_pct", to_decimal(self.stop_distance_pct))
 
 
 @dataclass(frozen=True)
@@ -50,9 +74,14 @@ class OrderExecutionResult:
     side: str
     order_type: str
     status: str
-    quantity: float
-    position_value: float
-    limit_price: Optional[float]
+    quantity: Decimal
+    position_value: Decimal
+    limit_price: Optional[Decimal]
+
+    def __post_init__(self):
+        object.__setattr__(self, "quantity", to_decimal(self.quantity))
+        object.__setattr__(self, "position_value", to_decimal(self.position_value))
+        object.__setattr__(self, "limit_price", to_decimal_or_none(self.limit_price))
 
 
 @dataclass(frozen=True)
@@ -74,8 +103,13 @@ class ContractRules:
 class OrderValidationResult:
     is_valid: bool
     error_message: Optional[str] = None
-    quantity: Optional[float] = None
+    quantity: Optional[Decimal] = None
     quantity_text: Optional[str] = None
-    limit_price: Optional[float] = None
+    limit_price: Optional[Decimal] = None
     limit_price_text: Optional[str] = None
-    position_value: Optional[float] = None
+    position_value: Optional[Decimal] = None
+
+    def __post_init__(self):
+        object.__setattr__(self, "quantity", to_decimal_or_none(self.quantity))
+        object.__setattr__(self, "limit_price", to_decimal_or_none(self.limit_price))
+        object.__setattr__(self, "position_value", to_decimal_or_none(self.position_value))

@@ -1,4 +1,5 @@
 import asyncio
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -318,12 +319,12 @@ def test_confirm_pending_order_processing_executes_with_full_pending_data():
     request = service.executions[0]
     assert request.symbol == "BTCUSDT"
     assert request.direction == "short"
-    assert request.quantity == 0.02
-    assert request.stop_loss == 81700
-    assert request.position_value == 1604
-    assert request.current_price == 80500
+    assert request.quantity == Decimal("0.02")
+    assert request.stop_loss == Decimal("81700")
+    assert request.position_value == Decimal("1604")
+    assert request.current_price == Decimal("80500")
     assert request.order_mode == "limit"
-    assert request.limit_price == 80200
+    assert request.limit_price == Decimal("80200")
     assert request.pending_order_token == "tok_ready"
     assert audit_owner.audit_events[-1]["action"] == "pending_order_confirm"
     assert audit_owner.audit_events[-1]["details"]["status"] == "processing"
@@ -419,8 +420,8 @@ def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch):
     assert pending_order_repo.failed == []
     assert failure_alert.calls == []
     assert audit_owner.audit_events[-1]["details"]["reason"] == "position_size_limit_exceeded"
-    assert audit_owner.audit_events[-1]["details"]["position_limit"] == 500.0
-    assert system_log_repo.logs[-1]["extra_data"]["position_limit"] == 500.0
+    assert audit_owner.audit_events[-1]["details"]["position_limit"] == "500"
+    assert system_log_repo.logs[-1]["extra_data"]["position_limit"] == "500"
 
 
 def test_execute_order_blocks_when_daily_trade_limit_reached_before_bitget():

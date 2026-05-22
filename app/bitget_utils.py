@@ -1,3 +1,9 @@
+from decimal import Decimal
+from typing import Any
+
+from .decimal_utils import decimal_text, to_decimal
+
+
 def format_symbol(symbol: str) -> str:
     return symbol.upper().replace("/", "").replace("-", "")
 
@@ -21,13 +27,13 @@ def validate_order_params(symbol: str, side: str, order_type: str, quantity: flo
     return True
 
 
-def calculate_order_value(quantity: float, price: float) -> float:
-    return quantity * price
+def calculate_order_value(quantity: Any, price: Any) -> Decimal:
+    return to_decimal(quantity) * to_decimal(price)
 
 
-def format_price(price: float, precision: int = 8) -> str:
-    return f"{price:.{precision}f}".rstrip("0").rstrip(".")
+def format_price(price: Any, precision: int = 8) -> str:
+    return decimal_text(price, precision)
 
 
-def format_quantity(quantity: float, precision: int = 8) -> str:
-    return f"{quantity:.{precision}f}".rstrip("0").rstrip(".")
+def format_quantity(quantity: Any, precision: int = 8) -> str:
+    return decimal_text(quantity, precision)

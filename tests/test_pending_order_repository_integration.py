@@ -3,6 +3,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import select, text
@@ -97,7 +98,7 @@ async def seed_trade(db, user_id):
             symbol="BTCUSDT",
             side="buy",
             order_type="market",
-            quantity=0.01,
+            quantity=Decimal("0.01"),
             client_order_id=f"test_{uuid.uuid4().hex}",
             status="filled",
         )
@@ -113,7 +114,7 @@ async def seed_trade_with_status(db, user_id, status, created_at):
             symbol="BTCUSDT",
             side="buy",
             order_type="market",
-            quantity=0.01,
+            quantity=Decimal("0.01"),
             client_order_id=f"test_{uuid.uuid4().hex}",
             status=status,
             created_at=created_at,
@@ -131,12 +132,12 @@ async def create_pending(repo, user_id, telegram_id=123456, **overrides):
         "direction": "long",
         "order_mode": "market",
         "limit_price": None,
-        "entry_lower": 80000,
-        "entry_upper": 81000,
-        "quantity": 0.01,
-        "stop_loss": 79000,
-        "position_value": 800,
-        "current_price": 80000,
+        "entry_lower": Decimal("80000"),
+        "entry_upper": Decimal("81000"),
+        "quantity": Decimal("0.01"),
+        "stop_loss": Decimal("79000"),
+        "position_value": Decimal("800"),
+        "current_price": Decimal("80000"),
         "expires_at": datetime.utcnow() + timedelta(minutes=10),
     }
     data.update(overrides)
@@ -146,6 +147,12 @@ async def create_pending(repo, user_id, telegram_id=123456, **overrides):
 async def load_pending(db, token):
     async with db.get_session() as session:
         result = await session.execute(select(PendingOrder).where(PendingOrder.token == token))
+        return result.scalar_one()
+
+
+async def load_trade(db, trade_id):
+    async with db.get_session() as session:
+        result = await session.execute(select(Trade).where(Trade.id == trade_id))
         return result.scalar_one()
 
 
@@ -160,15 +167,15 @@ def test_create_and_claim_pending_order_lifecycle():
                 repo,
                 user_id,
                 order_mode="limit",
-                limit_price=81000,
-                entry_lower=80200,
-                entry_upper=81000,
+                limit_price=Decimal("81000.123456789123456789"),
+                entry_lower=Decimal("80200.123456789123456789"),
+                entry_upper=Decimal("81000.123456789123456789"),
             )
 
             assert pending.status == "pending"
             assert pending.symbol == "BTCUSDT"
             assert pending.order_mode == "limit"
-            assert pending.limit_price == 81000
+            assert pending.limit_price == Decimal("81000.123456789123456789")
 
             claimed, status = await repo.claim_pending_order(pending.token, 123456)
             assert status == "processing"
@@ -176,6 +183,10 @@ def test_create_and_claim_pending_order_lifecycle():
 
             saved = await load_pending(db, pending.token)
             assert saved.status == "processing"
+            assert saved.limit_price == Decimal("81000.123456789123456789")
+            assert saved.entry_lower == Decimal("80200.123456789123456789")
+            assert saved.quantity == Decimal("0.010000000000000000")
+            assert isinstance(saved.quantity, Decimal)
 
             claimed_again, status_again = await repo.claim_pending_order(pending.token, 123456)
             assert claimed_again.token == pending.token
@@ -282,13 +293,16 @@ def test_trade_repository_daily_non_failed_count_and_limit_create():
                 symbol="ETHUSDT",
                 side="buy",
                 order_type="market",
-                quantity=0.1,
+                quantity=Decimal("0.1"),
                 price=None,
                 client_order_id=f"test_{uuid.uuid4().hex}",
                 daily_trade_limit=3,
                 day_start_utc=day_start,
             )
             assert trade.id
+            saved_trade = await load_trade(db, trade.id)
+            assert saved_trade.quantity == Decimal("0.100000000000000000")
+            assert isinstance(saved_trade.quantity, Decimal)
             assert await repo.count_daily_non_failed_trades(user_id, day_start) == 3
 
             with pytest.raises(RiskLimitExceeded) as error:
@@ -297,7 +311,7 @@ def test_trade_repository_daily_non_failed_count_and_limit_create():
                     symbol="SOLUSDT",
                     side="buy",
                     order_type="market",
-                    quantity=1,
+                    quantity=Decimal("1"),
                     price=None,
                     client_order_id=f"test_{uuid.uuid4().hex}",
                     daily_trade_limit=3,

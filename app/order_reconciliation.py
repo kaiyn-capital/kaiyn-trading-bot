@@ -1,10 +1,12 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Any, Optional
 
 from .audit import summarize_identifier
 from .bitget_errors import ClassifiedBitgetError, classify_bitget_exception
+from .decimal_utils import to_decimal_or_none
 from .order_flow import build_client_order_id
 
 logger = logging.getLogger(__name__)
@@ -187,13 +189,13 @@ class PendingOrderReconciliationService:
         if order_type not in {"market", "limit"}:
             order_type = pending_order.order_mode if pending_order.order_mode in {"market", "limit"} else "market"
 
-        exchange_price = _parse_optional_float(order_data.get("price"))
+        exchange_price = _parse_optional_decimal(order_data.get("price"))
         return await self.trade_repo.create_trade(
             user_id=user.id,
             symbol=pending_order.symbol,
             side=_side_from_pending_order(pending_order),
             order_type=order_type,
-            quantity=float(pending_order.quantity),
+            quantity=pending_order.quantity,
             price=(exchange_price if exchange_price is not None else pending_order.limit_price)
             if order_type == "limit"
             else None,
@@ -205,10 +207,10 @@ class PendingOrderReconciliationService:
             trade_id,
             bitget_order_id=order_data.get("orderId") or None,
             status=local_status,
-            filled_quantity=_parse_float(order_data.get("baseVolume"), default=0.0),
-            avg_price=_parse_optional_float(order_data.get("priceAvg")),
-            total_amount=_parse_optional_float(order_data.get("quoteVolume")),
-            fee=_parse_float(order_data.get("fee"), default=0.0),
+            filled_quantity=_parse_decimal(order_data.get("baseVolume"), default=Decimal("0")),
+            avg_price=_parse_optional_decimal(order_data.get("priceAvg")),
+            total_amount=_parse_optional_decimal(order_data.get("quoteVolume")),
+            fee=_parse_decimal(order_data.get("fee"), default=Decimal("0")),
         )
 
     async def _mark_failed_not_found(self, pending_order, trade, client_order_id: str):
@@ -326,17 +328,14 @@ def _side_from_pending_order(pending_order) -> str:
     return "buy" if pending_order.direction == "long" else "sell"
 
 
-def _parse_optional_float(value: Any) -> Optional[float]:
+def _parse_optional_decimal(value: Any) -> Optional[Decimal]:
     if value is None or value == "":
         return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+    return to_decimal_or_none(value)
 
 
-def _parse_float(value: Any, default: float) -> float:
-    parsed = _parse_optional_float(value)
+def _parse_decimal(value: Any, default: Decimal) -> Decimal:
+    parsed = _parse_optional_decimal(value)
     return default if parsed is None else parsed
 
 

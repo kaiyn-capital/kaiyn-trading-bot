@@ -14,6 +14,7 @@ from .bot_keyboards import (
 from .bot_messages import help_message, settings_message, welcome_message
 from .bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
 from .bot_states import WAITING_API_KEY
+from .decimal_utils import decimal_text, to_decimal
 from .log_sanitizer import summarize_balance_response
 
 logger = logging.getLogger(__name__)
@@ -233,14 +234,17 @@ class AccountHandlersMixin(UserSessionMixin):
         amount_text = update.message.text.strip()
 
         try:
-            amount = float(amount_text)
+            amount = to_decimal(amount_text)
             if amount <= 0:
                 raise ValueError("金额必须大于 0")
 
             success = await self.user_repo.update_user_risk_amount(user.id, amount)
 
             if success:
-                await update.message.reply_text(f"✅ **已设置定 R 止损为 {amount} USDT**", parse_mode="Markdown")
+                await update.message.reply_text(
+                    f"✅ **已设置定 R 止损为 {decimal_text(amount)} USDT**",
+                    parse_mode="Markdown",
+                )
             else:
                 await update.message.reply_text("❌ 设置失败，请重试")
 

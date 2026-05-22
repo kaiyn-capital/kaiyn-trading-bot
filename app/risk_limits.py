@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Optional
 
 from .config import Config
+from .decimal_utils import decimal_json, to_decimal_or_none
 
 UTC_PLUS_8 = timezone(timedelta(hours=8))
 
@@ -19,10 +21,9 @@ class RiskLimitExceeded(Exception):
         return self.user_message
 
 
-def _positive_float_or_none(value: Any) -> Optional[float]:
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
+def _positive_decimal_or_none(value: Any) -> Optional[Decimal]:
+    parsed = to_decimal_or_none(value)
+    if parsed is None:
         return None
     return parsed if parsed > 0 else None
 
@@ -35,10 +36,10 @@ def _positive_int_or_none(value: Any) -> Optional[int]:
     return parsed if parsed > 0 else None
 
 
-def get_effective_position_limit(user_data) -> float:
+def get_effective_position_limit(user_data) -> Decimal:
     """Return the stricter positive position cap between global and user settings."""
-    global_limit = _positive_float_or_none(Config.MAX_POSITION_SIZE) or 1000.0
-    user_limit = _positive_float_or_none(getattr(user_data, "max_position_size", None))
+    global_limit = _positive_decimal_or_none(Config.MAX_POSITION_SIZE) or Decimal("1000.0")
+    user_limit = _positive_decimal_or_none(getattr(user_data, "max_position_size", None))
     return min(global_limit, user_limit) if user_limit else global_limit
 
 
@@ -62,7 +63,7 @@ def get_daily_limit_day_start_utc(now: Optional[datetime] = None) -> datetime:
     return local_start.astimezone(timezone.utc).replace(tzinfo=None)
 
 
-def build_position_limit_error(position_value: float, position_limit: float) -> RiskLimitExceeded:
+def build_position_limit_error(position_value: Decimal, position_limit: Decimal) -> RiskLimitExceeded:
     return RiskLimitExceeded(
         reason="position_size_limit_exceeded",
         user_message=(
@@ -72,8 +73,8 @@ def build_position_limit_error(position_value: float, position_limit: float) -> 
         ),
         details={
             "reason": "position_size_limit_exceeded",
-            "position_value": position_value,
-            "position_limit": position_limit,
+            "position_value": decimal_json(position_value),
+            "position_limit": decimal_json(position_limit),
         },
     )
 
@@ -100,7 +101,8 @@ def build_daily_trade_limit_error(
     )
 
 
-def ensure_position_within_limit(position_value: float, user_data) -> None:
+def ensure_position_within_limit(position_value, user_data) -> None:
+    position_value = _positive_decimal_or_none(position_value) or Decimal("0")
     position_limit = get_effective_position_limit(user_data)
     if position_value > position_limit:
         raise build_position_limit_error(position_value, position_limit)

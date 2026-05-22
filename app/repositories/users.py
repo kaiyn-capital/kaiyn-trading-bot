@@ -1,7 +1,9 @@
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import select
 
+from ..decimal_utils import to_decimal
 from ..models import User
 
 
@@ -60,14 +62,14 @@ class UserRepository:
             user.is_api_connected = True
             return True
 
-    async def update_user_risk_amount(self, user_id: int, risk_amount: float) -> bool:
+    async def update_user_risk_amount(self, user_id: int, risk_amount: Decimal) -> bool:
         """更新用戶風險金額設置"""
         async with self.db.get_session() as session:
             user = await session.get(User, user_id)
             if not user:
                 return False
 
-            user.fixed_risk_amount = risk_amount
+            user.fixed_risk_amount = to_decimal(risk_amount)
             return True
 
     async def set_trader_status(self, telegram_id: int, is_trader: bool = True) -> bool:
