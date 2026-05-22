@@ -121,6 +121,15 @@ format: ## Apply Ruff lint fixes and formatting
 	$(COMPOSE) run --rm test ruff check --fix .
 	$(COMPOSE) run --rm test ruff format .
 
+.PHONY: migrate-test
+migrate-test: ## Run Alembic upgrade head on test database
+	$(MAKE) up-db
+	$(COMPOSE) run --rm test alembic upgrade head
+
+.PHONY: alembic-check
+alembic-check: ## Check Alembic migration-model consistency
+	$(COMPOSE) run --rm test alembic check
+
 .PHONY: test
 test: ## Run fast pytest suite
 	$(COMPOSE) run --rm test python -m pytest
@@ -142,6 +151,8 @@ diff-check: ## Check git whitespace errors
 verify: ## Run the full Docker-first verification suite
 	$(MAKE) build-test
 	$(MAKE) lock-check
+	$(MAKE) migrate-test
+	$(MAKE) alembic-check
 	$(MAKE) lint
 	$(MAKE) format-check
 	$(MAKE) test-db
