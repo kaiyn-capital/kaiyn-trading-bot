@@ -1,6 +1,7 @@
 import hashlib
 import re
 import secrets
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Sequence
 
@@ -214,6 +215,8 @@ async def execute_order(
     quantity_text: Optional[str] = None,
     limit_price_text: Optional[str] = None,
     client_order_id: Optional[str] = None,
+    daily_trade_limit: Optional[int] = None,
+    daily_limit_day_start_utc: Optional[datetime] = None,
 ) -> OrderExecutionResult:
     order_mode = order_mode if order_mode in {"market", "limit"} else "market"
     is_limit_order = order_mode == "limit"
@@ -230,15 +233,23 @@ async def execute_order(
     trade_record_id = None
 
     try:
-        trade_record = await trade_repo.create_trade(
-            user_id=user_data.id,
-            symbol=symbol,
-            side=side,
-            order_type=order_type,
-            quantity=quantity,
-            price=order_price,
-            client_order_id=client_order_id,
-        )
+        trade_payload = {
+            "user_id": user_data.id,
+            "symbol": symbol,
+            "side": side,
+            "order_type": order_type,
+            "quantity": quantity,
+            "price": order_price,
+            "client_order_id": client_order_id,
+        }
+        if daily_trade_limit is not None and daily_limit_day_start_utc is not None:
+            trade_record = await trade_repo.create_trade_with_daily_limit(
+                **trade_payload,
+                daily_trade_limit=daily_trade_limit,
+                day_start_utc=daily_limit_day_start_utc,
+            )
+        else:
+            trade_record = await trade_repo.create_trade(**trade_payload)
         trade_record_id = trade_record.id
 
         if is_limit_order:

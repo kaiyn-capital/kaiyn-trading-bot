@@ -19,6 +19,14 @@ from .order_flow import (
 from .order_flow import (
     execute_order as execute_order_flow,
 )
+from .risk_limits import (
+    RiskLimitExceeded,
+    ensure_daily_trade_limit_not_reached,
+    ensure_position_within_limit,
+    get_daily_limit_day_start_utc,
+    get_effective_daily_trade_limit,
+    get_effective_position_limit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +73,81 @@ class TelegramOrderFlowService:
     async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
         if self.failure_alert_handler:
             await self.failure_alert_handler(classified_error, source, details)
+
+    async def _get_daily_trade_count(self, user_data, day_start_utc: datetime) -> int:
+        return await self.trade_repo.count_daily_non_failed_trades(user_data.id, day_start_utc)
+
+    async def _ensure_daily_trade_limit_available(self, user_data, day_start_utc: datetime) -> int:
+        daily_trade_limit = get_effective_daily_trade_limit(user_data)
+        current_count = await self._get_daily_trade_count(user_data, day_start_utc)
+        ensure_daily_trade_limit_not_reached(
+            current_count=current_count,
+            daily_trade_limit=daily_trade_limit,
+            day_start_utc=day_start_utc,
+        )
+        return daily_trade_limit
+
+    async def _log_risk_limit_block(self, user, user_data, risk_error: RiskLimitExceeded, symbol: str, details: dict):
+        try:
+            await self.system_log_repo.log(
+                level="WARNING",
+                message="Order blocked by local risk limit",
+                module="risk_limits",
+                function=details.get("function"),
+                user_id=getattr(user_data, "id", None),
+                telegram_id=user.telegram_id,
+                extra_data={
+                    "symbol": symbol,
+                    "reason": risk_error.reason,
+                    **risk_error.details,
+                    **details,
+                },
+            )
+        except Exception as exc:
+            logger.error("Failed to log risk limit block: %s", exc)
+
+    async def _send_risk_limit_block_message(
+        self,
+        *,
+        query,
+        user,
+        user_data,
+        risk_error: RiskLimitExceeded,
+        symbol: str,
+        direction: str,
+        order_mode: str,
+        action: str,
+        pending_order_token: str | None = None,
+        position_value: float | None = None,
+        mark_pending_failed: bool = False,
+    ):
+        if mark_pending_failed and pending_order_token:
+            await self.pending_order_repo.mark_failed(pending_order_token, risk_error.user_message)
+
+        details = {
+            "status": "failed" if mark_pending_failed else "blocked",
+            "reason": risk_error.reason,
+            "symbol": symbol,
+            "direction": direction,
+            "order_mode": order_mode,
+            "position_value": position_value,
+            "effective_position_limit": get_effective_position_limit(user_data),
+            "effective_daily_trade_limit": get_effective_daily_trade_limit(user_data),
+            "pending_order_token": summarize_identifier(pending_order_token),
+            **risk_error.details,
+        }
+        await emit_audit_event(self.audit_owner, user, action, details)
+        await self._log_risk_limit_block(
+            user,
+            user_data,
+            risk_error,
+            symbol,
+            {
+                **details,
+                "function": action,
+            },
+        )
+        await self.send_private_message(query, user, risk_error.user_message)
 
     async def send_private_message(self, query, user, text, reply_markup=None):
         """Send a private Telegram message to the user."""
@@ -153,6 +236,9 @@ class TelegramOrderFlowService:
             return
 
         try:
+            day_start_utc = get_daily_limit_day_start_utc()
+            await self._ensure_daily_trade_limit_available(user_data, day_start_utc)
+
             await self.send_private_message(query, user, "🔄 正在获取当前市价与交易规则...")
 
             contract_payload = await self.trade_manager.get_contract_rules(callback_data.symbol)
@@ -211,6 +297,7 @@ class TelegramOrderFlowService:
                 return
 
             preview = apply_order_validation(preview, validation)
+            ensure_position_within_limit(preview.position_value, user_data)
 
             pending_order = await self.pending_order_repo.create_pending_order(
                 user_id=user_data.id,
@@ -258,6 +345,18 @@ class TelegramOrderFlowService:
                 pending_order_keyboard(pending_order.token),
             )
 
+        except RiskLimitExceeded as e:
+            await self._send_risk_limit_block_message(
+                query=query,
+                user=user,
+                user_data=user_data,
+                risk_error=e,
+                symbol=callback_data.symbol,
+                direction=callback_data.direction,
+                order_mode=callback_data.order_mode,
+                action="order_place_blocked",
+                position_value=e.details.get("position_value"),
+            )
         except Exception as e:
             classified = classify_bitget_exception(e)
             logger.error(f"Place order callback error: {classified.storage_message()}")
@@ -444,6 +543,8 @@ class TelegramOrderFlowService:
                 user_data.encrypted_secret_key,
                 user_data.encrypted_passphrase,
             )
+            day_start_utc = get_daily_limit_day_start_utc()
+            daily_trade_limit = await self._ensure_daily_trade_limit_available(user_data, day_start_utc)
 
             order_mode = order_mode if order_mode in {"market", "limit"} else "market"
             contract_payload = await self.trade_manager.get_contract_rules(symbol)
@@ -504,6 +605,7 @@ class TelegramOrderFlowService:
             position_value = validation.position_value or position_value
             if order_mode == "limit":
                 limit_price = validation.limit_price
+            ensure_position_within_limit(position_value, user_data)
 
             logger.info(
                 f"Executing {order_mode} order for {symbol}, direction: {direction}, "
@@ -527,6 +629,8 @@ class TelegramOrderFlowService:
                 quantity_text=validation.quantity_text,
                 limit_price_text=validation.limit_price_text,
                 client_order_id=client_order_id,
+                daily_trade_limit=daily_trade_limit,
+                daily_limit_day_start_utc=day_start_utc,
             )
 
             if pending_order_token:
@@ -563,6 +667,22 @@ class TelegramOrderFlowService:
                 },
             )
             return True
+
+        except RiskLimitExceeded as e:
+            await self._send_risk_limit_block_message(
+                query=query,
+                user=user,
+                user_data=user_data,
+                risk_error=e,
+                symbol=symbol,
+                direction=direction,
+                order_mode=order_mode,
+                action="order_risk_limit_failed",
+                pending_order_token=pending_order_token,
+                position_value=e.details.get("position_value", position_value),
+                mark_pending_failed=True,
+            )
+            return False
 
         except Exception as e:
             classified = classify_bitget_exception(e)

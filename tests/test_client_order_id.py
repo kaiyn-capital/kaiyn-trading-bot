@@ -1,5 +1,6 @@
 import asyncio
 import re
+from datetime import datetime
 from types import SimpleNamespace
 
 import app.order_flow as order_flow_module
@@ -16,14 +17,25 @@ class FakeTradeRecord:
 class RecordingTradeRepo:
     def __init__(self):
         self.created_trade = None
+        self.created_trade_with_daily_limit = None
         self.updated_results = []
 
     async def create_trade(self, **kwargs):
         self.created_trade = kwargs
         return FakeTradeRecord()
 
+    async def create_trade_with_daily_limit(self, **kwargs):
+        self.created_trade_with_daily_limit = kwargs
+        trade_kwargs = {
+            key: value for key, value in kwargs.items() if key not in {"daily_trade_limit", "day_start_utc"}
+        }
+        return await self.create_trade(**trade_kwargs)
+
     async def update_trade_result(self, trade_id, **kwargs):
         self.updated_results.append({"trade_id": trade_id, **kwargs})
+
+    async def count_daily_non_failed_trades(self, user_id, day_start_utc):
+        return 0
 
 
 class RecordingTradeManager:
@@ -70,6 +82,8 @@ class FakeUserRepo:
             encrypted_secret_key="secret",
             encrypted_passphrase="passphrase",
             fixed_risk_amount=10,
+            daily_trade_limit=10,
+            max_position_size=1000,
         )
 
 
@@ -233,6 +247,34 @@ def test_execute_order_without_client_order_id_uses_legal_fallback(monkeypatch):
     assert client_order_id == "KTB_fallback_token"
     assert trade_manager.market_orders[-1]["args"][5] == client_order_id
     assert CLIENT_ORDER_ID_PATTERN.fullmatch(client_order_id)
+
+
+def test_execute_order_uses_authoritative_daily_limit_create_path():
+    trade_repo = RecordingTradeRepo()
+    trade_manager = RecordingTradeManager()
+    day_start = datetime(2026, 5, 21, 16, 0, 0)
+
+    asyncio.run(
+        execute_order(
+            user_data=SimpleNamespace(id=7),
+            trade_repo=trade_repo,
+            trade_manager=trade_manager,
+            credentials=("api", "secret", "passphrase"),
+            telegram_id=123,
+            symbol="BTCUSDT",
+            direction="long",
+            quantity=0.01,
+            stop_loss=79000,
+            position_value=800,
+            client_order_id="KTB_daily_limit",
+            daily_trade_limit=3,
+            daily_limit_day_start_utc=day_start,
+        )
+    )
+
+    assert trade_repo.created_trade_with_daily_limit["daily_trade_limit"] == 3
+    assert trade_repo.created_trade_with_daily_limit["day_start_utc"] == day_start
+    assert trade_repo.created_trade["client_order_id"] == "KTB_daily_limit"
 
 
 def test_order_flow_service_builds_client_order_id_from_pending_token():

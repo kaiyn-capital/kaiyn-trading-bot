@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.config import Config
 from app.order_interaction_service import TelegramOrderFlowService
 
 
@@ -50,6 +51,9 @@ class FakeConfirmPendingOrderRepo:
         self.failed.append({"token": token, "error_message": error_message})
         return True
 
+    async def create_pending_order(self, **kwargs):
+        raise AssertionError("pending order should not be created")
+
 
 class RecordingOrderFlowService(TelegramOrderFlowService):
     def __init__(self, **kwargs):
@@ -62,20 +66,34 @@ class RecordingOrderFlowService(TelegramOrderFlowService):
 
 
 class FakeUserRepo:
+    def __init__(self, **overrides):
+        self.overrides = overrides
+
     async def get_user_by_telegram_id(self, telegram_id):
-        return SimpleNamespace(
-            id=7,
-            telegram_id=telegram_id,
-            is_api_connected=True,
-            encrypted_api_key="api",
-            encrypted_secret_key="secret",
-            encrypted_passphrase="passphrase",
-            fixed_risk_amount=10,
-        )
+        user_data = {
+            "id": 7,
+            "telegram_id": telegram_id,
+            "is_api_connected": True,
+            "encrypted_api_key": "api",
+            "encrypted_secret_key": "secret",
+            "encrypted_passphrase": "passphrase",
+            "fixed_risk_amount": 10,
+            "daily_trade_limit": 10,
+            "max_position_size": 1000,
+        }
+        user_data.update(self.overrides)
+        return SimpleNamespace(**user_data)
 
 
 class RejectingRulesTradeManager:
+    def __init__(self):
+        self.contract_rule_calls = []
+        self.market_price_calls = []
+        self.market_order_calls = []
+        self.limit_order_calls = []
+
     async def get_contract_rules(self, symbol):
+        self.contract_rule_calls.append(symbol)
         return {
             "symbol": symbol,
             "productType": "USDT-FUTURES",
@@ -91,18 +109,117 @@ class RejectingRulesTradeManager:
         }
 
     async def get_market_price(self, symbol):
+        self.market_price_calls.append(symbol)
         return 80000
 
     async def place_market_order(self, *args, **kwargs):
+        self.market_order_calls.append({"args": args, "kwargs": kwargs})
         raise AssertionError("market order should not be placed")
 
     async def place_limit_order(self, *args, **kwargs):
+        self.limit_order_calls.append({"args": args, "kwargs": kwargs})
         raise AssertionError("limit order should not be placed")
 
 
 class UnusedTradeRepo:
     async def create_trade(self, **kwargs):
         raise AssertionError("trade should not be created")
+
+    async def create_trade_with_daily_limit(self, **kwargs):
+        raise AssertionError("trade should not be created")
+
+    async def count_daily_non_failed_trades(self, user_id, day_start_utc):
+        return 0
+
+
+class RecordingPendingOrderRepo(FakeConfirmPendingOrderRepo):
+    def __init__(self):
+        super().__init__()
+        self.created = []
+
+    async def create_pending_order(self, **kwargs):
+        self.created.append(kwargs)
+        return SimpleNamespace(id=55, token="tok_created", **kwargs)
+
+
+class CountingTradeRepo(UnusedTradeRepo):
+    def __init__(self, daily_count=0):
+        self.daily_count = daily_count
+
+    async def count_daily_non_failed_trades(self, user_id, day_start_utc):
+        return self.daily_count
+
+
+class RecordingRulesTradeManager(RejectingRulesTradeManager):
+    async def place_market_order(self, *args, **kwargs):
+        self.market_order_calls.append({"args": args, "kwargs": kwargs})
+        return {"code": "00000", "data": {"orderId": "market-order"}}
+
+    async def place_limit_order(self, *args, **kwargs):
+        self.limit_order_calls.append({"args": args, "kwargs": kwargs})
+        return {"code": "00000", "data": {"orderId": "limit-order"}}
+
+
+class NoBitgetTradeManager:
+    def __init__(self):
+        self.contract_rule_calls = []
+        self.market_price_calls = []
+
+    async def get_contract_rules(self, symbol):
+        self.contract_rule_calls.append(symbol)
+        raise AssertionError("Bitget rules should not be fetched")
+
+    async def get_market_price(self, symbol):
+        self.market_price_calls.append(symbol)
+        raise AssertionError("Bitget price should not be fetched")
+
+
+class PermissiveRulesTradeManager(RejectingRulesTradeManager):
+    async def get_contract_rules(self, symbol):
+        self.contract_rule_calls.append(symbol)
+        return {
+            "symbol": symbol,
+            "productType": "USDT-FUTURES",
+            "symbolStatus": "normal",
+            "minTradeNum": "0.001",
+            "minTradeUSDT": "5",
+            "sizeMultiplier": "0.001",
+            "volumePlace": "3",
+            "pricePlace": "1",
+            "priceEndStep": "1",
+            "maxMarketOrderQty": "100",
+            "maxOrderQty": "100",
+        }
+
+
+class RecordingSystemLogRepo:
+    def __init__(self):
+        self.logs = []
+
+    async def log(self, **kwargs):
+        self.logs.append(kwargs)
+
+
+class RecordingFailureAlert:
+    def __init__(self):
+        self.calls = []
+
+    async def __call__(self, classified_error, source, details=None):
+        self.calls.append({"classified_error": classified_error, "source": source, "details": details})
+
+
+class SuccessfulTradeRepo(CountingTradeRepo):
+    def __init__(self, daily_count=0):
+        super().__init__(daily_count=daily_count)
+        self.created_with_daily_limit = []
+        self.updated = []
+
+    async def create_trade_with_daily_limit(self, **kwargs):
+        self.created_with_daily_limit.append(kwargs)
+        return SimpleNamespace(id=77)
+
+    async def update_trade_result(self, trade_id, **kwargs):
+        self.updated.append({"trade_id": trade_id, **kwargs})
 
 
 class FakeSystemLogRepo:
@@ -137,6 +254,7 @@ def make_service(
     trade_repo=None,
     trade_manager=None,
     system_log_repo=None,
+    failure_alert_handler=None,
 ):
     bot = FakeBot()
     audit_owner = FakeAuditOwner()
@@ -148,7 +266,7 @@ def make_service(
         trade_manager=trade_manager or SimpleNamespace(),
         system_log_repo=system_log_repo or SimpleNamespace(),
         audit_owner=audit_owner,
-        failure_alert_handler=None,
+        failure_alert_handler=failure_alert_handler,
     )
     return service, bot, audit_owner
 
@@ -244,6 +362,148 @@ def test_cancel_pending_order_non_pending_status():
 
     assert "状态为 processing，无法取消" in bot.messages[-1]["text"]
     assert audit_owner.audit_events[-1]["details"]["status"] == "processing"
+
+
+def test_place_order_blocks_when_daily_trade_limit_reached():
+    trade_manager = NoBitgetTradeManager()
+    system_log_repo = RecordingSystemLogRepo()
+    failure_alert = RecordingFailureAlert()
+    service, bot, audit_owner = make_service(
+        pending_order_repo=FakeConfirmPendingOrderRepo(),
+        user_repo=FakeUserRepo(daily_trade_limit=3),
+        trade_repo=CountingTradeRepo(daily_count=3),
+        trade_manager=trade_manager,
+        system_log_repo=system_log_repo,
+        failure_alert_handler=failure_alert,
+    )
+
+    asyncio.run(
+        service.handle_place_order_callback(
+            FakeQuery(),
+            make_user(),
+            "place_order_market_BTCUSDT_long_80200_81000_79000",
+        )
+    )
+
+    assert "今日下单次数已达上限" in bot.messages[-1]["text"]
+    assert trade_manager.contract_rule_calls == []
+    assert failure_alert.calls == []
+    assert audit_owner.audit_events[-1]["details"]["reason"] == "daily_trade_limit_exceeded"
+    assert audit_owner.audit_events[-1]["details"]["daily_trade_count"] == 3
+    assert system_log_repo.logs[-1]["extra_data"]["reason"] == "daily_trade_limit_exceeded"
+
+
+def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch):
+    monkeypatch.setattr(Config, "MAX_POSITION_SIZE", 1000.0)
+    pending_order_repo = FakeConfirmPendingOrderRepo()
+    system_log_repo = RecordingSystemLogRepo()
+    failure_alert = RecordingFailureAlert()
+    service, bot, audit_owner = make_service(
+        pending_order_repo=pending_order_repo,
+        user_repo=FakeUserRepo(fixed_risk_amount=1000, max_position_size=500),
+        trade_repo=CountingTradeRepo(daily_count=0),
+        trade_manager=PermissiveRulesTradeManager(),
+        system_log_repo=system_log_repo,
+        failure_alert_handler=failure_alert,
+    )
+
+    asyncio.run(
+        service.handle_place_order_callback(
+            FakeQuery(),
+            make_user(),
+            "place_order_market_BTCUSDT_long_80200_81000_79000",
+        )
+    )
+
+    assert "仓位超过风险上限" in bot.messages[-1]["text"]
+    assert pending_order_repo.failed == []
+    assert failure_alert.calls == []
+    assert audit_owner.audit_events[-1]["details"]["reason"] == "position_size_limit_exceeded"
+    assert audit_owner.audit_events[-1]["details"]["position_limit"] == 500.0
+    assert system_log_repo.logs[-1]["extra_data"]["position_limit"] == 500.0
+
+
+def test_execute_order_blocks_when_daily_trade_limit_reached_before_bitget():
+    pending_order_repo = FakeConfirmPendingOrderRepo()
+    trade_manager = NoBitgetTradeManager()
+    system_log_repo = RecordingSystemLogRepo()
+    failure_alert = RecordingFailureAlert()
+    service, bot, audit_owner = make_service(
+        pending_order_repo=pending_order_repo,
+        user_repo=FakeUserRepo(daily_trade_limit=2),
+        trade_repo=CountingTradeRepo(daily_count=2),
+        trade_manager=trade_manager,
+        system_log_repo=system_log_repo,
+        failure_alert_handler=failure_alert,
+    )
+
+    result = asyncio.run(
+        service.execute_order(
+            SimpleNamespace(
+                query=FakeQuery(),
+                user=make_user(),
+                symbol="BTCUSDT",
+                direction="long",
+                quantity=0.01,
+                stop_loss=79000,
+                position_value=800,
+                current_price=80000,
+                order_mode="market",
+                limit_price=None,
+                pending_order_token="tok_daily",
+            )
+        )
+    )
+
+    assert result is False
+    assert pending_order_repo.failed[-1]["token"] == "tok_daily"
+    assert "今日下单次数已达上限" in pending_order_repo.failed[-1]["error_message"]
+    assert "今日下单次数已达上限" in bot.messages[-1]["text"]
+    assert trade_manager.contract_rule_calls == []
+    assert failure_alert.calls == []
+    assert audit_owner.audit_events[-1]["action"] == "order_risk_limit_failed"
+
+
+def test_execute_order_blocks_when_confirmed_position_exceeds_cap(monkeypatch):
+    monkeypatch.setattr(Config, "MAX_POSITION_SIZE", 1000.0)
+    pending_order_repo = FakeConfirmPendingOrderRepo()
+    trade_manager = PermissiveRulesTradeManager()
+    system_log_repo = RecordingSystemLogRepo()
+    failure_alert = RecordingFailureAlert()
+    service, bot, audit_owner = make_service(
+        pending_order_repo=pending_order_repo,
+        user_repo=FakeUserRepo(max_position_size=500),
+        trade_repo=UnusedTradeRepo(),
+        trade_manager=trade_manager,
+        system_log_repo=system_log_repo,
+        failure_alert_handler=failure_alert,
+    )
+
+    result = asyncio.run(
+        service.execute_order(
+            SimpleNamespace(
+                query=FakeQuery(),
+                user=make_user(),
+                symbol="BTCUSDT",
+                direction="long",
+                quantity=0.01,
+                stop_loss=79000,
+                position_value=800,
+                current_price=80000,
+                order_mode="market",
+                limit_price=None,
+                pending_order_token="tok_position",
+            )
+        )
+    )
+
+    assert result is False
+    assert pending_order_repo.failed[-1]["token"] == "tok_position"
+    assert "仓位超过风险上限" in pending_order_repo.failed[-1]["error_message"]
+    assert "仓位超过风险上限" in bot.messages[-1]["text"]
+    assert trade_manager.market_order_calls == []
+    assert failure_alert.calls == []
+    assert audit_owner.audit_events[-1]["details"]["reason"] == "position_size_limit_exceeded"
 
 
 def test_execute_order_marks_pending_failed_when_second_validation_fails():

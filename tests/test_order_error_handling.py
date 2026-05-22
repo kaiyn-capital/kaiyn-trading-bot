@@ -28,6 +28,15 @@ class FakeTradeRepo:
         self.created_trade = kwargs
         return FakeTradeRecord()
 
+    async def create_trade_with_daily_limit(self, **kwargs):
+        trade_kwargs = {
+            key: value for key, value in kwargs.items() if key not in {"daily_trade_limit", "day_start_utc"}
+        }
+        return await self.create_trade(**trade_kwargs)
+
+    async def count_daily_non_failed_trades(self, user_id, day_start_utc):
+        return 0
+
     async def update_trade_result(self, trade_id, **kwargs):
         self.updated_results.append({"trade_id": trade_id, **kwargs})
 
