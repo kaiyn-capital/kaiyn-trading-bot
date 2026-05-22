@@ -1,24 +1,24 @@
 import asyncio
 import os
+import subprocess
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.database import PendingOrderRepository, TradeRepository
-from app.models import Base, PendingOrder, Trade, User
+from app.models import PendingOrder, Trade, User
 from app.risk_limits import RiskLimitExceeded
 
 
 class IntegrationDatabaseManager:
-    def __init__(self, database_url, schema):
+    def __init__(self, database_url):
         self.database_url = database_url
-        self.schema = schema
         self.engine = create_async_engine(
             database_url,
             poolclass=NullPool,
@@ -50,30 +50,31 @@ class IntegrationDatabaseManager:
 @asynccontextmanager
 async def integration_database():
     database_url = os.environ["TEST_DATABASE_URL"]
-    schema = f"test_pending_orders_{uuid.uuid4().hex}"
-    admin_engine = create_async_engine(database_url, poolclass=NullPool)
-    original_schemas = {table: table.schema for table in Base.metadata.tables.values()}
 
-    async with admin_engine.begin() as connection:
-        await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
-    await admin_engine.dispose()
+    env = os.environ.copy()
+    env["DATABASE_URL"] = database_url
 
-    for table in Base.metadata.tables.values():
-        table.schema = schema
+    # Run Alembic migrations via subprocess to avoid conflicting with the active asyncio loop in tests
+    subprocess.run(
+        ["alembic", "upgrade", "head"],
+        env=env,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
-    db = IntegrationDatabaseManager(database_url, schema)
+    db = IntegrationDatabaseManager(database_url)
     try:
-        async with db.engine.begin() as connection:
-            await connection.run_sync(Base.metadata.create_all)
         yield db
     finally:
         await db.close()
-        for table, original_schema in original_schemas.items():
-            table.schema = original_schema
-        cleanup_engine = create_async_engine(database_url, poolclass=NullPool)
-        async with cleanup_engine.begin() as connection:
-            await connection.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
-        await cleanup_engine.dispose()
+        subprocess.run(
+            ["alembic", "downgrade", "base"],
+            env=env,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
 
 async def seed_user(db, telegram_id=123456):

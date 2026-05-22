@@ -13,6 +13,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -91,7 +92,7 @@ class Trade(Base):
     error_message = Column(Text, nullable=True)
 
     # 時間戳
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     executed_at = Column(DateTime, nullable=True)
 
@@ -126,7 +127,7 @@ class PendingOrder(Base):
     error_message = Column(Text, nullable=True)
 
     # 時間戳
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False, index=True)
 
@@ -137,9 +138,10 @@ class PendingOrder(Base):
 
 class SignalRecord(Base):
     __tablename__ = "signal_records"
+    __table_args__ = (UniqueConstraint("public_id", name="signal_records_public_id_key"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    public_id = Column(String(16), unique=True, nullable=False, index=True)
+    public_id = Column(String(16), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     sender_telegram_id = Column(BigInteger, nullable=False, index=True)
     sender_username = Column(String, nullable=True)
@@ -211,7 +213,7 @@ class NotificationLog(Base):
     extra_data = Column(Text, nullable=True)  # JSON 格式
 
     # 時間戳
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     sent_at = Column(DateTime, nullable=True)
 
     # 關聯
@@ -302,7 +304,7 @@ class SystemLog(Base):
     stack_trace = Column(Text, nullable=True)
 
     # 時間戳
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     def set_extra_data(self, data: dict):
         """設置額外數據"""
