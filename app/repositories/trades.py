@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import func, or_, select
@@ -21,8 +22,8 @@ class TradeRepository:
         symbol: str,
         side: str,
         order_type: str,
-        quantity: float,
-        price: Optional[float] = None,
+        quantity: Decimal,
+        price: Optional[Decimal] = None,
         client_order_id: Optional[str] = None,
     ) -> Trade:
         """創建新交易記錄"""
@@ -46,10 +47,10 @@ class TradeRepository:
         symbol: str,
         side: str,
         order_type: str,
-        quantity: float,
+        quantity: Decimal,
         daily_trade_limit: int,
         day_start_utc: datetime,
-        price: Optional[float] = None,
+        price: Optional[Decimal] = None,
         client_order_id: Optional[str] = None,
     ) -> Trade:
         """Create a trade after a transaction-scoped per-user daily limit check."""
@@ -90,10 +91,10 @@ class TradeRepository:
         trade_id: int,
         bitget_order_id: Optional[str],
         status: str,
-        filled_quantity: float = 0,
-        avg_price: Optional[float] = None,
-        total_amount: Optional[float] = None,
-        fee: float = 0,
+        filled_quantity: Decimal = Decimal("0"),
+        avg_price: Optional[Decimal] = None,
+        total_amount: Optional[Decimal] = None,
+        fee: Decimal = Decimal("0"),
         error_message: Optional[str] = None,
     ) -> bool:
         """更新交易結果"""

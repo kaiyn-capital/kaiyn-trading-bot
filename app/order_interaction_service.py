@@ -1,12 +1,14 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Any, Optional
 
 from .audit import emit_audit_event, summarize_identifier
 from .bitget_errors import classify_bitget_exception
 from .bot_keyboards import pending_order_keyboard
 from .bot_messages import order_preview_message, order_success_message
+from .decimal_utils import decimal_json, to_decimal, to_decimal_or_none
 from .order_flow import (
     OrderPreview,
     apply_order_validation,
@@ -37,13 +39,21 @@ class ConfirmedOrderRequest:
     user: Any
     symbol: str
     direction: str
-    quantity: float
-    stop_loss: float
-    position_value: float
-    current_price: float
+    quantity: Decimal
+    stop_loss: Decimal
+    position_value: Decimal
+    current_price: Decimal
     order_mode: str = "market"
-    limit_price: Optional[float] = None
+    limit_price: Optional[Decimal] = None
     pending_order_token: Optional[str] = None
+
+    def __post_init__(self):
+        object.__setattr__(self, "quantity", to_decimal(self.quantity))
+        object.__setattr__(self, "stop_loss", to_decimal(self.stop_loss))
+        object.__setattr__(self, "position_value", to_decimal(self.position_value))
+        object.__setattr__(self, "current_price", to_decimal(self.current_price))
+        if self.limit_price is not None:
+            object.__setattr__(self, "limit_price", to_decimal(self.limit_price))
 
 
 class TelegramOrderFlowService:
@@ -118,7 +128,7 @@ class TelegramOrderFlowService:
         order_mode: str,
         action: str,
         pending_order_token: str | None = None,
-        position_value: float | None = None,
+        position_value=None,
         mark_pending_failed: bool = False,
     ):
         if mark_pending_failed and pending_order_token:
@@ -130,8 +140,8 @@ class TelegramOrderFlowService:
             "symbol": symbol,
             "direction": direction,
             "order_mode": order_mode,
-            "position_value": position_value,
-            "effective_position_limit": get_effective_position_limit(user_data),
+            "position_value": decimal_json(position_value),
+            "effective_position_limit": decimal_json(get_effective_position_limit(user_data)),
             "effective_daily_trade_limit": get_effective_daily_trade_limit(user_data),
             "pending_order_token": summarize_identifier(pending_order_token),
             **risk_error.details,
@@ -513,11 +523,12 @@ class TelegramOrderFlowService:
         user = request.user
         symbol = request.symbol
         direction = request.direction
-        quantity = request.quantity
-        stop_loss = request.stop_loss
-        position_value = request.position_value
+        quantity = to_decimal(request.quantity)
+        stop_loss = to_decimal(request.stop_loss)
+        position_value = to_decimal(request.position_value)
+        current_price = to_decimal(request.current_price)
         order_mode = request.order_mode
-        limit_price = request.limit_price
+        limit_price = to_decimal_or_none(request.limit_price)
         pending_order_token = request.pending_order_token
 
         await query.answer("正在执行下单...")
@@ -550,6 +561,7 @@ class TelegramOrderFlowService:
             contract_payload = await self.trade_manager.get_contract_rules(symbol)
             contract_rules = parse_contract_rules(contract_payload)
             current_price = await self.trade_manager.get_market_price(symbol)
+            current_price = to_decimal(current_price)
             calculation_price = limit_price if order_mode == "limit" and limit_price is not None else current_price
             if calculation_price <= 0:
                 raise RuntimeError("Invalid calculation price")

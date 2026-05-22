@@ -1,5 +1,6 @@
 import secrets
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import func, select
@@ -20,13 +21,13 @@ class PendingOrderRepository:
         symbol: str,
         direction: str,
         order_mode: str,
-        limit_price: Optional[float],
-        entry_lower: Optional[float],
-        entry_upper: Optional[float],
-        quantity: float,
-        stop_loss: float,
-        position_value: float,
-        current_price: float,
+        limit_price: Optional[Decimal],
+        entry_lower: Optional[Decimal],
+        entry_upper: Optional[Decimal],
+        quantity: Decimal,
+        stop_loss: Decimal,
+        position_value: Decimal,
+        current_price: Decimal,
         expires_at: datetime,
     ) -> PendingOrder:
         """Create a pending order with a short callback token."""

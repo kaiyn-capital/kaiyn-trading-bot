@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -17,10 +18,10 @@ from app.risk_limits import (
 def test_effective_position_limit_uses_stricter_positive_cap(monkeypatch):
     monkeypatch.setattr(Config, "MAX_POSITION_SIZE", 1000.0)
 
-    assert get_effective_position_limit(SimpleNamespace(max_position_size=500.0)) == 500.0
-    assert get_effective_position_limit(SimpleNamespace(max_position_size=1500.0)) == 1000.0
-    assert get_effective_position_limit(SimpleNamespace(max_position_size=0)) == 1000.0
-    assert get_effective_position_limit(SimpleNamespace()) == 1000.0
+    assert get_effective_position_limit(SimpleNamespace(max_position_size=500.0)) == Decimal("500.0")
+    assert get_effective_position_limit(SimpleNamespace(max_position_size=1500.0)) == Decimal("1000.0")
+    assert get_effective_position_limit(SimpleNamespace(max_position_size=0)) == Decimal("1000.0")
+    assert get_effective_position_limit(SimpleNamespace()) == Decimal("1000.0")
 
 
 def test_effective_daily_trade_limit_uses_stricter_positive_cap(monkeypatch):
@@ -47,7 +48,7 @@ def test_position_limit_raises_user_facing_error(monkeypatch):
 
     assert error.value.reason == "position_size_limit_exceeded"
     assert "仓位超过风险上限" in error.value.user_message
-    assert error.value.details["position_limit"] == 1000.0
+    assert error.value.details["position_limit"] == "1000"
 
 
 def test_daily_trade_limit_raises_user_facing_error():

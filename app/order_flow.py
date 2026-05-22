@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Optional, Sequence
 
 from .bitget_errors import classify_bitget_exception
+from .decimal_utils import decimal_text, to_decimal
 from .order_types import (
     ContractRules,
     OrderCallbackData,
@@ -14,7 +15,7 @@ from .order_types import (
     OrderValidationResult,
     SignalDraft,
 )
-from .order_validation import _decimal_text, apply_order_validation, parse_contract_rules, validate_order_preview
+from .order_validation import apply_order_validation, parse_contract_rules, validate_order_preview
 
 __all__ = [
     "ContractRules",
@@ -48,13 +49,13 @@ def build_client_order_id(pending_order_token: str | None = None) -> str:
     return f"KTB_{secrets.token_urlsafe(16)}"
 
 
-def _parse_signal_price_group(raw_prices: str) -> list[float]:
+def _parse_signal_price_group(raw_prices: str) -> list[Decimal]:
     prices = raw_prices.split()
     if not prices:
         raise ValueError("missing signal price group values")
 
     try:
-        return [float(price) for price in prices]
+        return [to_decimal(price) for price in prices]
     except ValueError as exc:
         raise ValueError("invalid signal price") from exc
 
@@ -73,7 +74,7 @@ def parse_signal_args(args: Sequence[str]) -> SignalDraft:
     if not matches:
         raise ValueError("missing labeled signal groups")
 
-    groups: dict[str, list[float]] = {}
+    groups: dict[str, list[Decimal]] = {}
     remark_parts = []
     last_end = 0
     for match in matches:
@@ -121,16 +122,16 @@ def parse_order_callback_data(data: str) -> OrderCallbackData:
         order_mode = parts[2]
         symbol = parts[3]
         direction = parts[4]
-        entry_lower = float(parts[5])
-        entry_upper = float(parts[6])
-        stop_loss = float(parts[7])
+        entry_lower = to_decimal(parts[5])
+        entry_upper = to_decimal(parts[6])
+        stop_loss = to_decimal(parts[7])
     elif len(parts) >= 7:
         order_mode = "market"
         symbol = parts[2]
         direction = parts[3]
-        entry_lower = float(parts[4])
-        entry_upper = float(parts[5])
-        stop_loss = float(parts[6])
+        entry_lower = to_decimal(parts[4])
+        entry_upper = to_decimal(parts[5])
+        stop_loss = to_decimal(parts[6])
     else:
         raise ValueError("invalid order callback data")
 
@@ -149,9 +150,11 @@ def parse_order_callback_data(data: str) -> OrderCallbackData:
 
 def prepare_order_preview(
     callback_data: OrderCallbackData,
-    current_price: float,
-    risk_amount: float,
+    current_price,
+    risk_amount,
 ) -> OrderPreview:
+    current_price = to_decimal(current_price)
+    risk_amount = to_decimal(risk_amount)
     entry_low = min(callback_data.entry_lower, callback_data.entry_upper)
     entry_high = max(callback_data.entry_lower, callback_data.entry_upper)
     order_mode = callback_data.order_mode
@@ -176,11 +179,12 @@ def prepare_order_preview(
     if calculation_price <= 0:
         raise ValueError("entry price must be greater than 0")
 
-    stop_distance_pct = abs((calculation_price - callback_data.stop_loss) / calculation_price)
-    if stop_distance_pct <= 0:
+    stop_distance = abs(calculation_price - callback_data.stop_loss)
+    if stop_distance <= 0:
         raise ValueError("stop distance must be greater than 0")
 
-    position_value = risk_amount / stop_distance_pct
+    stop_distance_pct = stop_distance / calculation_price
+    position_value = risk_amount * calculation_price / stop_distance
     quantity = position_value / calculation_price
 
     return OrderPreview(
@@ -207,11 +211,11 @@ async def execute_order(
     telegram_id: int,
     symbol: str,
     direction: str,
-    quantity: float,
-    stop_loss: float,
-    position_value: float,
+    quantity,
+    stop_loss,
+    position_value,
     order_mode: str = "market",
-    limit_price: Optional[float] = None,
+    limit_price=None,
     quantity_text: Optional[str] = None,
     limit_price_text: Optional[str] = None,
     client_order_id: Optional[str] = None,
@@ -221,14 +225,16 @@ async def execute_order(
     order_mode = order_mode if order_mode in {"market", "limit"} else "market"
     is_limit_order = order_mode == "limit"
     order_type = "limit" if is_limit_order else "market"
-    order_price = limit_price if is_limit_order else None
-    if is_limit_order and not order_price:
+    order_price = to_decimal(limit_price) if is_limit_order and limit_price is not None else None
+    if is_limit_order and (order_price is None or order_price <= 0):
         raise RuntimeError("Limit order is missing limit_price")
 
     side = "buy" if direction == "long" else "sell"
-    quantity = float(quantity)
-    quantity_for_api = quantity_text or _decimal_text(Decimal(str(quantity)))
-    price_for_api = limit_price_text or (_decimal_text(Decimal(str(order_price))) if order_price is not None else None)
+    quantity = to_decimal(quantity)
+    stop_loss = to_decimal(stop_loss)
+    position_value = to_decimal(position_value)
+    quantity_for_api = quantity_text or decimal_text(quantity)
+    price_for_api = limit_price_text or (decimal_text(order_price) if order_price is not None else None)
     client_order_id = client_order_id or build_client_order_id()
     trade_record_id = None
 

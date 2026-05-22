@@ -1,4 +1,5 @@
 import asyncio
+from decimal import Decimal
 from types import SimpleNamespace
 
 from app.bot_order_handlers import OrderHandlersMixin
@@ -118,10 +119,10 @@ def test_execute_order_delegates_confirmed_request_to_order_flow_service():
     assert request.user is user
     assert request.symbol == "BTCUSDT"
     assert request.direction == "long"
-    assert request.quantity == 0.01
-    assert request.stop_loss == 79000
-    assert request.position_value == 800
-    assert request.current_price == 80000
+    assert request.quantity == Decimal("0.01")
+    assert request.stop_loss == Decimal("79000")
+    assert request.position_value == Decimal("800")
+    assert request.current_price == Decimal("80000")
     assert request.order_mode == "market"
     assert request.limit_price is None
     assert request.pending_order_token == "tok_123"

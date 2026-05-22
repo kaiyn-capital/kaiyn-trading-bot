@@ -1,9 +1,11 @@
 import logging
+from decimal import Decimal
 from typing import Dict, List, Tuple
 
 from .bitget_client import BitgetAPIClient
 from .bitget_errors import BitgetAPIError, classify_bitget_exception
 from .bitget_public_market import BitgetPublicMarket
+from .decimal_utils import decimal_text, to_decimal
 from .encryption import EncryptionManager
 from .log_sanitizer import summarize_order_response
 from .market_types import MarketCandle
@@ -84,8 +86,8 @@ class BitgetTradeManager:
             logger.error(f"Failed to get user UID: {e}")
             return "Unknown"
 
-    async def get_market_price(self, symbol: str) -> float:
-        return await self.public_market.get_market_price(symbol)
+    async def get_market_price(self, symbol: str) -> Decimal:
+        return to_decimal(await self.public_market.get_market_price(symbol))
 
     async def get_trading_pairs(self, product_type: str = "USDT-FUTURES", force_refresh: bool = False) -> List[Dict]:
         return await self.public_market.get_trading_pairs(product_type, force_refresh=force_refresh)
@@ -114,8 +116,8 @@ class BitgetTradeManager:
         client_order_id: str = None,
         margin_coin: str = "USDT",
         trade_side: str = "open",
-        stop_loss_price: float = None,
-        take_profit_price: float = None,
+        stop_loss_price: Decimal = None,
+        take_profit_price: Decimal = None,
     ) -> Dict:
         client = self._get_client(user_id, encrypted_credentials)
 
@@ -128,8 +130,8 @@ class BitgetTradeManager:
             margin_coin=margin_coin,
             margin_mode="crossed",
             trade_side=trade_side,
-            stop_loss_price=str(stop_loss_price) if stop_loss_price else None,
-            take_profit_price=str(take_profit_price) if take_profit_price else None,
+            stop_loss_price=decimal_text(stop_loss_price) if stop_loss_price else None,
+            take_profit_price=decimal_text(take_profit_price) if take_profit_price else None,
         )
         logger.info("Market order placed summary: %s", summarize_order_response(result))
         return result
@@ -145,8 +147,8 @@ class BitgetTradeManager:
         client_order_id: str = None,
         margin_coin: str = "USDT",
         trade_side: str = "open",
-        stop_loss_price: float = None,
-        take_profit_price: float = None,
+        stop_loss_price: Decimal = None,
+        take_profit_price: Decimal = None,
         force: str = "gtc",
     ) -> Dict:
         client = self._get_client(user_id, encrypted_credentials)
@@ -160,8 +162,8 @@ class BitgetTradeManager:
             margin_coin=margin_coin,
             margin_mode="crossed",
             trade_side=trade_side,
-            stop_loss_price=str(stop_loss_price) if stop_loss_price else None,
-            take_profit_price=str(take_profit_price) if take_profit_price else None,
+            stop_loss_price=decimal_text(stop_loss_price) if stop_loss_price else None,
+            take_profit_price=decimal_text(take_profit_price) if take_profit_price else None,
             force=force,
         )
 

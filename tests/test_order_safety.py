@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from app.order_flow import (
     OrderPreview,
     apply_order_validation,
@@ -93,7 +95,7 @@ def test_quantity_is_formatted_to_multiplier():
     assert result.is_valid
     assert result.quantity_text == "0.012"
     applied = apply_order_validation(make_preview(quantity=0.012345), result)
-    assert applied.quantity == 0.012
+    assert applied.quantity == Decimal("0.012")
 
 
 def test_limit_price_is_formatted_to_price_step():
@@ -106,7 +108,7 @@ def test_limit_price_is_formatted_to_price_step():
     )
     result = validate_order_preview(preview, make_rules(), "long")
     assert result.is_valid
-    assert result.limit_price == 79999.9
+    assert result.limit_price == Decimal("79999.9")
     assert result.limit_price_text == "79999.9"
 
 

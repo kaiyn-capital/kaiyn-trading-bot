@@ -1,6 +1,7 @@
 import asyncio
 import re
 from datetime import datetime
+from decimal import Decimal
 from types import SimpleNamespace
 
 import app.order_flow as order_flow_module
@@ -191,6 +192,9 @@ def test_market_execute_order_uses_same_client_order_id_for_trade_record_and_bit
     )
 
     assert trade_repo.created_trade["client_order_id"] == client_order_id
+    assert trade_repo.created_trade["quantity"] == Decimal("0.01")
+    assert trade_repo.created_trade["price"] is None
+    assert trade_manager.market_orders[-1]["args"][4] == "0.01"
     assert trade_manager.market_orders[-1]["args"][5] == client_order_id
 
 
@@ -220,6 +224,10 @@ def test_limit_execute_order_uses_same_client_order_id_for_trade_record_and_bitg
     )
 
     assert trade_repo.created_trade["client_order_id"] == client_order_id
+    assert trade_repo.created_trade["quantity"] == Decimal("0.02")
+    assert trade_repo.created_trade["price"] == Decimal("80200")
+    assert trade_manager.limit_orders[-1]["args"][4] == "0.02"
+    assert trade_manager.limit_orders[-1]["args"][5] == "80200"
     assert trade_manager.limit_orders[-1]["args"][6] == client_order_id
 
 

@@ -56,10 +56,10 @@ def select_signal_chart_levels(signal: SignalDraft) -> SignalChartLevels:
 
     other_targets = tuple(tp for tp in signal.take_profit_levels if tp != target)
     return SignalChartLevels(
-        entry=entry,
-        stop_loss=signal.stop_loss,
-        target=target,
-        other_targets=other_targets,
+        entry=float(entry),
+        stop_loss=float(signal.stop_loss),
+        target=float(target),
+        other_targets=tuple(float(tp) for tp in other_targets),
     )
 
 

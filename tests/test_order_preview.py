@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 
 from app.order_flow import OrderCallbackData, prepare_order_preview
@@ -25,9 +27,10 @@ def test_market_preview_uses_current_price_for_1r_calculation():
 
     assert preview.order_mode == "market"
     assert preview.limit_price is None
-    assert preview.stop_distance_pct == pytest.approx(0.0125)
-    assert preview.position_value == pytest.approx(8000)
-    assert preview.quantity == pytest.approx(0.1)
+    assert isinstance(preview.quantity, Decimal)
+    assert preview.stop_distance_pct == Decimal("0.0125")
+    assert preview.position_value == Decimal("8000")
+    assert preview.quantity == Decimal("0.1")
 
 
 def test_long_limit_uses_entry_high():
@@ -38,9 +41,10 @@ def test_long_limit_uses_entry_high():
     )
 
     assert preview.order_mode == "limit"
-    assert preview.limit_price == 81000
-    assert preview.position_value == pytest.approx(4050)
-    assert preview.quantity == pytest.approx(0.05)
+    assert preview.limit_price == Decimal("81000")
+    assert preview.position_value == Decimal("4050")
+    assert isinstance(preview.quantity, Decimal)
+    assert float(preview.quantity) == pytest.approx(0.05)
 
 
 def test_short_limit_uses_entry_low():
@@ -51,9 +55,11 @@ def test_short_limit_uses_entry_low():
     )
 
     assert preview.order_mode == "limit"
-    assert preview.limit_price == 80200
-    assert preview.position_value == pytest.approx(5346.666666666667)
-    assert preview.quantity == pytest.approx(0.0666666667)
+    assert preview.limit_price == Decimal("80200")
+    assert isinstance(preview.position_value, Decimal)
+    assert isinstance(preview.quantity, Decimal)
+    assert float(preview.position_value) == pytest.approx(5346.666666666667)
+    assert float(preview.quantity) == pytest.approx(0.0666666667)
 
 
 def test_long_limit_switches_to_market_when_price_can_fill_immediately():

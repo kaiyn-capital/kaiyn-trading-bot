@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
@@ -9,6 +10,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
 )
@@ -37,14 +39,14 @@ class User(Base):
 
     # 設定
     daily_trade_limit = Column(Integer, default=10)
-    max_position_size = Column(Float, default=1000.0)
+    max_position_size = Column(Numeric(38, 18, asdecimal=True), default=Decimal("1000.0"))
     enable_notifications = Column(Boolean, default=True)
 
     # 交易設定
     default_stop_loss_percent = Column(Float, default=2.0)  # 預設止損百分比
     default_trade_amount = Column(Float, default=100.0)  # 預設交易金額
     auto_stop_loss = Column(Boolean, default=True)  # 是否自動設置止損
-    fixed_risk_amount = Column(Float, nullable=True)  # 固定風險金額(1R)
+    fixed_risk_amount = Column(Numeric(38, 18, asdecimal=True), nullable=True)  # 固定風險金額(1R)
 
     # 發單員權限
     is_trader = Column(Boolean, default=False)  # 是否為發單員
@@ -71,8 +73,8 @@ class Trade(Base):
     symbol = Column(String, nullable=False)  # 例如: BTCUSDT
     side = Column(String, nullable=False)  # buy/sell
     order_type = Column(String, nullable=False)  # market/limit
-    quantity = Column(Float, nullable=False)
-    price = Column(Float, nullable=True)  # limit 單才有價格
+    quantity = Column(Numeric(38, 18, asdecimal=True), nullable=False)
+    price = Column(Numeric(38, 18, asdecimal=True), nullable=True)  # limit 單才有價格
 
     # Bitget 訂單信息
     bitget_order_id = Column(String, unique=True, nullable=True)
@@ -80,10 +82,10 @@ class Trade(Base):
 
     # 執行結果
     status = Column(String, default="pending")  # pending/filled/cancelled/failed
-    filled_quantity = Column(Float, default=0.0)
-    avg_price = Column(Float, nullable=True)
-    total_amount = Column(Float, nullable=True)
-    fee = Column(Float, default=0.0)
+    filled_quantity = Column(Numeric(38, 18, asdecimal=True), default=Decimal("0.0"))
+    avg_price = Column(Numeric(38, 18, asdecimal=True), nullable=True)
+    total_amount = Column(Numeric(38, 18, asdecimal=True), nullable=True)
+    fee = Column(Numeric(38, 18, asdecimal=True), default=Decimal("0.0"))
 
     # 錯誤信息
     error_message = Column(Text, nullable=True)
@@ -110,13 +112,13 @@ class PendingOrder(Base):
     symbol = Column(String, nullable=False)
     direction = Column(String, nullable=False)  # long/short
     order_mode = Column(String, default="market", nullable=False)  # market/limit
-    limit_price = Column(Float, nullable=True)
-    entry_lower = Column(Float, nullable=True)
-    entry_upper = Column(Float, nullable=True)
-    quantity = Column(Float, nullable=False)
-    stop_loss = Column(Float, nullable=False)
-    position_value = Column(Float, nullable=False)
-    current_price = Column(Float, nullable=False)
+    limit_price = Column(Numeric(38, 18, asdecimal=True), nullable=True)
+    entry_lower = Column(Numeric(38, 18, asdecimal=True), nullable=True)
+    entry_upper = Column(Numeric(38, 18, asdecimal=True), nullable=True)
+    quantity = Column(Numeric(38, 18, asdecimal=True), nullable=False)
+    stop_loss = Column(Numeric(38, 18, asdecimal=True), nullable=False)
+    position_value = Column(Numeric(38, 18, asdecimal=True), nullable=False)
+    current_price = Column(Numeric(38, 18, asdecimal=True), nullable=False)
 
     # Lifecycle
     status = Column(String, default="pending", nullable=False, index=True)
@@ -168,7 +170,7 @@ class SignalRecord(Base):
     )
 
     def set_take_profit_levels(self, levels: list[float]):
-        self.take_profit_levels = json.dumps(levels, ensure_ascii=False)
+        self.take_profit_levels = json.dumps([float(level) for level in levels], ensure_ascii=False)
 
     def get_take_profit_levels(self) -> list[float]:
         if not self.take_profit_levels:
@@ -217,7 +219,7 @@ class NotificationLog(Base):
 
     def set_extra_data(self, data: dict):
         """設置額外數據"""
-        self.extra_data = json.dumps(data, ensure_ascii=False)
+        self.extra_data = json.dumps(data, ensure_ascii=False, default=str)
 
     def get_extra_data(self) -> dict:
         """獲取額外數據"""
@@ -304,7 +306,7 @@ class SystemLog(Base):
 
     def set_extra_data(self, data: dict):
         """設置額外數據"""
-        self.extra_data = json.dumps(data, ensure_ascii=False)
+        self.extra_data = json.dumps(data, ensure_ascii=False, default=str)
 
     def get_extra_data(self) -> dict:
         """獲取額外數據"""

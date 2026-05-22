@@ -1,6 +1,8 @@
+from decimal import Decimal
+
 import pytest
 
-from app.order_flow import parse_signal_args
+from app.order_flow import parse_order_callback_data, parse_signal_args
 
 
 def test_parse_signal_with_labeled_prices_and_remark():
@@ -20,11 +22,19 @@ def test_parse_signal_with_single_entry_price():
 
     assert signal.symbol == "PUMPUSDT"
     assert signal.direction == "long"
-    assert signal.entry_lower == 0.00179
-    assert signal.entry_upper == 0.00179
-    assert signal.stop_loss == 0.00156
-    assert signal.take_profit_levels == [0.0022, 0.00268]
+    assert signal.entry_lower == Decimal("0.00179")
+    assert signal.entry_upper == Decimal("0.00179")
+    assert signal.stop_loss == Decimal("0.00156")
+    assert signal.take_profit_levels == [Decimal("0.0022"), Decimal("0.00268")]
     assert signal.remark == ""
+
+
+def test_parse_order_callback_data_returns_decimal_prices():
+    callback = parse_order_callback_data("place_order_limit_PUMPUSDT_long_0.00179_0.00268_0.00156")
+
+    assert callback.entry_lower == Decimal("0.00179")
+    assert callback.entry_upper == Decimal("0.00268")
+    assert callback.stop_loss == Decimal("0.00156")
 
 
 def test_parse_signal_supports_case_insensitive_labels_and_spaced_brackets():

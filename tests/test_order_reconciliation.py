@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta
+from decimal import Decimal
 from types import SimpleNamespace
 
 from app.bitget_client import BitgetAPIClient
@@ -283,10 +284,10 @@ def test_reconcile_filled_order_updates_trade_fields():
     assert summary.recovered == 1
     assert trade_repo.created[-1]["client_order_id"] == build_client_order_id(pending.token)
     assert trade_repo.updated[-1]["status"] == "filled"
-    assert trade_repo.updated[-1]["filled_quantity"] == 0.01
-    assert trade_repo.updated[-1]["avg_price"] == 50100.0
-    assert trade_repo.updated[-1]["total_amount"] == 501.0
-    assert trade_repo.updated[-1]["fee"] == -0.01
+    assert trade_repo.updated[-1]["filled_quantity"] == Decimal("0.01")
+    assert trade_repo.updated[-1]["avg_price"] == Decimal("50100.0")
+    assert trade_repo.updated[-1]["total_amount"] == Decimal("501.0")
+    assert trade_repo.updated[-1]["fee"] == Decimal("-0.01")
     assert pending_repo.executed == [{"token": pending.token, "trade_id": 77}]
 
 
