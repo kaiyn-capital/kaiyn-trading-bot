@@ -79,6 +79,18 @@ Check whitespace:
 make diff-check
 ```
 
+Run Alembic migrations on the test database:
+
+```bash
+make migrate-test
+```
+
+Check Alembic migration-model consistency:
+
+```bash
+make alembic-check
+```
+
 Run full Docker-first verification:
 
 ```bash

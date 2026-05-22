@@ -35,6 +35,12 @@ jobs:
       - name: Start PostgreSQL
         run: docker compose up -d postgres
 
+      - name: Run Alembic migrations on clean database
+        run: docker compose run --rm test alembic upgrade head
+
+      - name: Check Alembic migration-model consistency
+        run: docker compose run --rm test alembic check
+
       - name: Check uv lockfile
         run: docker compose run --rm test uv lock --check
 
@@ -52,6 +58,10 @@ jobs:
 
       - name: Check whitespace errors
         run: git diff --check
+
+      - name: Downgrade Alembic migrations
+        if: always()
+        run: docker compose run --rm test alembic downgrade base || true
 
       - name: Clean up Docker Compose
         if: always()
