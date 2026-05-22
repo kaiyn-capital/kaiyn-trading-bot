@@ -25,14 +25,9 @@ class SignalDeliveryService:
         chart_status: str,
         chart_error: str | None,
         signal_record_id: int | None = None,
+        signal_public_id: str | None = None,
     ) -> dict:
-        reply_markup = signal_order_keyboard(
-            signal.symbol,
-            signal.direction,
-            signal.entry_lower,
-            signal.entry_upper,
-            signal.stop_loss,
-        )
+        reply_markup = signal_order_keyboard(signal_public_id or "unknown")
 
         sent_to_channels = 0
         failed_channels = 0

@@ -10,11 +10,12 @@ from .bot_keyboards import pending_order_keyboard
 from .bot_messages import order_preview_message, order_success_message
 from .decimal_utils import decimal_json, to_decimal, to_decimal_or_none
 from .order_flow import (
+    OrderCallbackData,
     OrderPreview,
     apply_order_validation,
     build_client_order_id,
     parse_contract_rules,
-    parse_order_callback_data,
+    parse_tokenized_callback_data,
     prepare_order_preview,
     validate_order_preview,
 )
@@ -70,6 +71,7 @@ class TelegramOrderFlowService:
         system_log_repo,
         audit_owner,
         failure_alert_handler=None,
+        signal_record_repo=None,
     ):
         self.bot = bot
         self.user_repo = user_repo
@@ -79,6 +81,7 @@ class TelegramOrderFlowService:
         self.system_log_repo = system_log_repo
         self.audit_owner = audit_owner
         self.failure_alert_handler = failure_alert_handler
+        self.signal_record_repo = signal_record_repo
 
     async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
         if self.failure_alert_handler:
@@ -180,7 +183,7 @@ class TelegramOrderFlowService:
         await query.answer("正在处理下单请求...")
 
         try:
-            callback_data = parse_order_callback_data(data)
+            order_mode, token = parse_tokenized_callback_data(data)
         except (ValueError, IndexError):
             await emit_audit_event(
                 self.audit_owner,
@@ -190,6 +193,39 @@ class TelegramOrderFlowService:
             )
             await self.send_private_message(query, user, "❌ 交易信号数据解析失败")
             return
+
+        record = None
+        if self.signal_record_repo:
+            record = await self.signal_record_repo.get_by_public_id(token)
+
+        if not record or record.get("status") in {"cancelled", "expired", "preview_pending"}:
+            reason = "signal_not_found" if not record else f"signal_{record.get('status')}"
+            await emit_audit_event(
+                self.audit_owner,
+                user,
+                "order_place_blocked",
+                {
+                    "status": "blocked",
+                    "reason": reason,
+                    "token": token,
+                    "requested_order_mode": order_mode,
+                },
+            )
+            await self.send_private_message(
+                query,
+                user,
+                "❌ 无法下单：该交易信号不存在或已过期。",
+            )
+            return
+
+        callback_data = OrderCallbackData(
+            order_mode=order_mode,
+            symbol=record["symbol"],
+            direction=record["direction"],
+            entry_lower=to_decimal(record["entry_lower"]),
+            entry_upper=to_decimal(record["entry_upper"]),
+            stop_loss=to_decimal(record["stop_loss"]),
+        )
 
         await emit_audit_event(
             self.audit_owner,

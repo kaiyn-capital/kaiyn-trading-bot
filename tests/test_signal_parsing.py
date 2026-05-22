@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.order_flow import parse_order_callback_data, parse_signal_args
+from app.order_flow import parse_signal_args, parse_tokenized_callback_data
 
 
 def test_parse_signal_with_labeled_prices_and_remark():
@@ -29,12 +29,20 @@ def test_parse_signal_with_single_entry_price():
     assert signal.remark == ""
 
 
-def test_parse_order_callback_data_returns_decimal_prices():
-    callback = parse_order_callback_data("place_order_limit_PUMPUSDT_long_0.00179_0.00268_0.00156")
+def test_parse_tokenized_callback_data():
+    order_mode, token = parse_tokenized_callback_data("place_order_limit_abc123")
+    assert order_mode == "limit"
+    assert token == "abc123"
 
-    assert callback.entry_lower == Decimal("0.00179")
-    assert callback.entry_upper == Decimal("0.00268")
-    assert callback.stop_loss == Decimal("0.00156")
+    order_mode, token = parse_tokenized_callback_data("place_order_market_xyz789")
+    assert order_mode == "market"
+    assert token == "xyz789"
+
+    with pytest.raises(ValueError):
+        parse_tokenized_callback_data("place_order_invalid_abc123")
+
+    with pytest.raises(ValueError):
+        parse_tokenized_callback_data("place_order_market_")
 
 
 def test_parse_signal_supports_case_insensitive_labels_and_spaced_brackets():

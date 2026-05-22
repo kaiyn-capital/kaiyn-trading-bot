@@ -56,6 +56,14 @@ class FakeConfirmPendingOrderRepo:
         raise AssertionError("pending order should not be created")
 
 
+class FakeSignalRecordRepo:
+    def __init__(self, records=None):
+        self.records = records or {}
+
+    async def get_by_public_id(self, public_id: str) -> dict | None:
+        return self.records.get(public_id.lower())
+
+
 class RecordingOrderFlowService(TelegramOrderFlowService):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -256,6 +264,7 @@ def make_service(
     trade_manager=None,
     system_log_repo=None,
     failure_alert_handler=None,
+    signal_record_repo=None,
 ):
     bot = FakeBot()
     audit_owner = FakeAuditOwner()
@@ -268,6 +277,7 @@ def make_service(
         system_log_repo=system_log_repo or SimpleNamespace(),
         audit_owner=audit_owner,
         failure_alert_handler=failure_alert_handler,
+        signal_record_repo=signal_record_repo,
     )
     return service, bot, audit_owner
 
@@ -369,6 +379,15 @@ def test_place_order_blocks_when_daily_trade_limit_reached():
     trade_manager = NoBitgetTradeManager()
     system_log_repo = RecordingSystemLogRepo()
     failure_alert = RecordingFailureAlert()
+    signal_record = {
+        "symbol": "BTCUSDT",
+        "direction": "long",
+        "entry_lower": 80200,
+        "entry_upper": 81000,
+        "stop_loss": 79000,
+        "status": "sent",
+    }
+    signal_repo = FakeSignalRecordRepo({"tok_daily": signal_record})
     service, bot, audit_owner = make_service(
         pending_order_repo=FakeConfirmPendingOrderRepo(),
         user_repo=FakeUserRepo(daily_trade_limit=3),
@@ -376,13 +395,14 @@ def test_place_order_blocks_when_daily_trade_limit_reached():
         trade_manager=trade_manager,
         system_log_repo=system_log_repo,
         failure_alert_handler=failure_alert,
+        signal_record_repo=signal_repo,
     )
 
     asyncio.run(
         service.handle_place_order_callback(
             FakeQuery(),
             make_user(),
-            "place_order_market_BTCUSDT_long_80200_81000_79000",
+            "place_order_market_tok_daily",
         )
     )
 
@@ -399,6 +419,15 @@ def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch):
     pending_order_repo = FakeConfirmPendingOrderRepo()
     system_log_repo = RecordingSystemLogRepo()
     failure_alert = RecordingFailureAlert()
+    signal_record = {
+        "symbol": "BTCUSDT",
+        "direction": "long",
+        "entry_lower": 80200,
+        "entry_upper": 81000,
+        "stop_loss": 79000,
+        "status": "sent",
+    }
+    signal_repo = FakeSignalRecordRepo({"tok_position": signal_record})
     service, bot, audit_owner = make_service(
         pending_order_repo=pending_order_repo,
         user_repo=FakeUserRepo(fixed_risk_amount=1000, max_position_size=500),
@@ -406,13 +435,14 @@ def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch):
         trade_manager=PermissiveRulesTradeManager(),
         system_log_repo=system_log_repo,
         failure_alert_handler=failure_alert,
+        signal_record_repo=signal_repo,
     )
 
     asyncio.run(
         service.handle_place_order_callback(
             FakeQuery(),
             make_user(),
-            "place_order_market_BTCUSDT_long_80200_81000_79000",
+            "place_order_market_tok_position",
         )
     )
 
@@ -422,6 +452,109 @@ def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch):
     assert audit_owner.audit_events[-1]["details"]["reason"] == "position_size_limit_exceeded"
     assert audit_owner.audit_events[-1]["details"]["position_limit"] == "500"
     assert system_log_repo.logs[-1]["extra_data"]["position_limit"] == "500"
+
+
+def test_place_order_blocks_when_signal_cancelled_expired_or_not_found():
+    # 1. Signal not found
+    signal_repo = FakeSignalRecordRepo({})
+    service, bot, audit_owner = make_service(
+        user_repo=FakeUserRepo(),
+        signal_record_repo=signal_repo,
+    )
+    asyncio.run(
+        service.handle_place_order_callback(
+            FakeQuery(),
+            make_user(),
+            "place_order_market_tok_missing",
+        )
+    )
+    assert "该交易信号不存在或已过期" in bot.messages[-1]["text"]
+    assert audit_owner.audit_events[-1]["action"] == "order_place_blocked"
+    assert audit_owner.audit_events[-1]["details"]["reason"] == "signal_not_found"
+
+    # 2. Signal cancelled
+    signal_repo = FakeSignalRecordRepo(
+        {
+            "tok_cancelled": {
+                "symbol": "BTCUSDT",
+                "direction": "long",
+                "entry_lower": 80200,
+                "entry_upper": 81000,
+                "stop_loss": 79000,
+                "status": "cancelled",
+            }
+        }
+    )
+    service, bot, audit_owner = make_service(
+        user_repo=FakeUserRepo(),
+        signal_record_repo=signal_repo,
+    )
+    asyncio.run(
+        service.handle_place_order_callback(
+            FakeQuery(),
+            make_user(),
+            "place_order_market_tok_cancelled",
+        )
+    )
+    assert "该交易信号不存在或已过期" in bot.messages[-1]["text"]
+    assert audit_owner.audit_events[-1]["action"] == "order_place_blocked"
+    assert audit_owner.audit_events[-1]["details"]["reason"] == "signal_cancelled"
+
+    # 3. Signal expired
+    signal_repo = FakeSignalRecordRepo(
+        {
+            "tok_expired": {
+                "symbol": "BTCUSDT",
+                "direction": "long",
+                "entry_lower": 80200,
+                "entry_upper": 81000,
+                "stop_loss": 79000,
+                "status": "expired",
+            }
+        }
+    )
+    service, bot, audit_owner = make_service(
+        user_repo=FakeUserRepo(),
+        signal_record_repo=signal_repo,
+    )
+    asyncio.run(
+        service.handle_place_order_callback(
+            FakeQuery(),
+            make_user(),
+            "place_order_market_tok_expired",
+        )
+    )
+    assert "该交易信号不存在或已过期" in bot.messages[-1]["text"]
+    assert audit_owner.audit_events[-1]["action"] == "order_place_blocked"
+    assert audit_owner.audit_events[-1]["details"]["reason"] == "signal_expired"
+
+    # 4. Signal preview pending
+    signal_repo = FakeSignalRecordRepo(
+        {
+            "tok_preview": {
+                "symbol": "BTCUSDT",
+                "direction": "long",
+                "entry_lower": 80200,
+                "entry_upper": 81000,
+                "stop_loss": 79000,
+                "status": "preview_pending",
+            }
+        }
+    )
+    service, bot, audit_owner = make_service(
+        user_repo=FakeUserRepo(),
+        signal_record_repo=signal_repo,
+    )
+    asyncio.run(
+        service.handle_place_order_callback(
+            FakeQuery(),
+            make_user(),
+            "place_order_market_tok_preview",
+        )
+    )
+    assert "该交易信号不存在或已过期" in bot.messages[-1]["text"]
+    assert audit_owner.audit_events[-1]["action"] == "order_place_blocked"
+    assert audit_owner.audit_events[-1]["details"]["reason"] == "signal_preview_pending"
 
 
 def test_execute_order_blocks_when_daily_trade_limit_reached_before_bitget():

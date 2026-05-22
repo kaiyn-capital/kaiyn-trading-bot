@@ -1,7 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from .decimal_utils import decimal_text
-
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -32,27 +30,17 @@ def trading_settings_keyboard(include_return: bool = False) -> InlineKeyboardMar
     return InlineKeyboardMarkup(keyboard)
 
 
-def signal_order_keyboard(
-    symbol: str,
-    direction: str,
-    entry_lower,
-    entry_upper,
-    stop_loss,
-) -> InlineKeyboardMarkup:
-    entry_lower_text = decimal_text(entry_lower)
-    entry_upper_text = decimal_text(entry_upper)
-    stop_loss_text = decimal_text(stop_loss)
-    order_payload = f"{symbol}_{direction}_{entry_lower_text}_{entry_upper_text}_{stop_loss_text}"
+def signal_order_keyboard(token: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
                     "💰 市价下单",
-                    callback_data=f"place_order_market_{order_payload}",
+                    callback_data=f"place_order_market_{token}",
                 ),
                 InlineKeyboardButton(
                     "📌 挂单",
-                    callback_data=f"place_order_limit_{order_payload}",
+                    callback_data=f"place_order_limit_{token}",
                 ),
             ]
         ]

@@ -29,6 +29,7 @@ __all__ = [
     "execute_order",
     "parse_contract_rules",
     "parse_order_callback_data",
+    "parse_tokenized_callback_data",
     "parse_signal_args",
     "prepare_order_preview",
     "validate_order_preview",
@@ -146,6 +147,22 @@ def parse_order_callback_data(data: str) -> OrderCallbackData:
         entry_upper=entry_upper,
         stop_loss=stop_loss,
     )
+
+
+def parse_tokenized_callback_data(data: str) -> tuple[str, str]:
+    if data.startswith("place_order_market_"):
+        order_mode = "market"
+        token = data.removeprefix("place_order_market_")
+    elif data.startswith("place_order_limit_"):
+        order_mode = "limit"
+        token = data.removeprefix("place_order_limit_")
+    else:
+        raise ValueError("invalid tokenized order callback data")
+
+    if not token:
+        raise ValueError("missing token in order callback data")
+
+    return order_mode, token
 
 
 def prepare_order_preview(
