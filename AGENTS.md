@@ -94,7 +94,7 @@ make verify
   - If the worktree has unrelated local changes, do not overwrite or discard them.
   - Switch to local `main` only when it is safe to do so.
   - Update `main` with `git pull --ff-only origin main`.
-  - Create a feature branch from updated `main`; prefer the `codex/` branch prefix unless the user requests another name.
+  - Create a feature branch from updated `main`; use neutral prefixes such as `feature/`, `fix/`, `docs/`, `refactor/`, `chore/`, or `ci/`. Do not use AI/tool/vendor names such as `codex/` in branch names.
 - Commit workflow:
   - Commits must follow `$commit`.
   - Review staged and unstaged changes before committing.
