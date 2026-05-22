@@ -85,6 +85,33 @@ Run full Docker-first verification:
 make verify
 ```
 
+## Git And Pull Request Workflow
+
+- Primary remote is `origin` and should point to `https://github.com/kaiyn-capital/kaiyn-trading-bot.git`.
+- Do not commit directly to `main` for normal feature, fix, refactor, or documentation work.
+- Before starting code changes:
+  - Check the current worktree with `git status --short --branch`.
+  - If the worktree has unrelated local changes, do not overwrite or discard them.
+  - Switch to local `main` only when it is safe to do so.
+  - Update `main` with `git pull --ff-only origin main`.
+  - Create a feature branch from updated `main`; prefer the `codex/` branch prefix unless the user requests another name.
+- Commit workflow:
+  - Commits must follow `$commit`.
+  - Review staged and unstaged changes before committing.
+  - Split unrelated work into atomic commits.
+  - Use Conventional Commits v1.0.0 messages.
+- Pull request workflow:
+  - Pull requests must follow `$pull-request`.
+  - Push the feature branch to the same `origin` repository.
+  - Draft the PR title and description first.
+  - Ask for explicit user confirmation before running `gh pr create`.
+  - Do not create or merge a PR without explicit user confirmation.
+- After PR merge:
+  - Switch back to `main`.
+  - Pull the merged result with `git pull --ff-only origin main`.
+  - Delete the merged local feature branch.
+  - Delete the remote feature branch only after confirming it was merged and is no longer needed.
+
 ## Database Operations
 
 Start PostgreSQL:
