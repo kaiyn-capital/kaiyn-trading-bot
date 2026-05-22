@@ -35,14 +35,20 @@ class AdminMessagingMixin:
 
             for channel in channels:
                 try:
-                    await context.bot.send_message(
-                        chat_id=channel["chat_id"],
-                        text=f"📢 **管理员广播** by @{sender_username}\n\n{message_text}",
-                        parse_mode="Markdown",
-                    )
+                    send_kwargs = {
+                        "chat_id": channel["chat_id"],
+                        "text": f"📢 **管理员广播** by @{sender_username}\n\n{message_text}",
+                        "parse_mode": "Markdown",
+                    }
+                    if channel.get("message_thread_id"):
+                        send_kwargs["message_thread_id"] = channel["message_thread_id"]
+                    await context.bot.send_message(**send_kwargs)
                     sent_to_channels += 1
                 except Exception as e:
-                    logger.warning(f"Failed to send broadcast to channel {channel['chat_id']}: {e}")
+                    logger.warning(
+                        f"Failed to send broadcast to channel {channel['chat_id']} "
+                        f"thread {channel.get('message_thread_id')}: {e}"
+                    )
                     failed_channels += 1
 
             await status_msg.edit_text(

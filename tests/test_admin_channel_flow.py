@@ -355,6 +355,32 @@ def test_admin_broadcast_records_summary_audit(monkeypatch):
     assert audit["details"]["message"]["length"] == len("系统维护 请稍候")
 
 
+def test_admin_broadcast_sends_to_message_thread_id(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+    repo = FakeChannelRepo()
+    repo.active_channels = [
+        {
+            "chat_id": "-1001",
+            "chat_type": "channel",
+            "title": "test_kaiyn",
+            "username": "test_kaiyn",
+            "auto_forward_signals": True,
+            "message_thread_id": 42,
+            "thread_title": "Alerts",
+        }
+    ]
+    handler = FakeAdminHandler(repo)
+    update = make_update("")
+    context = make_context_with_args(["系统维护", "请稍候"])
+
+    asyncio.run(handler.admin_broadcast_command(update, context))
+
+    sent = context.bot.sent_messages[0]
+    assert sent["chat_id"] == "-1001"
+    assert sent["message_thread_id"] == 42
+    assert "系统维护 请稍候" in sent["text"]
+
+
 def test_admin_audit_rejects_non_admin(monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "999")
     handler = FakeAdminHandler(FakeChannelRepo())
