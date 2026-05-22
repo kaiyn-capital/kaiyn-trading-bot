@@ -1,5 +1,6 @@
+import hashlib
 import re
-from datetime import datetime
+import secrets
 from decimal import Decimal
 from typing import Optional, Sequence
 
@@ -22,6 +23,7 @@ __all__ = [
     "OrderValidationResult",
     "SignalDraft",
     "apply_order_validation",
+    "build_client_order_id",
     "execute_order",
     "parse_contract_rules",
     "parse_order_callback_data",
@@ -32,6 +34,17 @@ __all__ = [
 
 
 _SIGNAL_PRICE_GROUP_PATTERN = re.compile(r"\b(entry|sl|tp)\s*\[([^\]]*)\]", re.IGNORECASE)
+_BITGET_CLIENT_ORDER_ID_PATTERN = re.compile(r"^[0-9A-Za-z_:#\-\+\s]{1,32}$")
+
+
+def build_client_order_id(pending_order_token: str | None = None) -> str:
+    if pending_order_token:
+        candidate = f"KTB_{pending_order_token}"
+        if _BITGET_CLIENT_ORDER_ID_PATTERN.fullmatch(candidate):
+            return candidate
+        return f"KTB_{hashlib.sha256(pending_order_token.encode('utf-8')).hexdigest()[:24]}"
+
+    return f"KTB_{secrets.token_urlsafe(16)}"
 
 
 def _parse_signal_price_group(raw_prices: str) -> list[float]:
@@ -200,6 +213,7 @@ async def execute_order(
     limit_price: Optional[float] = None,
     quantity_text: Optional[str] = None,
     limit_price_text: Optional[str] = None,
+    client_order_id: Optional[str] = None,
 ) -> OrderExecutionResult:
     order_mode = order_mode if order_mode in {"market", "limit"} else "market"
     is_limit_order = order_mode == "limit"
@@ -212,7 +226,7 @@ async def execute_order(
     quantity = float(quantity)
     quantity_for_api = quantity_text or _decimal_text(Decimal(str(quantity)))
     price_for_api = limit_price_text or (_decimal_text(Decimal(str(order_price))) if order_price is not None else None)
-    client_order_id = f"TG_{telegram_id}_{int(datetime.timestamp(datetime.now()))}"
+    client_order_id = client_order_id or build_client_order_id()
     trade_record_id = None
 
     try:
