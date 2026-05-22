@@ -10,6 +10,7 @@ from .bot_messages import order_preview_message, order_success_message
 from .order_flow import (
     OrderPreview,
     apply_order_validation,
+    build_client_order_id,
     parse_contract_rules,
     parse_order_callback_data,
     prepare_order_preview,
@@ -508,6 +509,7 @@ class TelegramOrderFlowService:
                 f"Executing {order_mode} order for {symbol}, direction: {direction}, "
                 f"quantity: {quantity}, limit_price: {limit_price}"
             )
+            client_order_id = build_client_order_id(pending_order_token)
 
             result = await execute_order_flow(
                 user_data=user_data,
@@ -524,6 +526,7 @@ class TelegramOrderFlowService:
                 limit_price=limit_price,
                 quantity_text=validation.quantity_text,
                 limit_price_text=validation.limit_price_text,
+                client_order_id=client_order_id,
             )
 
             if pending_order_token:
