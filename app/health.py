@@ -1,3 +1,4 @@
+import html
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -213,15 +214,19 @@ def format_admin_health_report(
     processing_text = _format_stale_processing_count(stale_processing_count)
     error_text = _format_recent_errors(recent_errors)
 
+    backup_msg_escaped = html.escape(backup_health.message)
+    backup_file_escaped = html.escape(backup_health.filename) if backup_health.filename else "无"
+    maint_msg_escaped = html.escape(maintenance_health.message)
+
     return (
-        "🩺 **系统健康检查**\n\n"
+        "🩺 <b>系统健康检查</b>\n\n"
         f"Bot：✅ 正常\n"
         f"Uptime：{uptime}\n"
         f"DB：{db_text}\n"
-        f"Backup：{backup_icon} {backup_health.message}\n"
+        f"Backup：{backup_icon} {backup_msg_escaped}\n"
         f"Backup 时间：{format_utc8(backup_health.timestamp)}\n"
-        f"Backup 文件：{backup_health.filename or '无'}\n"
-        f"Maintenance：{maintenance_icon} {maintenance_health.message}\n"
+        f"Backup 文件：{backup_file_escaped}\n"
+        f"Maintenance：{maintenance_icon} {maint_msg_escaped}\n"
         f"Maintenance 时间：{format_utc8(maintenance_health.timestamp)}\n"
         f"Processing 卡单：{processing_text}\n"
         f"Bitget API：{bitget_text}\n\n"
@@ -264,7 +269,7 @@ async def _count_stale_processing_orders(pending_order_repo, now: datetime) -> O
 def _format_bitget_counts(counts: dict[str, int]) -> str:
     if not counts:
         return "✅ 近 24 小时无系统级 API 异常"
-    return "⚠️ " + " / ".join(f"{category}: {count}" for category, count in sorted(counts.items()))
+    return "⚠️ " + " / ".join(f"{html.escape(category)}: {count}" for category, count in sorted(counts.items()))
 
 
 def _format_stale_processing_count(count: Optional[int]) -> str:
@@ -281,6 +286,6 @@ def _format_recent_errors(errors: list) -> str:
         return "✅ 近 24 小时无 ERROR/CRITICAL"
     lines = []
     for error in errors[:5]:
-        message = str(error.message).replace("\n", " ")[:120]
+        message = html.escape(str(error.message).replace("\n", " ")[:120])
         lines.append(f"- {format_utc8(error.created_at)} {error.level} {message}")
     return "\n".join(lines)
