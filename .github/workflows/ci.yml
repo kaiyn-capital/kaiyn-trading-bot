@@ -59,6 +59,7 @@ jobs:
 
       - name: Pytest coverage comment
         uses: MishaKav/pytest-coverage-comment@v1.1.52
+        if: github.event_name == 'pull_request'
         with:
           pytest-xml-coverage-path: ./coverage.xml
           title: "Code Coverage Report"
