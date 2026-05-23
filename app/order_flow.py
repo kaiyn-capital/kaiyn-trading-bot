@@ -1,9 +1,10 @@
 import hashlib
 import re
 import secrets
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, Sequence
+from typing import Any
 
 from .bitget_errors import classify_bitget_exception
 from .decimal_utils import decimal_text, to_decimal
@@ -167,8 +168,8 @@ def parse_tokenized_callback_data(data: str) -> tuple[str, str]:
 
 def prepare_order_preview(
     callback_data: OrderCallbackData,
-    current_price,
-    risk_amount,
+    current_price: Decimal | float,
+    risk_amount: Decimal | float,
 ) -> OrderPreview:
     current_price = to_decimal(current_price)
     risk_amount = to_decimal(risk_amount)
@@ -221,23 +222,23 @@ def prepare_order_preview(
 
 
 async def execute_order(
-    user_data,
-    trade_repo,
-    trade_manager,
-    credentials,
+    user_data: Any,
+    trade_repo: Any,
+    trade_manager: Any,
+    credentials: tuple[str, str, str],
     telegram_id: int,
     symbol: str,
     direction: str,
-    quantity,
-    stop_loss,
-    position_value,
+    quantity: Decimal | float,
+    stop_loss: Decimal | float,
+    position_value: Decimal | float,
     order_mode: str = "market",
-    limit_price=None,
-    quantity_text: Optional[str] = None,
-    limit_price_text: Optional[str] = None,
-    client_order_id: Optional[str] = None,
-    daily_trade_limit: Optional[int] = None,
-    daily_limit_day_start_utc: Optional[datetime] = None,
+    limit_price: Decimal | float | None = None,
+    quantity_text: str | None = None,
+    limit_price_text: str | None = None,
+    client_order_id: str | None = None,
+    daily_trade_limit: int | None = None,
+    daily_limit_day_start_utc: datetime | None = None,
 ) -> OrderExecutionResult:
     order_mode = order_mode if order_mode in {"market", "limit"} else "market"
     is_limit_order = order_mode == "limit"

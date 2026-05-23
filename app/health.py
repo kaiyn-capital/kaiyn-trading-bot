@@ -3,7 +3,6 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 from .config import Config
 
@@ -15,8 +14,8 @@ BACKUP_STATUS_FILE = "backup_status.json"
 class BackupHealth:
     status: str
     message: str
-    timestamp: Optional[datetime] = None
-    filename: Optional[str] = None
+    timestamp: datetime | None = None
+    filename: str | None = None
 
     @property
     def is_problem(self) -> bool:
@@ -27,14 +26,14 @@ class BackupHealth:
 class MaintenanceHealth:
     status: str
     message: str
-    timestamp: Optional[datetime] = None
+    timestamp: datetime | None = None
 
     @property
     def is_problem(self) -> bool:
         return self.status in {"failed", "missing", "stale"}
 
 
-def parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+def parse_iso_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
@@ -43,7 +42,7 @@ def parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def format_utc8(value: Optional[datetime]) -> str:
+def format_utc8(value: datetime | None) -> str:
     if not value:
         return "未知"
     return (value + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S UTC+8")
@@ -67,7 +66,7 @@ def format_duration(seconds: float) -> str:
 def read_backup_health(
     backups_dir: Path = BACKUPS_DIR,
     stale_hours: int = Config.BACKUP_STALE_HOURS,
-    now: Optional[datetime] = None,
+    now: datetime | None = None,
 ) -> BackupHealth:
     now = now or datetime.utcnow()
     status_path = backups_dir / BACKUP_STATUS_FILE
@@ -129,7 +128,7 @@ def read_backup_health(
 async def read_maintenance_health(
     system_log_repo,
     stale_hours: int = Config.MAINTENANCE_STALE_HOURS,
-    now: Optional[datetime] = None,
+    now: datetime | None = None,
 ) -> MaintenanceHealth:
     now = now or datetime.utcnow()
     latest = await system_log_repo.get_latest_log(
@@ -154,7 +153,7 @@ async def read_maintenance_health(
 async def build_admin_health_report(
     db_manager,
     system_log_repo,
-    started_at: Optional[datetime],
+    started_at: datetime | None,
     pending_order_repo=None,
     backups_dir: Path = BACKUPS_DIR,
 ) -> tuple[str, dict]:
@@ -201,9 +200,9 @@ def format_admin_health_report(
     maintenance_health: MaintenanceHealth,
     recent_errors: list,
     bitget_counts: dict[str, int],
-    started_at: Optional[datetime],
-    stale_processing_count: Optional[int] = None,
-    now: Optional[datetime] = None,
+    started_at: datetime | None,
+    stale_processing_count: int | None = None,
+    now: datetime | None = None,
 ) -> str:
     now = now or datetime.utcnow()
     uptime = format_duration((now - started_at).total_seconds()) if started_at else "未知"
@@ -234,7 +233,7 @@ def format_admin_health_report(
     )
 
 
-def _find_newest_backup(backups_dir: Path) -> Optional[Path]:
+def _find_newest_backup(backups_dir: Path) -> Path | None:
     if not backups_dir.exists():
         return None
     backups = list(backups_dir.glob("kaiyn_trading_bot_*.sql.gz"))
@@ -256,12 +255,13 @@ def _count_bitget_categories(logs: list) -> dict[str, int]:
     return counts
 
 
-async def _count_stale_processing_orders(pending_order_repo, now: datetime) -> Optional[int]:
+async def _count_stale_processing_orders(pending_order_repo, now: datetime) -> int | None:
     if not pending_order_repo:
         return None
     cutoff = now - timedelta(seconds=Config.PENDING_ORDER_RECONCILE_AFTER_SECONDS)
     try:
-        return await pending_order_repo.count_stale_processing_orders(cutoff)
+        result = await pending_order_repo.count_stale_processing_orders(cutoff)
+        return int(result) if result is not None else None
     except Exception:
         return None
 
@@ -272,7 +272,7 @@ def _format_bitget_counts(counts: dict[str, int]) -> str:
     return "⚠️ " + " / ".join(f"{html.escape(category)}: {count}" for category, count in sorted(counts.items()))
 
 
-def _format_stale_processing_count(count: Optional[int]) -> str:
+def _format_stale_processing_count(count: int | None) -> str:
     if count is None:
         return "未知"
     if count == 0:

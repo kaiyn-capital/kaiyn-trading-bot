@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -43,9 +43,7 @@ def test_effective_daily_trade_limit_uses_stricter_positive_cap(monkeypatch):
 
 def test_daily_limit_day_start_uses_utc_plus_8():
     assert get_daily_limit_day_start_utc(datetime(2026, 5, 22, 1, 30, 0)) == datetime(2026, 5, 21, 16, 0, 0)
-    assert get_daily_limit_day_start_utc(datetime(2026, 5, 22, 18, 0, 0, tzinfo=timezone.utc)) == datetime(
-        2026, 5, 22, 16, 0, 0
-    )
+    assert get_daily_limit_day_start_utc(datetime(2026, 5, 22, 18, 0, 0, tzinfo=UTC)) == datetime(2026, 5, 22, 16, 0, 0)
 
 
 def test_position_limit_raises_user_facing_error(monkeypatch):

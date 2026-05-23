@@ -4,7 +4,6 @@ import hmac
 import json
 import logging
 import time
-from typing import Dict
 
 import httpx
 
@@ -32,7 +31,7 @@ class BitgetAPIClient:
         mac = hmac.new(self.secret_key.encode("utf-8"), message.encode("utf-8"), hashlib.sha256)
         return base64.b64encode(mac.digest()).decode()
 
-    def _get_headers(self, method: str, request_path: str, body: str = "") -> Dict[str, str]:
+    def _get_headers(self, method: str, request_path: str, body: str = "") -> dict[str, str]:
         timestamp = str(int(time.time() * 1000))
         signature = self._generate_signature(timestamp, method, request_path, body)
 
@@ -45,7 +44,7 @@ class BitgetAPIClient:
             "locale": "zh-CN",
         }
 
-    async def _make_request(self, method: str, endpoint: str, params: Dict = None, data: Dict = None) -> Dict:
+    async def _make_request(self, method: str, endpoint: str, params: dict = None, data: dict = None) -> dict:
         url = f"{self.base_url}{endpoint}"
 
         query_string = ""
@@ -74,7 +73,7 @@ class BitgetAPIClient:
 
             try:
                 result = response.json()
-            except Exception:
+            except Exception as e:
                 raise BitgetAPIError(
                     code=str(response.status_code),
                     message=f"Invalid JSON response from Bitget HTTP {response.status_code}",
@@ -82,7 +81,7 @@ class BitgetAPIClient:
                     http_status=response.status_code,
                     endpoint=endpoint,
                     method=method,
-                )
+                ) from e
 
             if result.get("code") != "00000":
                 raise BitgetAPIError(
@@ -147,7 +146,7 @@ class BitgetAPIClient:
                 http_status=e.response.status_code,
                 endpoint=endpoint,
                 method=method,
-            )
+            ) from e
         except httpx.TimeoutException as e:
             logger.error(f"Bitget request timeout: {method} {endpoint}: {e}")
             raise BitgetAPIError(
@@ -156,7 +155,7 @@ class BitgetAPIClient:
                 data={"error": str(e)},
                 endpoint=endpoint,
                 method=method,
-            )
+            ) from e
         except httpx.RequestError as e:
             logger.error(f"Bitget network request error: {method} {endpoint}: {e}")
             raise BitgetAPIError(
@@ -165,35 +164,35 @@ class BitgetAPIClient:
                 data={"error": str(e)},
                 endpoint=endpoint,
                 method=method,
-            )
+            ) from e
         except Exception as e:
             logger.error(f"Request error: {e}")
             raise
 
-    async def get_account_info(self, product_type: str = "USDT-FUTURES") -> Dict:
+    async def get_account_info(self, product_type: str = "USDT-FUTURES") -> dict:
         params = {"productType": product_type}
         return await self._make_request("GET", "/api/v2/mix/account/account", params=params)
 
-    async def get_account_assets(self, product_type: str = "USDT-FUTURES") -> Dict:
+    async def get_account_assets(self, product_type: str = "USDT-FUTURES") -> dict:
         params = {"productType": product_type}
         return await self._make_request("GET", "/api/v2/mix/account/accounts", params=params)
 
-    async def get_positions(self, product_type: str = "USDT-FUTURES") -> Dict:
+    async def get_positions(self, product_type: str = "USDT-FUTURES") -> dict:
         params = {"productType": product_type}
         return await self._make_request("GET", "/api/v2/mix/position/all-position", params=params)
 
-    async def set_position_mode(self, product_type: str = "USDT-FUTURES", pos_mode: str = "hedge_mode") -> Dict:
+    async def set_position_mode(self, product_type: str = "USDT-FUTURES", pos_mode: str = "hedge_mode") -> dict:
         data = {
             "productType": product_type,
             "posMode": pos_mode,
         }
         return await self._make_request("POST", "/api/v2/mix/account/set-position-mode", data=data)
 
-    async def get_symbols(self, product_type: str = "USDT-FUTURES") -> Dict:
+    async def get_symbols(self, product_type: str = "USDT-FUTURES") -> dict:
         params = {"productType": product_type}
         return await self._make_request("GET", "/api/v2/mix/market/contracts", params=params)
 
-    async def get_ticker(self, symbol: str) -> Dict:
+    async def get_ticker(self, symbol: str) -> dict:
         params = {"symbol": symbol}
         return await self._make_request("GET", "/api/v2/mix/market/ticker", params=params)
 
@@ -212,7 +211,7 @@ class BitgetAPIClient:
         stop_loss_price: str = None,
         take_profit_price: str = None,
         force: str = None,
-    ) -> Dict:
+    ) -> dict:
         data = {
             "marginCoin": margin_coin,
             "marginMode": margin_mode,
@@ -244,7 +243,7 @@ class BitgetAPIClient:
 
     async def cancel_order(
         self, symbol: str, order_id: str = None, client_order_id: str = None, margin_coin: str = "USDT"
-    ) -> Dict:
+    ) -> dict:
         data = {"symbol": symbol, "marginCoin": margin_coin}
 
         if order_id:
@@ -262,7 +261,7 @@ class BitgetAPIClient:
         order_id: str = None,
         client_order_id: str = None,
         product_type: str = "USDT-FUTURES",
-    ) -> Dict:
+    ) -> dict:
         params = {"symbol": symbol, "productType": product_type}
 
         if order_id:
@@ -281,7 +280,7 @@ class BitgetAPIClient:
         product_type: str = "USDT-FUTURES",
         order_id: str = None,
         client_order_id: str = None,
-    ) -> Dict:
+    ) -> dict:
         params = {"productType": product_type, "limit": str(limit)}
 
         if symbol:
@@ -293,7 +292,7 @@ class BitgetAPIClient:
 
         return await self._make_request("GET", "/api/v2/mix/order/orders-history", params=params)
 
-    async def get_account_uid(self) -> Dict:
+    async def get_account_uid(self) -> dict:
         return await self._make_request("GET", "/api/v2/spot/account/info")
 
     async def close(self):

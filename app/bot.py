@@ -1,7 +1,7 @@
 import asyncio
+import contextlib
 import logging
 from datetime import datetime
-from typing import Dict, Optional
 
 from telegram import (
     BotCommand,
@@ -75,9 +75,9 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
         self.encryption_manager = create_encryption_manager(Config.ENCRYPTION_KEY)
         self.trade_manager = BitgetTradeManager(self.encryption_manager)
-        self.started_at: Optional[datetime] = None
-        self.health_monitor_task: Optional[asyncio.Task] = None
-        self.user_sessions: Dict[int, Dict] = {}
+        self.started_at: datetime | None = None
+        self.health_monitor_task: asyncio.Task | None = None
+        self.user_sessions: dict[int, dict] = {}
         self.session_store = SessionStore(
             sessions_dict=self.user_sessions,
             ttl_seconds=Config.USER_SESSION_TTL_SECONDS,
@@ -221,7 +221,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             return update.effective_user.first_name or "Unknown"
         return "Unknown"
 
-    async def _log_user_action(self, user: User, action: str, details: Optional[Dict] = None):
+    async def _log_user_action(self, user: User, action: str, details: dict | None = None):
         """Persist an audit-style user action log."""
         try:
             await self.system_log_repo.log(
@@ -242,14 +242,14 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 extra_data=details or {},
             )
 
-    async def _audit_action(self, user: User, action: str, details: Optional[Dict] = None):
+    async def _audit_action(self, user: User, action: str, details: dict | None = None):
         """Persist an operator audit event."""
         try:
             await record_audit_event(self.system_log_repo, user, action, details or {})
         except Exception as e:
             logger.error(f"Failed to record audit event {action}: {e}")
 
-    async def _record_bitget_failure_alert(self, classified_error, source: str, details: Optional[Dict] = None):
+    async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
         """Record a classified Bitget failure and alert admins if needed."""
         try:
             await self.alert_manager.record_bitget_failure(
@@ -352,10 +352,8 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             if self._is_private_chat_update(update):
                 await query.edit_message_text("❌ 操作失败，请重试")
             else:
-                try:
+                with contextlib.suppress(Exception):
                     await query.answer("操作失败，请到与机器人的私人聊天查看或重试", show_alert=True)
-                except Exception:
-                    pass
 
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle uncaught Telegram update errors."""
@@ -391,13 +389,11 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             logger.error(f"Failed to log error: {e}")
 
         if update and update.effective_chat and self._is_private_chat_update(update):
-            try:
+            with contextlib.suppress(Exception):
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
                     text="❌ 系统发生错误，请稍后重试。如问题持续，请联系管理员。",
                 )
-            except Exception:
-                pass
 
     async def start(self):
         """Start the Telegram bot."""
@@ -428,10 +424,8 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             logger.info("Stopping Telegram bot...")
             if self.health_monitor_task:
                 self.health_monitor_task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await self.health_monitor_task
-                except asyncio.CancelledError:
-                    pass
 
             await self.application.updater.stop()
             await self.application.stop()

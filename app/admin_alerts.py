@@ -2,7 +2,6 @@ import json
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
@@ -24,7 +23,7 @@ def _utcnow() -> datetime:
     return datetime.utcnow()
 
 
-def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+def _parse_iso_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
@@ -68,7 +67,7 @@ class AlertStateStore:
         self,
         alert_key: str,
         cooldown_seconds: int,
-        now: Optional[datetime] = None,
+        now: datetime | None = None,
     ) -> bool:
         state = self.load()
         sent = state.setdefault("sent", {})
@@ -84,9 +83,9 @@ class AlertStateStore:
 
 async def send_direct_admin_alert(
     text: str,
-    alert_key: Optional[str] = None,
-    cooldown_seconds: Optional[int] = None,
-    state_store: Optional[AlertStateStore] = None,
+    alert_key: str | None = None,
+    cooldown_seconds: int | None = None,
+    state_store: AlertStateStore | None = None,
 ) -> bool:
     token = Config.TELEGRAM_BOT_TOKEN
     admin_ids = _safe_admin_ids()
@@ -122,7 +121,7 @@ class AdminAlertManager:
         self,
         bot,
         system_log_repo=None,
-        state_store: Optional[AlertStateStore] = None,
+        state_store: AlertStateStore | None = None,
     ):
         self.bot = bot
         self.system_log_repo = system_log_repo
@@ -132,8 +131,8 @@ class AdminAlertManager:
     async def send_alert(
         self,
         text: str,
-        alert_key: Optional[str] = None,
-        cooldown_seconds: Optional[int] = None,
+        alert_key: str | None = None,
+        cooldown_seconds: int | None = None,
     ) -> bool:
         admin_ids = _safe_admin_ids()
         if not admin_ids:
@@ -169,7 +168,7 @@ class AdminAlertManager:
             alert_key="startup_failure",
         )
 
-    async def alert_db_failure(self, source: str, error: Optional[Exception] = None):
+    async def alert_db_failure(self, source: str, error: Exception | None = None):
         suffix = f"\n\n错误：{error}" if error else ""
         return await self.send_alert(
             f"❌ Kaiyn Trading Bot DB 健康检查失败。\n\n来源：{source}{suffix}",
@@ -192,7 +191,7 @@ class AdminAlertManager:
         self,
         classified_error: ClassifiedBitgetError,
         source: str,
-        context: Optional[dict] = None,
+        context: dict | None = None,
     ) -> bool:
         if classified_error.category not in ALERTABLE_BITGET_CATEGORIES:
             return False

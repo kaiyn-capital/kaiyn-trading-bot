@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -43,7 +43,7 @@ def test_parse_bitget_candles_payload_sorts_and_maps_rows():
     )
 
     assert [candle.timestamp.timestamp() for candle in candles] == [1, 2]
-    assert candles[0].timestamp.tzinfo == timezone.utc
+    assert candles[0].timestamp.tzinfo == UTC
     assert candles[0].open == 100
     assert candles[0].high == 102
     assert candles[0].low == 98
@@ -98,8 +98,8 @@ def test_get_candles_accepts_time_window(monkeypatch):
     asyncio.run(
         BitgetPublicMarket().get_candles(
             "BTCUSDT",
-            start_time=datetime(2026, 5, 21, 1, 0, tzinfo=timezone.utc),
-            end_time=datetime(2026, 5, 21, 2, 0, tzinfo=timezone.utc),
+            start_time=datetime(2026, 5, 21, 1, 0, tzinfo=UTC),
+            end_time=datetime(2026, 5, 21, 2, 0, tzinfo=UTC),
         )
     )
 

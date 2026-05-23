@@ -1,8 +1,7 @@
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Dict, List
 
 import httpx
 
@@ -20,7 +19,7 @@ def parse_bitget_candles_payload(raw_candles: list[list[str]]) -> list[MarketCan
         if len(row) < 6:
             raise ValueError("invalid candle row")
 
-        timestamp = datetime.fromtimestamp(int(row[0]) / 1000, tz=timezone.utc)
+        timestamp = datetime.fromtimestamp(int(row[0]) / 1000, tz=UTC)
         candles.append(
             MarketCandle(
                 timestamp=timestamp,
@@ -37,7 +36,7 @@ def parse_bitget_candles_payload(raw_candles: list[list[str]]) -> list[MarketCan
 
 def _datetime_to_millis(value: datetime) -> int:
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
+        value = value.replace(tzinfo=UTC)
     return int(value.timestamp() * 1000)
 
 
@@ -77,28 +76,26 @@ class BitgetPublicMarket:
                             endpoint="/api/v2/mix/market/tickers",
                             method="GET",
                         )
-                    else:
-                        error_msg = f"API returned error: {data}"
-                        logger.error(error_msg)
-                        raise BitgetAPIError(
-                            code=data.get("code"),
-                            message=data.get("msg", error_msg),
-                            data=data,
-                            http_status=response.status_code,
-                            endpoint="/api/v2/mix/market/tickers",
-                            method="GET",
-                        )
-                else:
-                    error_msg = f"HTTP {response.status_code}: {response.text}"
+                    error_msg = f"API returned error: {data}"
                     logger.error(error_msg)
                     raise BitgetAPIError(
-                        code=str(response.status_code),
-                        message=error_msg,
-                        data={"response": response.text[:1000]},
+                        code=data.get("code"),
+                        message=data.get("msg", error_msg),
+                        data=data,
                         http_status=response.status_code,
                         endpoint="/api/v2/mix/market/tickers",
                         method="GET",
                     )
+                error_msg = f"HTTP {response.status_code}: {response.text}"
+                logger.error(error_msg)
+                raise BitgetAPIError(
+                    code=str(response.status_code),
+                    message=error_msg,
+                    data={"response": response.text[:1000]},
+                    http_status=response.status_code,
+                    endpoint="/api/v2/mix/market/tickers",
+                    method="GET",
+                )
 
             except httpx.TimeoutException as e:
                 error_msg = f"Request timeout for {symbol}: {e}"
@@ -109,7 +106,7 @@ class BitgetPublicMarket:
                     data={"symbol": symbol},
                     endpoint="/api/v2/mix/market/tickers",
                     method="GET",
-                )
+                ) from e
             except httpx.RequestError as e:
                 error_msg = f"Network error for {symbol}: {e}"
                 logger.error(error_msg)
@@ -119,15 +116,15 @@ class BitgetPublicMarket:
                     data={"symbol": symbol},
                     endpoint="/api/v2/mix/market/tickers",
                     method="GET",
-                )
+                ) from e
             except BitgetAPIError:
                 raise
             except Exception as e:
                 error_msg = f"Failed to get futures market price for {symbol}: {e}"
                 logger.error(error_msg)
-                raise Exception(error_msg)
+                raise Exception(error_msg) from e
 
-    async def get_trading_pairs(self, product_type: str = "USDT-FUTURES", force_refresh: bool = False) -> List[Dict]:
+    async def get_trading_pairs(self, product_type: str = "USDT-FUTURES", force_refresh: bool = False) -> list[dict]:
         cached = self._contracts_cache.get(product_type)
         if not force_refresh and cached and time.time() - cached["cached_at"] < self._contracts_cache_ttl_seconds:
             return cached["data"]
@@ -165,7 +162,7 @@ class BitgetPublicMarket:
                     data={"product_type": product_type},
                     endpoint="/api/v2/mix/market/contracts",
                     method="GET",
-                )
+                ) from e
             except httpx.RequestError as e:
                 logger.error(f"Network error getting futures trading pairs: {e}")
                 raise BitgetAPIError(
@@ -174,7 +171,7 @@ class BitgetPublicMarket:
                     data={"product_type": product_type},
                     endpoint="/api/v2/mix/market/contracts",
                     method="GET",
-                )
+                ) from e
             except Exception as e:
                 logger.error(f"Failed to get futures trading pairs: {e}")
                 raise
@@ -240,7 +237,7 @@ class BitgetPublicMarket:
                     data={"symbol": normalized_symbol, "granularity": granularity},
                     endpoint=endpoint,
                     method="GET",
-                )
+                ) from e
             except httpx.RequestError as e:
                 logger.error(f"Network error getting candles for {normalized_symbol}: {e}")
                 raise BitgetAPIError(
@@ -249,9 +246,9 @@ class BitgetPublicMarket:
                     data={"symbol": normalized_symbol, "granularity": granularity},
                     endpoint=endpoint,
                     method="GET",
-                )
+                ) from e
 
-    async def get_contract_rules(self, symbol: str, product_type: str = "USDT-FUTURES") -> Dict:
+    async def get_contract_rules(self, symbol: str, product_type: str = "USDT-FUTURES") -> dict:
         normalized_symbol = symbol.upper()
         contracts = await self.get_trading_pairs(product_type)
 

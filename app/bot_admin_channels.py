@@ -1,5 +1,4 @@
 import logging
-import traceback
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -139,8 +138,7 @@ class AdminChannels:
             )
 
         except Exception as e:
-            logger.error(f"Admin channels command error: {e}")
-            traceback.print_exc()
+            logger.exception(f"Admin channels command error: {e}")
             await update.message.reply_text(f"❌ 获取频道列表时发生错误: {str(e)}")
 
     async def add_channel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
