@@ -107,7 +107,7 @@
 
 `[話題名稱]` 是管理員自訂備註名稱，只用於 `/admin_channels` 顯示，不要求與 Telegram 話題實際名稱一致。
 
-指定 topic 套用於 `/send_signal` 交易信號自動轉發；`/update_chart` 會沿用原始信號成功轉發時保存的群組/topic。`/admin_broadcast` 與 `/send_to_channel` 維持發到群組本身。
+指定 topic 套用於 `/send_signal` 交易信號自動轉發與 `/admin_broadcast`；`/update_chart` 會沿用原始信號成功轉發時保存的群組/topic。`/send_to_channel` 維持發到群組本身。
 
 ## Post-deploy Smoke Test
 

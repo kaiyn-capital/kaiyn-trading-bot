@@ -353,6 +353,20 @@ def test_admin_broadcast_records_summary_audit(monkeypatch):
     assert audit["details"]["target_count"] == 1
     assert audit["details"]["sent_count"] == 1
     assert audit["details"]["message"]["length"] == len("系统维护 请稍候")
+    assert "message_thread_id" not in context.bot.sent_messages[-1]
+
+
+def test_admin_broadcast_uses_configured_channel_topic(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+    channel_repo = FakeChannelRepo()
+    channel_repo.active_channels[0]["message_thread_id"] = 456
+    handler = FakeAdminHandler(channel_repo)
+    update = make_update("")
+    context = make_context_with_args(["系统维护"])
+
+    asyncio.run(handler.admin_broadcast_command(update, context))
+
+    assert context.bot.sent_messages[-1]["message_thread_id"] == 456
 
 
 def test_admin_broadcast_sends_to_message_thread_id(monkeypatch):
