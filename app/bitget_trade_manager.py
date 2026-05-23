@@ -212,3 +212,4 @@ class BitgetTradeManager:
         for client in self._clients.values():
             await client.close()
         self._clients.clear()
+        await self.public_market.close()
