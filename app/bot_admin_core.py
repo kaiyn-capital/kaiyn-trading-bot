@@ -5,6 +5,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from .audit import emit_audit_event
+from .decimal_utils import decimal_text
 
 logger = logging.getLogger(__name__)
 
@@ -93,9 +94,14 @@ class AdminCore:
                 telegram_id = u.get("telegram_id")
                 created_at = u.get("created_at")
 
+                trader_status = " | ⭐️发单员" if u.get("is_trader") else ""
+                fixed_risk = u.get("fixed_risk_amount")
+                risk_status = f" | 1R: {decimal_text(fixed_risk)} USDT" if fixed_risk is not None else ""
+
                 users_text += f"{api_status} {first_name} (@{username})\n"
                 users_text += (
-                    f"   ID: {telegram_id} | 注册: {created_at.strftime('%m-%d') if created_at else 'N/A'}\n\n"
+                    f"   ID: {telegram_id} | 注册: {created_at.strftime('%m-%d') if created_at else 'N/A'}"
+                    f"{trader_status}{risk_status}\n\n"
                 )
 
             if len(users_data) > 20:

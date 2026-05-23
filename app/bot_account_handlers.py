@@ -212,7 +212,7 @@ class AccountHandlers:
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await query.edit_message_text(
-                f"💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n您目前已设置定损为 {current_risk} USDT，要更改吗？",
+                f"💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n您目前已设置定损为 {decimal_text(current_risk)} USDT，要更改吗？",
                 reply_markup=reply_markup,
                 parse_mode="Markdown",
             )

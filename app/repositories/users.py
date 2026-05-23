@@ -95,11 +95,48 @@ class UserRepository:
             return result.scalar_one_or_none() is not None
 
     async def get_active_users(self) -> list[dict]:
-        """獲取所有活躍用戶（返回字典格式避免 Session 問題）"""
+        """獲取所有活躍用戶的概要資訊（不包含加密 API 金鑰等敏感資料）"""
         async with self.db.get_session() as session:
-            result = await session.execute(select(User).where(User.is_active.is_(True)).order_by(User.created_at))
-            users = result.scalars().all()
-            return [user_to_dict(user) for user in users]
+            result = await session.execute(
+                select(
+                    User.id,
+                    User.telegram_id,
+                    User.username,
+                    User.first_name,
+                    User.last_name,
+                    User.is_api_connected,
+                    User.daily_trade_limit,
+                    User.max_position_size,
+                    User.default_stop_loss_percent,
+                    User.default_trade_amount,
+                    User.fixed_risk_amount,
+                    User.is_trader,
+                    User.created_at,
+                    User.updated_at,
+                )
+                .where(User.is_active.is_(True))
+                .order_by(User.created_at)
+            )
+            users = result.all()
+            return [
+                {
+                    "id": u.id,
+                    "telegram_id": u.telegram_id,
+                    "username": u.username,
+                    "first_name": u.first_name,
+                    "last_name": u.last_name,
+                    "is_api_connected": u.is_api_connected,
+                    "daily_trade_limit": u.daily_trade_limit,
+                    "max_position_size": u.max_position_size,
+                    "default_stop_loss_percent": u.default_stop_loss_percent,
+                    "default_trade_amount": u.default_trade_amount,
+                    "fixed_risk_amount": u.fixed_risk_amount,
+                    "is_trader": u.is_trader,
+                    "created_at": u.created_at,
+                    "updated_at": u.updated_at,
+                }
+                for u in users
+            ]
 
 
 def user_to_dict(user: User) -> dict:
