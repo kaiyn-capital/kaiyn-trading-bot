@@ -5,16 +5,16 @@ Revises: 20260521_0006
 Create Date: 2026-05-22
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 
 from alembic import op
 
 revision: str = "20260522_0007"
-down_revision: Union[str, None] = "20260521_0006"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "20260521_0006"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 NUMERIC = sa.Numeric(38, 18, asdecimal=True)
 FLOAT = sa.Float()

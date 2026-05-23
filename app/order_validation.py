@@ -1,11 +1,12 @@
 from dataclasses import replace
 from decimal import ROUND_DOWN, Decimal, InvalidOperation
+from typing import Any
 
 from .decimal_utils import decimal_text, to_decimal
 from .order_types import ContractRules, OrderPreview, OrderValidationResult
 
 
-def _decimal_or_zero(value) -> Decimal:
+def _decimal_or_zero(value: object) -> Decimal:
     if value is None or value == "":
         return Decimal("0")
     try:
@@ -14,7 +15,7 @@ def _decimal_or_zero(value) -> Decimal:
         return Decimal("0")
 
 
-def _int_or_zero(value) -> int:
+def _int_or_zero(value: Any) -> int:
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -218,6 +219,7 @@ def validate_order_preview(
     if calculation_error:
         return calculation_error
 
+    assert calculation_price is not None
     stop_loss_error = _validate_stop_loss_direction(direction, to_decimal(preview.stop_loss), calculation_price)
     if stop_loss_error:
         return stop_loss_error
@@ -226,6 +228,7 @@ def validate_order_preview(
     if quantity_error:
         return quantity_error
 
+    assert calculation_price is not None
     calculation_price, limit_price, limit_price_text, limit_price_error = _normalize_limit_price(
         preview,
         rules,
@@ -235,6 +238,8 @@ def validate_order_preview(
     if limit_price_error:
         return limit_price_error
 
+    assert quantity is not None
+    assert calculation_price is not None
     position_value_decimal, position_value_error = _validate_position_value(quantity, calculation_price, rules)
     if position_value_error:
         return position_value_error

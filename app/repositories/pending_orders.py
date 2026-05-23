@@ -1,7 +1,6 @@
 import secrets
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
 from sqlalchemy import func, select
 
@@ -21,9 +20,9 @@ class PendingOrderRepository:
         symbol: str,
         direction: str,
         order_mode: str,
-        limit_price: Optional[Decimal],
-        entry_lower: Optional[Decimal],
-        entry_upper: Optional[Decimal],
+        limit_price: Decimal | None,
+        entry_lower: Decimal | None,
+        entry_upper: Decimal | None,
         quantity: Decimal,
         stop_loss: Decimal,
         position_value: Decimal,
@@ -60,7 +59,7 @@ class PendingOrderRepository:
             await session.flush()
             return pending_order
 
-    async def claim_pending_order(self, token: str, telegram_id: int) -> tuple[Optional[PendingOrder], str]:
+    async def claim_pending_order(self, token: str, telegram_id: int) -> tuple[PendingOrder | None, str]:
         """Atomically claim a pending order for execution."""
         async with self.db.get_session() as session:
             result = await session.execute(
@@ -147,8 +146,8 @@ class PendingOrderRepository:
         self,
         token: str,
         status: str,
-        trade_id: Optional[int] = None,
-        error_message: Optional[str] = None,
+        trade_id: int | None = None,
+        error_message: str | None = None,
     ) -> bool:
         async with self.db.get_session() as session:
             result = await session.execute(select(PendingOrder).where(PendingOrder.token == token))

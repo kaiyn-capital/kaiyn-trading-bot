@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 
 from telegram import Update
@@ -244,7 +244,7 @@ class OrderHandlers:
             signal.symbol,
             granularity,
             Config.SIGNAL_UPDATE_CANDLE_LIMIT,
-            end_time=datetime.now(timezone.utc),
+            end_time=datetime.now(UTC),
         )
         return await asyncio.to_thread(render_signal_update_chart, signal, candles, granularity, signal_time)
 

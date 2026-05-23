@@ -1,7 +1,6 @@
 import base64
 import logging
 import os
-from typing import Optional
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.backends import default_backend
@@ -26,7 +25,7 @@ class EncryptionManager:
             self.fernet = Fernet(self.key)
         except Exception as e:
             logger.error(f"Failed to initialize encryption: {e}")
-            raise ValueError("Invalid encryption key")
+            raise ValueError("Invalid encryption key") from e
 
     def encrypt(self, plaintext: str) -> str:
         """
@@ -126,7 +125,7 @@ class KeyGenerator:
         return key.decode()
 
     @staticmethod
-    def derive_key_from_password(password: str, salt: Optional[bytes] = None) -> str:
+    def derive_key_from_password(password: str, salt: bytes | None = None) -> str:
         """
         從密碼派生金鑰
 

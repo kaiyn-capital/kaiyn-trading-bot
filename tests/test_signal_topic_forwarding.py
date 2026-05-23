@@ -204,7 +204,7 @@ def make_update():
 
 def make_context():
     return SimpleNamespace(
-        args="BTCUSDT short entry[80200 81000] sl[81700] tp[77777 75000] 等待回踩后执行".split(),
+        args=["BTCUSDT", "short", "entry[80200", "81000]", "sl[81700]", "tp[77777", "75000]", "等待回踩后执行"],
         bot=FakeBot(),
     )
 

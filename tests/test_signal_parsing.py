@@ -6,7 +6,9 @@ from app.order_flow import parse_signal_args, parse_tokenized_callback_data
 
 
 def test_parse_signal_with_labeled_prices_and_remark():
-    signal = parse_signal_args("BTCUSDT short entry[80200 81000] sl[81700] tp[77777 75000] 等待回踩后执行".split())
+    signal = parse_signal_args(
+        ["BTCUSDT", "short", "entry[80200", "81000]", "sl[81700]", "tp[77777", "75000]", "等待回踩后执行"]
+    )
 
     assert signal.symbol == "BTCUSDT"
     assert signal.direction == "short"
@@ -18,7 +20,7 @@ def test_parse_signal_with_labeled_prices_and_remark():
 
 
 def test_parse_signal_with_single_entry_price():
-    signal = parse_signal_args("PUMPUSDT long entry[0.00179] sl[0.00156] tp[0.0022 0.00268]".split())
+    signal = parse_signal_args(["PUMPUSDT", "long", "entry[0.00179]", "sl[0.00156]", "tp[0.0022", "0.00268]"])
 
     assert signal.symbol == "PUMPUSDT"
     assert signal.direction == "long"
@@ -46,7 +48,7 @@ def test_parse_tokenized_callback_data():
 
 
 def test_parse_signal_supports_case_insensitive_labels_and_spaced_brackets():
-    signal = parse_signal_args("ethusdt LONG TP [3400 3500] ENTRY [3200 3250] SL [3150]".split())
+    signal = parse_signal_args(["ethusdt", "LONG", "TP", "[3400", "3500]", "ENTRY", "[3200", "3250]", "SL", "[3150]"])
 
     assert signal.symbol == "ETHUSDT"
     assert signal.direction == "long"
@@ -57,14 +59,16 @@ def test_parse_signal_supports_case_insensitive_labels_and_spaced_brackets():
 
 
 def test_parse_signal_treats_text_outside_labels_as_remark():
-    signal = parse_signal_args("PUMPUSDT long 等待 entry[0.00179] sl[0.00156] tp[0.0022] 回踩后执行".split())
+    signal = parse_signal_args(
+        ["PUMPUSDT", "long", "等待", "entry[0.00179]", "sl[0.00156]", "tp[0.0022]", "回踩后执行"]
+    )
 
     assert signal.remark == "等待 回踩后执行"
 
 
 def test_parse_signal_rejects_old_positional_format():
     with pytest.raises(ValueError):
-        parse_signal_args("BTCUSDT short 80200 81000 81700 77777".split())
+        parse_signal_args(["BTCUSDT", "short", "80200", "81000", "81700", "77777"])
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -15,7 +15,7 @@ from app.signal_charts import (
 
 
 def make_candles(count=30):
-    start = datetime(2026, 5, 18, tzinfo=timezone.utc)
+    start = datetime(2026, 5, 18, tzinfo=UTC)
     candles = []
     for index in range(count):
         price = 100 + index * 0.4
@@ -198,4 +198,4 @@ def test_render_signal_update_chart_rejects_missing_signal_time():
 
 
 def test_format_time_label_uses_compact_day_label():
-    assert _format_time_label(datetime(2026, 5, 19, 21, 30, tzinfo=timezone.utc)) == "May 19"
+    assert _format_time_label(datetime(2026, 5, 19, 21, 30, tzinfo=UTC)) == "May 19"

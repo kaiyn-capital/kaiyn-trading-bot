@@ -1,6 +1,5 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
 from sqlalchemy import func, or_, select
 
@@ -23,8 +22,8 @@ class TradeRepository:
         side: str,
         order_type: str,
         quantity: Decimal,
-        price: Optional[Decimal] = None,
-        client_order_id: Optional[str] = None,
+        price: Decimal | None = None,
+        client_order_id: str | None = None,
     ) -> Trade:
         """創建新交易記錄"""
         async with self.db.get_session() as session:
@@ -50,8 +49,8 @@ class TradeRepository:
         quantity: Decimal,
         daily_trade_limit: int,
         day_start_utc: datetime,
-        price: Optional[Decimal] = None,
-        client_order_id: Optional[str] = None,
+        price: Decimal | None = None,
+        client_order_id: str | None = None,
     ) -> Trade:
         """Create a trade after a transaction-scoped per-user daily limit check."""
         async with self.db.get_session() as session:
@@ -89,13 +88,13 @@ class TradeRepository:
     async def update_trade_result(
         self,
         trade_id: int,
-        bitget_order_id: Optional[str],
+        bitget_order_id: str | None,
         status: str,
         filled_quantity: Decimal = Decimal("0"),
-        avg_price: Optional[Decimal] = None,
-        total_amount: Optional[Decimal] = None,
+        avg_price: Decimal | None = None,
+        total_amount: Decimal | None = None,
         fee: Decimal = Decimal("0"),
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ) -> bool:
         """更新交易結果"""
         async with self.db.get_session() as session:
@@ -124,7 +123,7 @@ class TradeRepository:
             )
             return list(result.scalars().all())
 
-    async def get_by_client_order_id(self, client_order_id: str) -> Optional[Trade]:
+    async def get_by_client_order_id(self, client_order_id: str) -> Trade | None:
         """Return one trade by deterministic client order id."""
         async with self.db.get_session() as session:
             result = await session.execute(select(Trade).where(Trade.client_order_id == client_order_id))

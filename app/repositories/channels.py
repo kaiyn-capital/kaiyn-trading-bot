@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import func, select
 
@@ -17,11 +16,11 @@ class ChannelRepository:
         chat_id: str,
         chat_type: str,
         title: str,
-        username: Optional[str],
+        username: str | None,
         added_by_user_id: int,
-        description: Optional[str] = None,
-        message_thread_id: Optional[int] = None,
-        thread_title: Optional[str] = None,
+        description: str | None = None,
+        message_thread_id: int | None = None,
+        thread_title: str | None = None,
     ) -> ChannelGroup:
         """創建頻道記錄"""
         async with self.db.get_session() as session:
@@ -58,7 +57,7 @@ class ChannelRepository:
             )
             return [channel_to_dict(channel) for channel in result.scalars().all()]
 
-    async def get_channel_by_chat_id(self, chat_id: str) -> Optional[ChannelGroup]:
+    async def get_channel_by_chat_id(self, chat_id: str) -> ChannelGroup | None:
         """根據聊天ID獲取頻道"""
         async with self.db.get_session() as session:
             result = await session.execute(select(ChannelGroup).where(ChannelGroup.chat_id == chat_id))
@@ -98,11 +97,11 @@ class ChannelRepository:
         chat_id: str,
         chat_type: str,
         title: str,
-        username: Optional[str],
+        username: str | None,
         added_by_user_id: int,
-        description: Optional[str] = None,
-        message_thread_id: Optional[int] = None,
-        thread_title: Optional[str] = None,
+        description: str | None = None,
+        message_thread_id: int | None = None,
+        thread_title: str | None = None,
     ) -> bool:
         """Reactivate a soft-deleted channel and refresh its metadata."""
         async with self.db.get_session() as session:
@@ -124,9 +123,7 @@ class ChannelRepository:
             channel.updated_at = datetime.utcnow()
             return True
 
-    async def update_channel_topic(
-        self, chat_id: str, message_thread_id: int, thread_title: Optional[str] = None
-    ) -> bool:
+    async def update_channel_topic(self, chat_id: str, message_thread_id: int, thread_title: str | None = None) -> bool:
         """Set the default Telegram topic for signal forwarding."""
         async with self.db.get_session() as session:
             result = await session.execute(

@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional
 
 from .decimal_utils import to_decimal, to_decimal_or_none
 
@@ -41,7 +40,7 @@ class OrderCallbackData:
 class OrderPreview:
     requested_order_mode: str
     order_mode: str
-    limit_price: Optional[Decimal]
+    limit_price: Decimal | None
     entry_lower: Decimal
     entry_upper: Decimal
     quantity: Decimal
@@ -50,9 +49,9 @@ class OrderPreview:
     current_price: Decimal
     risk_amount: Decimal
     stop_distance_pct: Decimal
-    switch_notice: Optional[str] = None
-    quantity_text: Optional[str] = None
-    limit_price_text: Optional[str] = None
+    switch_notice: str | None = None
+    quantity_text: str | None = None
+    limit_price_text: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "limit_price", to_decimal_or_none(self.limit_price))
@@ -76,7 +75,7 @@ class OrderExecutionResult:
     status: str
     quantity: Decimal
     position_value: Decimal
-    limit_price: Optional[Decimal]
+    limit_price: Decimal | None
 
     def __post_init__(self):
         object.__setattr__(self, "quantity", to_decimal(self.quantity))
@@ -102,12 +101,12 @@ class ContractRules:
 @dataclass(frozen=True)
 class OrderValidationResult:
     is_valid: bool
-    error_message: Optional[str] = None
-    quantity: Optional[Decimal] = None
-    quantity_text: Optional[str] = None
-    limit_price: Optional[Decimal] = None
-    limit_price_text: Optional[str] = None
-    position_value: Optional[Decimal] = None
+    error_message: str | None = None
+    quantity: Decimal | None = None
+    quantity_text: str | None = None
+    limit_price: Decimal | None = None
+    limit_price_text: str | None = None
+    position_value: Decimal | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "quantity", to_decimal_or_none(self.quantity))

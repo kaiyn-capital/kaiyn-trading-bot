@@ -1,6 +1,5 @@
 import logging
 import re
-import traceback
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -142,8 +141,7 @@ class AdminCore:
             await update.message.reply_text(admin_text, parse_mode="Markdown")
 
         except Exception as e:
-            logger.error(f"Admin command error: {e}")
-            traceback.print_exc()
+            logger.exception(f"Admin command error: {e}")
             await update.message.reply_text(f"❌ 获取管理信息时发生错误: {str(e)}")
 
 

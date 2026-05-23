@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import select
 
@@ -17,11 +16,11 @@ class SystemLogRepository:
         level: str,
         message: str,
         module: str,
-        function: Optional[str] = None,
-        user_id: Optional[int] = None,
-        telegram_id: Optional[int] = None,
-        extra_data: Optional[dict] = None,
-        stack_trace: Optional[str] = None,
+        function: str | None = None,
+        user_id: int | None = None,
+        telegram_id: int | None = None,
+        extra_data: dict | None = None,
+        stack_trace: str | None = None,
     ) -> SystemLog:
         """創建系統日誌"""
         async with self.db.get_session() as session:
@@ -44,10 +43,10 @@ class SystemLogRepository:
 
     async def get_latest_log(
         self,
-        module: Optional[str] = None,
-        function: Optional[str] = None,
-        levels: Optional[list[str]] = None,
-    ) -> Optional[SystemLog]:
+        module: str | None = None,
+        function: str | None = None,
+        levels: list[str] | None = None,
+    ) -> SystemLog | None:
         """Return the newest system log matching simple filters."""
         async with self.db.get_session() as session:
             query = select(SystemLog)
@@ -63,9 +62,9 @@ class SystemLogRepository:
 
     async def get_recent_logs(
         self,
-        levels: Optional[list[str]] = None,
-        module: Optional[str] = None,
-        since: Optional[datetime] = None,
+        levels: list[str] | None = None,
+        module: str | None = None,
+        since: datetime | None = None,
         limit: int = 10,
     ) -> list[SystemLog]:
         """Return recent system logs matching simple filters."""

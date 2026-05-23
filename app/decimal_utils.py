@@ -1,5 +1,5 @@
 from decimal import ROUND_DOWN, Decimal, InvalidOperation
-from typing import Any, Optional
+from typing import Any
 
 
 def to_decimal(value: Any) -> Decimal:
@@ -17,7 +17,7 @@ def to_decimal(value: Any) -> Decimal:
     return decimal_value
 
 
-def to_decimal_or_none(value: Any) -> Optional[Decimal]:
+def to_decimal_or_none(value: Any) -> Decimal | None:
     if value is None or value == "":
         return None
     try:
@@ -32,7 +32,7 @@ def _quantize_for_places(value: Decimal, places: int) -> Decimal:
     return value.quantize(Decimal(1).scaleb(-places), rounding=ROUND_DOWN)
 
 
-def decimal_text(value: Any, places: Optional[int] = None) -> str:
+def decimal_text(value: Any, places: int | None = None) -> str:
     decimal_value = to_decimal(value)
     if places is not None:
         decimal_value = _quantize_for_places(decimal_value, places)

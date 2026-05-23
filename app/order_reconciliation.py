@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
 from .audit import summarize_identifier
 from .bitget_errors import ClassifiedBitgetError, classify_bitget_exception
@@ -59,7 +59,7 @@ class PendingOrderReconciliationService:
         *,
         stale_after_seconds: int,
         limit: int,
-        now: Optional[datetime] = None,
+        now: datetime | None = None,
     ) -> PendingOrderReconciliationSummary:
         now = now or datetime.utcnow()
         cutoff = now - timedelta(seconds=stale_after_seconds)
@@ -148,7 +148,7 @@ class PendingOrderReconciliationService:
         )
         return "recovered"
 
-    async def _find_bitget_order(self, user, credentials, pending_order, client_order_id: str) -> Optional[dict]:
+    async def _find_bitget_order(self, user, credentials, pending_order, client_order_id: str) -> dict | None:
         try:
             detail = await self.trade_manager.get_order_status(
                 user.id,
@@ -307,12 +307,12 @@ def _is_order_not_found_error(exc: Exception) -> bool:
     return ("order" in raw_message and "not exist" in raw_message) or "订单不存在" in raw_message
 
 
-def _extract_exchange_status(order_data: dict) -> Optional[str]:
+def _extract_exchange_status(order_data: dict) -> str | None:
     value = order_data.get("state") or order_data.get("status")
     return str(value).strip().lower() if value else None
 
 
-def _map_exchange_status(exchange_status: Optional[str]) -> Optional[str]:
+def _map_exchange_status(exchange_status: str | None) -> str | None:
     if exchange_status in OPEN_EXCHANGE_STATUSES:
         return "pending"
     if exchange_status in FILLED_EXCHANGE_STATUSES:
@@ -328,7 +328,7 @@ def _side_from_pending_order(pending_order) -> str:
     return "buy" if pending_order.direction == "long" else "sell"
 
 
-def _parse_optional_decimal(value: Any) -> Optional[Decimal]:
+def _parse_optional_decimal(value: Any) -> Decimal | None:
     if value is None or value == "":
         return None
     return to_decimal_or_none(value)
