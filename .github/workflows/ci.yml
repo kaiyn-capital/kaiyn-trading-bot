@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -54,7 +55,14 @@ jobs:
         run: docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
 
       - name: Run pytest with PostgreSQL integration
-        run: docker compose run --rm test python -m pytest --run-db
+        run: docker compose run --rm test python -m pytest --run-db --cov --cov-report=xml:coverage.xml
+
+      - name: Pytest coverage comment
+        uses: MishaKav/pytest-coverage-comment@v1.1.52
+        with:
+          pytest-xml-coverage-path: ./coverage.xml
+          title: "Code Coverage Report"
+          badge-title: "Coverage"
 
       - name: Compile Python files
         run: docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
