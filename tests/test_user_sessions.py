@@ -44,6 +44,39 @@ def test_expire_user_session_if_needed_clears_expired_session_once():
     assert owner.expire_user_session_if_needed(123) is False
 
 
+def test_pop_expired_user_session_returns_removed_session():
+    owner = FakeSessionOwner()
+    owner.set_user_session(123, {"step": "risk_amount"})
+    owner.now = owner.now + timedelta(seconds=301)
+
+    expired = owner.pop_expired_user_session(123)
+
+    assert expired["step"] == "risk_amount"
+    assert owner.user_sessions == {}
+    assert owner.pop_expired_user_session(123) is None
+
+
+def test_delete_user_session_is_idempotent():
+    owner = FakeSessionOwner()
+    owner.set_user_session(123, {"step": "risk_amount"})
+
+    owner.delete_user_session(123)
+    owner.delete_user_session(123)
+
+    assert owner.user_sessions == {}
+
+
+def test_peek_user_session_does_not_apply_expiry_side_effects():
+    owner = FakeSessionOwner()
+    owner.set_user_session(123, {"step": "risk_amount"})
+    owner.now = owner.now + timedelta(seconds=301)
+
+    session = owner.peek_user_session(123)
+
+    assert session["step"] == "risk_amount"
+    assert 123 in owner.user_sessions
+
+
 def test_update_user_session_refreshes_expiry_and_preserves_data():
     owner = FakeSessionOwner()
     owner.set_user_session(123, {"step": "api_key", "api_key": "old"})

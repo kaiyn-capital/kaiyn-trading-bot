@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from app.bot import TelegramBot
 from app.bot_admin_handlers import AdminHandlersMixin
 from app.bot_admin_permissions import ADMIN_PERMISSION_DENIED_MESSAGE
+from app.bot_callback_router import CallbackRoute, CallbackRouter
 
 
 class FakeQuery:
@@ -73,6 +74,43 @@ def test_button_callback_dispatches_exact_callback():
 
     assert update.callback_query.answers == [{"text": None, "kwargs": {}}]
     assert routed == [{"query": update.callback_query, "user": user}]
+
+
+def test_callback_router_dispatches_exact_and_prefix_callbacks():
+    routed = []
+
+    async def exact_handler(query, user):
+        routed.append(("exact", query.data, user.telegram_id))
+
+    async def prefix_handler(query, user, data):
+        routed.append(("prefix", data, user.telegram_id))
+
+    router = CallbackRouter(
+        exact_routes={"check_status": CallbackRoute(exact_handler)},
+        prefix_routes=(("confirm_order_", CallbackRoute(prefix_handler, include_data=True)),),
+    )
+    user = make_user()
+
+    assert asyncio.run(router.dispatch(FakeQuery("check_status"), user, "check_status")) is True
+    assert asyncio.run(router.dispatch(FakeQuery("confirm_order_tok"), user, "confirm_order_tok")) is True
+    assert asyncio.run(router.dispatch(FakeQuery("unknown"), user, "unknown")) is False
+    assert routed == [
+        ("exact", "check_status", user.telegram_id),
+        ("prefix", "confirm_order_tok", user.telegram_id),
+    ]
+
+
+def test_callback_router_identifies_admin_only_callbacks():
+    async def handler(query, user):
+        return None
+
+    router = CallbackRouter(
+        exact_routes={"manage_channels": CallbackRoute(handler, admin_only=True)},
+        prefix_routes=(),
+    )
+
+    assert router.is_admin_callback("manage_channels") is True
+    assert router.is_admin_callback("missing") is False
 
 
 def test_button_callback_dispatches_prefix_callbacks():

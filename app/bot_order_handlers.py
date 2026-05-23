@@ -31,28 +31,30 @@ CHART_UPDATE_PREVIEW_EXPIRED_MESSAGE = "⏳ 预览已过期或已被新的更新
 CHART_UPDATE_PREVIEW_PROMPT = "📋 **请确认是否转发以下图表更新**"
 
 
-class OrderHandlersMixin:
-    async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
-        return None
+class OrderHandlers:
+    """Standalone use-case coordinator for order flow and signals."""
+
+    def __init__(self, bot):
+        self.bot = bot
 
     def _order_flow_service(self) -> TelegramOrderFlowService:
         return TelegramOrderFlowService(
-            bot=self.application.bot,
-            user_repo=self.user_repo,
-            pending_order_repo=self.pending_order_repo,
-            trade_repo=self.trade_repo,
-            trade_manager=self.trade_manager,
-            system_log_repo=self.system_log_repo,
-            audit_owner=self,
-            failure_alert_handler=self._record_bitget_failure_alert,
-            signal_record_repo=self.signal_record_repo,
+            bot=self.bot.application.bot,
+            user_repo=self.bot.user_repo,
+            pending_order_repo=self.bot.pending_order_repo,
+            trade_repo=self.bot.trade_repo,
+            trade_manager=self.bot.trade_manager,
+            system_log_repo=self.bot.system_log_repo,
+            audit_owner=self.bot,
+            failure_alert_handler=self.bot._record_bitget_failure_alert,
+            signal_record_repo=self.bot.signal_record_repo,
         )
 
     def _signal_record_service(self) -> SignalRecordService:
-        return SignalRecordService(self.signal_record_repo)
+        return SignalRecordService(self.bot.signal_record_repo)
 
     def _signal_delivery_service(self) -> SignalDeliveryService:
-        return SignalDeliveryService(self.channel_repo, self.signal_record_repo)
+        return SignalDeliveryService(self.bot.channel_repo, self.bot.signal_record_repo)
 
     async def _mark_replaced_active_signal_preview(self, telegram_id: int) -> None:
         session = await self._get_active_preview_session(telegram_id)
@@ -61,27 +63,22 @@ class OrderHandlersMixin:
 
         signal_record_id = session.get("signal_record_id")
         if signal_record_id:
-            await self._signal_record_service().update_status(signal_record_id, "replaced")
+            await self.bot._signal_record_service().update_status(signal_record_id, "replaced")
 
     async def _get_active_preview_session(self, telegram_id: int) -> dict | None:
-        session = self.user_sessions.get(telegram_id)
-        if not session:
+        expired_session = self.bot.pop_expired_user_session(telegram_id)
+        if expired_session:
+            if expired_session.get("step") == SIGNAL_PREVIEW_STEP and expired_session.get("signal_record_id"):
+                await self.bot._signal_record_service().update_status(expired_session["signal_record_id"], "expired")
             return None
 
-        expires_at = session.get("expires_at")
-        if not isinstance(expires_at, datetime) or self._session_now() >= expires_at:
-            if session.get("step") == SIGNAL_PREVIEW_STEP and session.get("signal_record_id"):
-                await self._signal_record_service().update_status(session["signal_record_id"], "expired")
-            self.user_sessions.pop(telegram_id, None)
-            return None
-
-        return session
+        return self.bot.peek_user_session(telegram_id)
 
     async def send_signal_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Send a trading signal to configured channels."""
-        user = await self._get_or_create_user(update)
+        user = await self.bot._get_or_create_user(update)
 
-        if not await self._is_trader_or_admin(user.telegram_id):
+        if not await self.bot._is_trader_or_admin(user.telegram_id):
             await update.message.reply_text("❌ 您没有发送交易信号的权限")
             return
 
@@ -98,9 +95,9 @@ class OrderHandlersMixin:
                 return
 
             await self._mark_replaced_active_signal_preview(user.telegram_id)
-            sender_username = self._get_sender_username(update)
+            sender_username = self.bot._get_sender_username(update)
             chart_bytes, chart_status, chart_error = await self._try_create_signal_chart(signal)
-            signal_record, signal_text = await self._signal_record_service().create_signal_record(
+            signal_record, signal_text = await self.bot._signal_record_service().create_signal_record(
                 user=user,
                 signal=signal,
                 sender_username=sender_username,
@@ -108,7 +105,7 @@ class OrderHandlersMixin:
                 chart_error=chart_error,
             )
             token = secrets.token_urlsafe(8)
-            self.set_user_session(
+            self.bot.set_user_session(
                 user.telegram_id,
                 {
                     "step": SIGNAL_PREVIEW_STEP,
@@ -125,7 +122,7 @@ class OrderHandlersMixin:
 
             await self._send_signal_preview(update, signal, signal_text, chart_bytes, signal_preview_keyboard(token))
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "signal_preview_created",
                 {
@@ -148,7 +145,7 @@ class OrderHandlersMixin:
         except Exception as e:
             logger.error(f"Send signal error: {e}")
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "signal_sent",
                 {"status": "failed", "reason": type(e).__name__},
@@ -157,7 +154,7 @@ class OrderHandlersMixin:
 
     async def update_chart_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Create a confirmed chart update for an existing signal."""
-        user = await self._get_or_create_user(update)
+        user = await self.bot._get_or_create_user(update)
         args = context.args
         if not args:
             await update.message.reply_text("使用方法：`/update_chart 交易id [备注文字]`", parse_mode="Markdown")
@@ -167,8 +164,8 @@ class OrderHandlersMixin:
         remark = " ".join(args[1:]).strip()
 
         try:
-            signal_record_service = self._signal_record_service()
-            record = await self.signal_record_repo.get_by_public_id(public_id)
+            signal_record_service = self.bot._signal_record_service()
+            record = await self.bot.signal_record_repo.get_by_public_id(public_id)
             if not record:
                 await update.message.reply_text("❌ 找不到这笔交易信号")
                 return
@@ -181,7 +178,7 @@ class OrderHandlersMixin:
                 await update.message.reply_text("❌ 这笔交易信号尚未成功转发，无法更新图表")
                 return
 
-            target_messages = await self.signal_record_repo.get_channel_messages(record["id"])
+            target_messages = await self.bot.signal_record_repo.get_channel_messages(record["id"])
             if not target_messages:
                 await update.message.reply_text("❌ 找不到这笔交易信号的原始转发消息")
                 return
@@ -193,7 +190,7 @@ class OrderHandlersMixin:
             signal = signal_record_service.signal_record_to_draft(record)
             try:
                 chart_bytes = await asyncio.wait_for(
-                    self._create_signal_update_chart(signal, record["created_at"], record["granularity"]),
+                    self.bot._create_signal_update_chart(signal, record["created_at"], record["granularity"]),
                     timeout=Config.SIGNAL_CHART_TIMEOUT_SECONDS,
                 )
             except ValueError:
@@ -203,7 +200,7 @@ class OrderHandlersMixin:
             update_text = chart_update_message(record["public_id"], remark)
             await self._mark_replaced_active_signal_preview(user.telegram_id)
             token = secrets.token_urlsafe(8)
-            self.set_user_session(
+            self.bot.set_user_session(
                 user.telegram_id,
                 {
                     "step": CHART_UPDATE_PREVIEW_STEP,
@@ -223,7 +220,7 @@ class OrderHandlersMixin:
                 chart_update_preview_keyboard(token),
             )
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "chart_update_preview_created",
                 {
@@ -235,7 +232,7 @@ class OrderHandlersMixin:
         except Exception as e:
             logger.error("Update chart error: %s", e)
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "chart_update_failed",
                 {"status": "failed", "signal_id": public_id, "reason": type(e).__name__},
@@ -243,7 +240,7 @@ class OrderHandlersMixin:
             await update.message.reply_text("❌ 更新图表时发生错误")
 
     async def _create_signal_update_chart(self, signal: SignalDraft, signal_time: datetime, granularity: str) -> bytes:
-        candles = await self.trade_manager.get_candles(
+        candles = await self.bot.trade_manager.get_candles(
             signal.symbol,
             granularity,
             Config.SIGNAL_UPDATE_CANDLE_LIMIT,
@@ -262,10 +259,10 @@ class OrderHandlersMixin:
 
     async def _handle_place_order_callback(self, query, user, data):
         """Handle market or limit order button."""
-        return await self._order_flow_service().handle_place_order_callback(query, user, data)
+        return await self.bot._order_flow_service().handle_place_order_callback(query, user, data)
 
     async def _create_signal_chart(self, signal: SignalDraft) -> bytes:
-        candles = await self.trade_manager.get_candles(
+        candles = await self.bot.trade_manager.get_candles(
             signal.symbol,
             Config.SIGNAL_CHART_GRANULARITY,
             Config.SIGNAL_CHART_CANDLE_LIMIT,
@@ -278,7 +275,7 @@ class OrderHandlersMixin:
 
         try:
             chart_bytes = await asyncio.wait_for(
-                self._create_signal_chart(signal),
+                self.bot._create_signal_chart(signal),
                 timeout=Config.SIGNAL_CHART_TIMEOUT_SECONDS,
             )
             return chart_bytes, "generated", None
@@ -316,8 +313,8 @@ class OrderHandlersMixin:
         if not session:
             return
 
-        result = await self._signal_delivery_service().forward_signal_to_channels(
-            self.application.bot,
+        result = await self.bot._signal_delivery_service().forward_signal_to_channels(
+            self.bot.application.bot,
             session["signal"],
             session["signal_text"],
             session.get("chart_bytes"),
@@ -327,15 +324,17 @@ class OrderHandlersMixin:
             signal_public_id=session.get("signal_public_id"),
         )
         if session.get("signal_record_id"):
-            await self._signal_record_service().update_send_status(session["signal_record_id"], result["sent_count"])
-        self.user_sessions.pop(user.telegram_id, None)
+            await self.bot._signal_record_service().update_send_status(
+                session["signal_record_id"], result["sent_count"]
+            )
+        self.bot.delete_user_session(user.telegram_id)
         await self._edit_signal_preview_message(
             query,
             f"✅ 交易信号已转发\n\n📺 发送到频道：{result['sent_count']} 个",
             parse_mode="Markdown",
         )
         await emit_audit_event(
-            self,
+            self.bot,
             user,
             "signal_sent",
             {
@@ -364,12 +363,12 @@ class OrderHandlersMixin:
         if not session:
             return
 
-        self.user_sessions.pop(user.telegram_id, None)
+        self.bot.delete_user_session(user.telegram_id)
         if session.get("signal_record_id"):
-            await self._signal_record_service().update_status(session["signal_record_id"], "cancelled")
+            await self.bot._signal_record_service().update_status(session["signal_record_id"], "cancelled")
         await self._edit_signal_preview_message(query, "✅ 已取消转发")
         await emit_audit_event(
-            self,
+            self.bot,
             user,
             "signal_preview_cancelled",
             {
@@ -385,20 +384,20 @@ class OrderHandlersMixin:
         if not session:
             return
 
-        result = await self._signal_delivery_service().forward_chart_update_to_original_targets(
-            self.application.bot,
+        result = await self.bot._signal_delivery_service().forward_chart_update_to_original_targets(
+            self.bot.application.bot,
             session["chart_bytes"],
             session["update_text"],
             session["target_messages"],
         )
-        self.user_sessions.pop(user.telegram_id, None)
+        self.bot.delete_user_session(user.telegram_id)
         await self._edit_signal_preview_message(
             query,
             f"✅ 图表更新已转发\n\n📺 发送到频道：{result['sent_count']} 个",
             parse_mode="Markdown",
         )
         await emit_audit_event(
-            self,
+            self.bot,
             user,
             "chart_update_sent",
             {
@@ -417,10 +416,10 @@ class OrderHandlersMixin:
         if not session:
             return
 
-        self.user_sessions.pop(user.telegram_id, None)
+        self.bot.delete_user_session(user.telegram_id)
         await self._edit_signal_preview_message(query, "✅ 已取消转发")
         await emit_audit_event(
-            self,
+            self.bot,
             user,
             "chart_update_preview_cancelled",
             {
@@ -434,7 +433,7 @@ class OrderHandlersMixin:
         if not session or session.get("step") != SIGNAL_PREVIEW_STEP or session.get("token") != token:
             await self._edit_signal_preview_message(query, SIGNAL_PREVIEW_EXPIRED_MESSAGE)
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "signal_preview_expired",
                 {"status": "missing_or_expired"},
@@ -448,7 +447,7 @@ class OrderHandlersMixin:
         if not session or session.get("step") != CHART_UPDATE_PREVIEW_STEP or session.get("token") != token:
             await self._edit_signal_preview_message(query, CHART_UPDATE_PREVIEW_EXPIRED_MESSAGE)
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "chart_update_preview_expired",
                 {"status": "missing_or_expired"},
@@ -465,15 +464,15 @@ class OrderHandlersMixin:
 
     async def _send_private_message(self, query, user, text, reply_markup=None):
         """Send a private Telegram message to the user."""
-        return await self._order_flow_service().send_private_message(query, user, text, reply_markup)
+        return await self.bot._order_flow_service().send_private_message(query, user, text, reply_markup)
 
     async def _handle_confirm_pending_order_callback(self, query, user, data):
         """Handle pending order confirmation."""
-        return await self._order_flow_service().handle_confirm_pending_order_callback(query, user, data)
+        return await self.bot._order_flow_service().handle_confirm_pending_order_callback(query, user, data)
 
     async def _handle_cancel_pending_order_callback(self, query, user, data):
         """Handle pending order cancellation."""
-        return await self._order_flow_service().handle_cancel_pending_order_callback(query, user, data)
+        return await self.bot._order_flow_service().handle_cancel_pending_order_callback(query, user, data)
 
     async def _execute_order(
         self,
@@ -490,7 +489,7 @@ class OrderHandlersMixin:
         pending_order_token=None,
     ):
         """Execute a confirmed order."""
-        return await self._order_flow_service().execute_order(
+        return await self.bot._order_flow_service().execute_order(
             ConfirmedOrderRequest(
                 query=query,
                 user=user,
@@ -504,4 +503,118 @@ class OrderHandlersMixin:
                 limit_price=limit_price,
                 pending_order_token=pending_order_token,
             )
+        )
+
+
+class OrderHandlersMixin:
+    @property
+    def order_handlers(self) -> OrderHandlers:
+        if not hasattr(self, "_order_handlers_delegate"):
+            self._order_handlers_delegate = OrderHandlers(self)
+        return self._order_handlers_delegate
+
+    @order_handlers.setter
+    def order_handlers(self, value: OrderHandlers):
+        self._order_handlers_delegate = value
+
+    async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
+        return None
+
+    def _order_flow_service(self) -> TelegramOrderFlowService:
+        return self.order_handlers._order_flow_service()
+
+    def _signal_record_service(self) -> SignalRecordService:
+        return self.order_handlers._signal_record_service()
+
+    def _signal_delivery_service(self) -> SignalDeliveryService:
+        return self.order_handlers._signal_delivery_service()
+
+    async def _mark_replaced_active_signal_preview(self, telegram_id: int) -> None:
+        await self.order_handlers._mark_replaced_active_signal_preview(telegram_id)
+
+    async def _get_active_preview_session(self, telegram_id: int) -> dict | None:
+        return await self.order_handlers._get_active_preview_session(telegram_id)
+
+    async def send_signal_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.order_handlers.send_signal_command(update, context)
+
+    async def update_chart_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.order_handlers.update_chart_command(update, context)
+
+    async def _create_signal_update_chart(self, signal: SignalDraft, signal_time: datetime, granularity: str) -> bytes:
+        return await self.order_handlers._create_signal_update_chart(signal, signal_time, granularity)
+
+    async def _send_chart_update_preview(self, update: Update, update_text: str, chart_bytes: bytes, reply_markup):
+        await self.order_handlers._send_chart_update_preview(update, update_text, chart_bytes, reply_markup)
+
+    async def _handle_place_order_callback(self, query, user, data):
+        return await self.order_handlers._handle_place_order_callback(query, user, data)
+
+    async def _create_signal_chart(self, signal: SignalDraft) -> bytes:
+        return await self.order_handlers._create_signal_chart(signal)
+
+    async def _try_create_signal_chart(self, signal: SignalDraft) -> tuple[bytes | None, str, str | None]:
+        return await self.order_handlers._try_create_signal_chart(signal)
+
+    async def _send_signal_preview(
+        self, update: Update, signal: SignalDraft, signal_text: str, chart_bytes, reply_markup
+    ):
+        await self.order_handlers._send_signal_preview(update, signal, signal_text, chart_bytes, reply_markup)
+
+    async def _handle_confirm_signal_callback(self, query, user, data):
+        await self.order_handlers._handle_confirm_signal_callback(query, user, data)
+
+    async def _handle_cancel_signal_callback(self, query, user, data):
+        await self.order_handlers._handle_cancel_signal_callback(query, user, data)
+
+    async def _handle_confirm_chart_update_callback(self, query, user, data):
+        await self.order_handlers._handle_confirm_chart_update_callback(query, user, data)
+
+    async def _handle_cancel_chart_update_callback(self, query, user, data):
+        await self.order_handlers._handle_cancel_chart_update_callback(query, user, data)
+
+    async def _get_signal_preview_session_or_reply(self, query, user, token: str) -> dict | None:
+        return await self.order_handlers._get_signal_preview_session_or_reply(query, user, token)
+
+    async def _get_chart_update_preview_session_or_reply(self, query, user, token: str) -> dict | None:
+        return await self.order_handlers._get_chart_update_preview_session_or_reply(query, user, token)
+
+    async def _edit_signal_preview_message(self, query, text: str, **kwargs):
+        await self.order_handlers._edit_signal_preview_message(query, text, **kwargs)
+
+    async def _send_private_message(self, query, user, text, reply_markup=None):
+        return await self.order_handlers._send_private_message(query, user, text, reply_markup)
+
+    async def _handle_confirm_pending_order_callback(self, query, user, data):
+        return await self.order_handlers._handle_confirm_pending_order_callback(query, user, data)
+
+    async def _handle_cancel_pending_order_callback(self, query, user, data):
+        return await self.order_handlers._handle_cancel_pending_order_callback(query, user, data)
+
+    async def _execute_order(
+        self,
+        query,
+        user,
+        symbol,
+        direction,
+        quantity,
+        stop_loss,
+        position_value,
+        current_price,
+        order_mode="market",
+        limit_price=None,
+        pending_order_token=None,
+    ):
+        return await self.order_handlers._execute_order(
+            query,
+            user,
+            symbol,
+            direction,
+            quantity,
+            stop_loss,
+            position_value,
+            current_price,
+            order_mode,
+            limit_price,
+            pending_order_token,
         )

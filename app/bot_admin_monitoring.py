@@ -9,10 +9,15 @@ from .health import build_admin_health_report
 logger = logging.getLogger(__name__)
 
 
-class AdminMonitoringMixin:
+class AdminMonitoring:
+    """Standalone coordinator for admin monitoring and health checks."""
+
+    def __init__(self, bot):
+        self.bot = bot
+
     async def admin_audit_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show recent operator audit events for admins."""
-        user = await self._require_admin(update)
+        user = await self.bot._require_admin(update)
         if user is None:
             return
 
@@ -26,7 +31,7 @@ class AdminMonitoringMixin:
             return
 
         try:
-            logs = await self.system_log_repo.get_recent_logs(levels=["INFO"], module=AUDIT_MODULE, limit=limit)
+            logs = await self.bot.system_log_repo.get_recent_logs(levels=["INFO"], module=AUDIT_MODULE, limit=limit)
             if not logs:
                 await update.message.reply_text("📋 近期没有操作审计记录")
                 return
@@ -41,18 +46,32 @@ class AdminMonitoringMixin:
 
     async def admin_health_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show health details for admins."""
-        user = await self._require_admin(update)
+        user = await self.bot._require_admin(update)
         if user is None:
             return
 
         try:
             report, _status = await build_admin_health_report(
-                db_manager=self.user_repo.db,
-                system_log_repo=self.system_log_repo,
-                started_at=getattr(self, "started_at", None),
-                pending_order_repo=getattr(self, "pending_order_repo", None),
+                db_manager=self.bot.user_repo.db,
+                system_log_repo=self.bot.system_log_repo,
+                started_at=getattr(self.bot, "started_at", None),
+                pending_order_repo=getattr(self.bot, "pending_order_repo", None),
             )
             await update.message.reply_text(report, parse_mode="HTML")
         except Exception as e:
             logger.error(f"Admin health command error: {e}")
             await update.message.reply_text(f"❌ 获取健康状态时发生错误: {str(e)}")
+
+
+class AdminMonitoringMixin:
+    @property
+    def admin_monitoring(self) -> AdminMonitoring:
+        if not hasattr(self, "_admin_monitoring_delegate"):
+            self._admin_monitoring_delegate = AdminMonitoring(self)
+        return self._admin_monitoring_delegate
+
+    async def admin_audit_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.admin_monitoring.admin_audit_command(update, context)
+
+    async def admin_health_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.admin_monitoring.admin_health_command(update, context)

@@ -1,7 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from .config import Config
+from .session_store import SessionStore
 
 SESSION_EXPIRED_MESSAGE = "⏳ 此設定流程已超过 5 分钟，请重新开始。"
 
@@ -12,37 +13,42 @@ class UserSessionMixin:
     def _session_now(self) -> datetime:
         return datetime.utcnow()
 
-    def _session_expiry(self) -> datetime:
-        return self._session_now() + timedelta(seconds=Config.USER_SESSION_TTL_SECONDS)
+    @property
+    def session_store(self) -> SessionStore:
+        if not hasattr(self, "_session_store_delegate"):
+            if not hasattr(self, "user_sessions"):
+                self.user_sessions = {}
+            self._session_store_delegate = SessionStore(
+                sessions_dict=self.user_sessions,
+                ttl_seconds=Config.USER_SESSION_TTL_SECONDS,
+                now_func=self._session_now,
+            )
+        return self._session_store_delegate
+
+    @session_store.setter
+    def session_store(self, value: SessionStore):
+        self._session_store_delegate = value
 
     def set_user_session(self, telegram_id: int, data: dict[str, Any]) -> dict[str, Any]:
-        session = dict(data)
-        session["expires_at"] = self._session_expiry()
-        self.user_sessions[telegram_id] = session
-        return session
+        return self.session_store.set_session(telegram_id, data)
 
     def update_user_session(self, telegram_id: int, updates: dict[str, Any]) -> dict[str, Any]:
-        session = self.user_sessions.setdefault(telegram_id, {})
-        session.update(updates)
-        session["expires_at"] = self._session_expiry()
-        return session
+        return self.session_store.update_session(telegram_id, updates)
 
     def expire_user_session_if_needed(self, telegram_id: int) -> bool:
-        session = self.user_sessions.get(telegram_id)
-        if not session:
-            return False
-
-        expires_at = session.get("expires_at")
-        if not isinstance(expires_at, datetime) or self._session_now() >= expires_at:
-            self.user_sessions.pop(telegram_id, None)
-            return True
-
-        return False
+        return self.session_store.is_expired(telegram_id)
 
     def get_active_user_session(self, telegram_id: int) -> dict[str, Any] | None:
-        if self.expire_user_session_if_needed(telegram_id):
-            return None
-        return self.user_sessions.get(telegram_id)
+        return self.session_store.get_session(telegram_id)
+
+    def peek_user_session(self, telegram_id: int) -> dict[str, Any] | None:
+        return self.session_store.peek_session(telegram_id)
+
+    def pop_expired_user_session(self, telegram_id: int) -> dict[str, Any] | None:
+        return self.session_store.pop_expired_session(telegram_id)
+
+    def delete_user_session(self, telegram_id: int) -> None:
+        self.session_store.delete_session(telegram_id)
 
     async def _reply_if_session_expired(self, update, telegram_id: int) -> bool:
         if not self.expire_user_session_if_needed(telegram_id):
