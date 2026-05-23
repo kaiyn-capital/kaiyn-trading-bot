@@ -84,7 +84,7 @@ class FakeUserRepo:
             encrypted_passphrase="passphrase",
             fixed_risk_amount=10,
             daily_trade_limit=10,
-            max_position_size=1000,
+            max_position_size=None,
         )
 
 

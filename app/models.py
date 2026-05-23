@@ -40,7 +40,7 @@ class User(Base):
 
     # 設定
     daily_trade_limit = Column(Integer, default=10)
-    max_position_size = Column(Numeric(38, 18, asdecimal=True), default=Decimal("1000.0"))
+    max_position_size = Column(Numeric(38, 18, asdecimal=True), nullable=True)
     enable_notifications = Column(Boolean, default=True)
 
     # 交易設定

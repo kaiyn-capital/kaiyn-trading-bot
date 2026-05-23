@@ -21,7 +21,15 @@ def test_effective_position_limit_uses_stricter_positive_cap(monkeypatch):
     assert get_effective_position_limit(SimpleNamespace(max_position_size=500.0)) == Decimal("500.0")
     assert get_effective_position_limit(SimpleNamespace(max_position_size=1500.0)) == Decimal("1000.0")
     assert get_effective_position_limit(SimpleNamespace(max_position_size=0)) == Decimal("1000.0")
+    assert get_effective_position_limit(SimpleNamespace(max_position_size=-1)) == Decimal("1000.0")
+    assert get_effective_position_limit(SimpleNamespace(max_position_size=None)) == Decimal("1000.0")
     assert get_effective_position_limit(SimpleNamespace()) == Decimal("1000.0")
+
+
+def test_effective_position_limit_defaults_to_global_cap_when_user_override_is_null(monkeypatch):
+    monkeypatch.setattr(Config, "MAX_POSITION_SIZE", 1000000.0)
+
+    assert get_effective_position_limit(SimpleNamespace(max_position_size=None)) == Decimal("1000000.0")
 
 
 def test_effective_daily_trade_limit_uses_stricter_positive_cap(monkeypatch):
