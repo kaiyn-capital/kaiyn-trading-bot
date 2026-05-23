@@ -23,18 +23,23 @@ from .bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
 logger = logging.getLogger(__name__)
 
 
-class AdminChannelsMixin(UserSessionMixin):
+class AdminChannels:
+    """Standalone use-case coordinator for admin channels management."""
+
+    def __init__(self, bot):
+        self.bot = bot
+
     async def delete_channel_by_number(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Delete a channel by its displayed number."""
-        user = await self._require_admin(update)
+        user = await self.bot._require_admin(update)
         if user is None:
             return
 
-        if await self._reply_if_session_expired(update, user.telegram_id):
+        if await self.bot._reply_if_session_expired(update, user.telegram_id):
             return
 
         try:
-            session_data = self.get_active_user_session(user.telegram_id)
+            session_data = self.bot.get_active_user_session(user.telegram_id)
             if not session_data:
                 await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
                 return
@@ -43,9 +48,9 @@ class AdminChannelsMixin(UserSessionMixin):
             channels_data = session_data.get("channels_data", [])
 
             if not channels_data or channel_number < 1 or channel_number > len(channels_data):
-                self.update_user_session(user.telegram_id, {"step": "delete_channel"})
+                self.bot.update_user_session(user.telegram_id, {"step": "delete_channel"})
                 await emit_audit_event(
-                    self,
+                    self.bot,
                     user,
                     "admin_delete_channel",
                     {
@@ -58,10 +63,10 @@ class AdminChannelsMixin(UserSessionMixin):
                 return
 
             channel_to_delete = channels_data[channel_number - 1]
-            deleted = await self.channel_repo.deactivate_channel(channel_to_delete["chat_id"])
+            deleted = await self.bot.channel_repo.deactivate_channel(channel_to_delete["chat_id"])
             if deleted:
                 await emit_audit_event(
-                    self,
+                    self.bot,
                     user,
                     "admin_delete_channel",
                     {
@@ -76,7 +81,7 @@ class AdminChannelsMixin(UserSessionMixin):
                 )
             else:
                 await emit_audit_event(
-                    self,
+                    self.bot,
                     user,
                     "admin_delete_channel",
                     {
@@ -89,12 +94,12 @@ class AdminChannelsMixin(UserSessionMixin):
                 )
                 await update.message.reply_text("❌ 找不到指定的频道")
 
-            self.user_sessions.pop(user.telegram_id, None)
+            self.bot.delete_user_session(user.telegram_id)
 
         except ValueError:
-            self.update_user_session(user.telegram_id, {"step": "delete_channel"})
+            self.bot.update_user_session(user.telegram_id, {"step": "delete_channel"})
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "admin_delete_channel",
                 {"status": "failed", "reason": "invalid_input"},
@@ -103,7 +108,7 @@ class AdminChannelsMixin(UserSessionMixin):
         except Exception as e:
             logger.error(f"Delete channel error: {e}")
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "admin_delete_channel",
                 {"status": "failed", "reason": type(e).__name__},
@@ -112,12 +117,12 @@ class AdminChannelsMixin(UserSessionMixin):
 
     async def admin_channels_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """List managed channels."""
-        user = await self._require_admin(update)
+        user = await self.bot._require_admin(update)
         if user is None:
             return
 
         try:
-            channels = await self.channel_repo.get_active_channels()
+            channels = await self.bot.channel_repo.get_active_channels()
 
             if not channels:
                 await update.message.reply_text(
@@ -140,7 +145,7 @@ class AdminChannelsMixin(UserSessionMixin):
 
     async def add_channel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Add a managed channel or group."""
-        user = await self._require_admin(update)
+        user = await self.bot._require_admin(update)
         if user is None:
             return
 
@@ -160,7 +165,7 @@ class AdminChannelsMixin(UserSessionMixin):
             bot_member = await context.bot.get_chat_member(chat_identifier, context.bot.id)
             if bot_member.status not in ["administrator", "creator"]:
                 await emit_audit_event(
-                    self,
+                    self.bot,
                     user,
                     "admin_add_channel",
                     {
@@ -176,10 +181,10 @@ class AdminChannelsMixin(UserSessionMixin):
                 )
                 return
 
-            existing = await self.channel_repo.get_channel_by_chat_id(str(chat_info.id))
+            existing = await self.bot.channel_repo.get_channel_by_chat_id(str(chat_info.id))
             if existing and existing.is_active:
                 await emit_audit_event(
-                    self,
+                    self.bot,
                     user,
                     "admin_add_channel",
                     {
@@ -193,7 +198,7 @@ class AdminChannelsMixin(UserSessionMixin):
                 return
 
             if existing and not existing.is_active:
-                reactivated = await self.channel_repo.reactivate_channel(
+                reactivated = await self.bot.channel_repo.reactivate_channel(
                     chat_id=str(chat_info.id),
                     chat_type=chat_info.type.value,
                     title=chat_info.title,
@@ -203,7 +208,7 @@ class AdminChannelsMixin(UserSessionMixin):
                 )
                 if not reactivated:
                     await emit_audit_event(
-                        self,
+                        self.bot,
                         user,
                         "admin_add_channel",
                         {
@@ -218,7 +223,7 @@ class AdminChannelsMixin(UserSessionMixin):
                     return
 
                 await emit_audit_event(
-                    self,
+                    self.bot,
                     user,
                     "admin_add_channel",
                     {
@@ -234,7 +239,7 @@ class AdminChannelsMixin(UserSessionMixin):
                 )
                 return
 
-            await self.channel_repo.create_channel(
+            await self.bot.channel_repo.create_channel(
                 chat_id=str(chat_info.id),
                 chat_type=chat_info.type.value,
                 title=chat_info.title,
@@ -244,7 +249,7 @@ class AdminChannelsMixin(UserSessionMixin):
             )
 
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "admin_add_channel",
                 {
@@ -262,7 +267,7 @@ class AdminChannelsMixin(UserSessionMixin):
         except Exception as e:
             logger.error(f"Add channel error: {e}")
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "admin_add_channel",
                 {
@@ -288,7 +293,7 @@ class AdminChannelsMixin(UserSessionMixin):
 
     async def _handle_manage_channels_callback(self, query, user):
         try:
-            channels = await self.channel_repo.get_active_channels()
+            channels = await self.bot.channel_repo.get_active_channels()
 
             if not channels:
                 await query.edit_message_text(
@@ -299,7 +304,7 @@ class AdminChannelsMixin(UserSessionMixin):
 
             channels_data = build_manage_channels_data(channels)
 
-            self.set_user_session(user.telegram_id, {"channels_data": channels_data})
+            self.bot.set_user_session(user.telegram_id, {"channels_data": channels_data})
 
             await query.edit_message_text(
                 format_manage_channels_html(channels_data),
@@ -312,9 +317,9 @@ class AdminChannelsMixin(UserSessionMixin):
             await query.edit_message_text(f"❌ 获取频道列表失败\n\n错误详情: {str(e)}\n\n请检查数据库连接状态。")
 
     async def _handle_delete_channel_start_callback(self, query, user):
-        session_data = self.get_active_user_session(user.telegram_id)
+        session_data = self.bot.get_active_user_session(user.telegram_id)
         if not session_data or not session_data.get("channels_data"):
-            self.user_sessions.pop(user.telegram_id, None)
+            self.bot.delete_user_session(user.telegram_id)
             await query.edit_message_text(SESSION_EXPIRED_MESSAGE)
             return
 
@@ -322,11 +327,11 @@ class AdminChannelsMixin(UserSessionMixin):
             DELETE_CHANNEL_PROMPT_MESSAGE,
             parse_mode="Markdown",
         )
-        self.update_user_session(user.telegram_id, {"step": "delete_channel"})
+        self.bot.update_user_session(user.telegram_id, {"step": "delete_channel"})
 
     async def _handle_return_admin_channels_callback(self, query, user):
         try:
-            channels = await self.channel_repo.get_active_channels()
+            channels = await self.bot.channel_repo.get_active_channels()
 
             if not channels:
                 await query.edit_message_text(
@@ -343,3 +348,32 @@ class AdminChannelsMixin(UserSessionMixin):
         except Exception as e:
             logger.error(f"Return admin channels error: {e}")
             await query.edit_message_text("❌ 获取频道列表失败")
+
+
+class AdminChannelsMixin(UserSessionMixin):
+    @property
+    def admin_channels(self) -> AdminChannels:
+        if not hasattr(self, "_admin_channels_delegate"):
+            self._admin_channels_delegate = AdminChannels(self)
+        return self._admin_channels_delegate
+
+    async def delete_channel_by_number(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.admin_channels.delete_channel_by_number(update, context)
+
+    async def admin_channels_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.admin_channels.admin_channels_command(update, context)
+
+    async def add_channel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.admin_channels.add_channel_command(update, context)
+
+    async def _handle_add_new_channel_callback(self, query, user):
+        await self.admin_channels._handle_add_new_channel_callback(query, user)
+
+    async def _handle_manage_channels_callback(self, query, user):
+        await self.admin_channels._handle_manage_channels_callback(query, user)
+
+    async def _handle_delete_channel_start_callback(self, query, user):
+        await self.admin_channels._handle_delete_channel_start_callback(query, user)
+
+    async def _handle_return_admin_channels_callback(self, query, user):
+        await self.admin_channels._handle_return_admin_channels_callback(query, user)

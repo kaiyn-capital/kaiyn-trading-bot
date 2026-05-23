@@ -8,10 +8,15 @@ from .audit import emit_audit_event, summarize_message_text
 logger = logging.getLogger(__name__)
 
 
-class AdminMessagingMixin:
+class AdminMessaging:
+    """Standalone use-case coordinator for admin messaging."""
+
+    def __init__(self, bot):
+        self.bot = bot
+
     async def admin_broadcast_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Broadcast a message to managed channels."""
-        user = await self._require_admin(update)
+        user = await self.bot._require_admin(update)
         if user is None:
             return
 
@@ -26,12 +31,12 @@ class AdminMessagingMixin:
             return
 
         try:
-            channels = await self.channel_repo.get_active_channels()
+            channels = await self.bot.channel_repo.get_active_channels()
             sent_to_channels = 0
             failed_channels = 0
             status_msg = await update.message.reply_text(f"📤 开始广播给 {len(channels)} 个频道/群组...")
 
-            sender_username = self._get_sender_username(update)
+            sender_username = self.bot._get_sender_username(update)
 
             for channel in channels:
                 try:
@@ -56,7 +61,7 @@ class AdminMessagingMixin:
                 parse_mode="Markdown",
             )
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "admin_broadcast",
                 {
@@ -71,7 +76,7 @@ class AdminMessagingMixin:
         except Exception as e:
             logger.error(f"Broadcast error: {e}")
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "admin_broadcast",
                 {
@@ -84,7 +89,7 @@ class AdminMessagingMixin:
 
     async def send_to_channel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Send a message to a specific channel."""
-        user = await self._require_admin(update)
+        user = await self.bot._require_admin(update)
         if user is None:
             return
 
@@ -110,7 +115,7 @@ class AdminMessagingMixin:
             )
 
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "admin_send_to_channel",
                 {
@@ -128,7 +133,7 @@ class AdminMessagingMixin:
         except Exception as e:
             logger.error(f"Send to channel error: {e}")
             await emit_audit_event(
-                self,
+                self.bot,
                 user,
                 "admin_send_to_channel",
                 {
@@ -139,3 +144,17 @@ class AdminMessagingMixin:
                 },
             )
             await update.message.reply_text(f"❌ 发送失败\n\n错误：{str(e)}")
+
+
+class AdminMessagingMixin:
+    @property
+    def admin_messaging(self) -> AdminMessaging:
+        if not hasattr(self, "_admin_messaging_delegate"):
+            self._admin_messaging_delegate = AdminMessaging(self)
+        return self._admin_messaging_delegate
+
+    async def admin_broadcast_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.admin_messaging.admin_broadcast_command(update, context)
+
+    async def send_to_channel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.admin_messaging.send_to_channel_command(update, context)

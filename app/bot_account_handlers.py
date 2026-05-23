@@ -20,25 +20,19 @@ from .log_sanitizer import summarize_balance_response
 logger = logging.getLogger(__name__)
 
 
-class AccountHandlersMixin(UserSessionMixin):
-    async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
-        return None
+class AccountHandlers:
+    """Standalone use-case coordinator for user accounts."""
+
+    def __init__(self, bot):
+        self.bot = bot
 
     def _api_setup_service(self) -> TelegramApiSetupService:
-        return TelegramApiSetupService(
-            user_repo=self.user_repo,
-            trade_manager=self.trade_manager,
-            encryption_manager=self.encryption_manager,
-            session_owner=self,
-            get_or_create_user=self._get_or_create_user,
-            log_user_action=self._log_user_action,
-            record_bitget_failure_alert=self._record_bitget_failure_alert,
-        )
+        return TelegramApiSetupService(self.bot)
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start."""
-        user = await self._get_or_create_user(update)
-        await self._log_user_action(user, "start_command")
+        user = await self.bot._get_or_create_user(update)
+        await self.bot._log_user_action(user, "start_command")
 
         await update.message.reply_text(welcome_message(), reply_markup=main_menu_keyboard(), parse_mode="Markdown")
 
@@ -48,8 +42,8 @@ class AccountHandlersMixin(UserSessionMixin):
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /status."""
-        user = await self._get_or_create_user(update)
-        await self._log_user_action(user, "status_command")
+        user = await self.bot._get_or_create_user(update)
+        await self.bot._log_user_action(user, "status_command")
 
         if not user.is_api_connected or not all(
             [
@@ -70,10 +64,10 @@ class AccountHandlersMixin(UserSessionMixin):
                 user.encrypted_secret_key,
                 user.encrypted_passphrase,
             )
-            is_connected, message = await self.trade_manager.test_api_connection(credentials)
+            is_connected, message = await self.bot.trade_manager.test_api_connection(credentials)
 
             if is_connected:
-                bitget_uid = await self.trade_manager.get_user_uid(credentials)
+                bitget_uid = await self.bot.trade_manager.get_user_uid(credentials)
                 status_text = f"""Bitget UID: {bitget_uid}\n✅ **API 连接状态：正常**"""
 
                 await update.message.reply_text(
@@ -90,13 +84,13 @@ class AccountHandlersMixin(UserSessionMixin):
         except Exception as e:
             logger.error(f"Status check failed: {e}")
             classified = classify_bitget_exception(e)
-            await self._record_bitget_failure_alert(classified, "status_command", {"telegram_id": user.telegram_id})
+            await self.bot._record_bitget_failure_alert(classified, "status_command", {"telegram_id": user.telegram_id})
             await update.message.reply_text(f"❌ {classified.user_message}")
 
     async def balance_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /balance."""
-        user = await self._get_or_create_user(update)
-        await self._log_user_action(user, "balance_command")
+        user = await self.bot._get_or_create_user(update)
+        await self.bot._log_user_action(user, "balance_command")
 
         if not user.is_api_connected:
             await update.message.reply_text("❌ 请先设置 API 连接。使用 `/setapi` 命令。")
@@ -114,7 +108,7 @@ class AccountHandlersMixin(UserSessionMixin):
                 user.id,
                 user.telegram_id,
             )
-            balance_data = await self.trade_manager.get_account_balance(user.id, credentials)
+            balance_data = await self.bot.trade_manager.get_account_balance(user.id, credentials)
             logger.info(
                 "Account balance summary: user_id=%s telegram_id=%s summary=%s",
                 user.id,
@@ -139,13 +133,15 @@ class AccountHandlersMixin(UserSessionMixin):
         except Exception as e:
             logger.error(f"Balance check failed: {e}")
             classified = classify_bitget_exception(e)
-            await self._record_bitget_failure_alert(classified, "balance_command", {"telegram_id": user.telegram_id})
+            await self.bot._record_bitget_failure_alert(
+                classified, "balance_command", {"telegram_id": user.telegram_id}
+            )
             await update.message.reply_text(f"❌ {classified.user_message}")
 
     async def set_api_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Start API setup."""
-        user = await self._get_or_create_user(update)
-        await self._log_user_action(user, "set_api_start")
+        user = await self.bot._get_or_create_user(update)
+        await self.bot._log_user_action(user, "set_api_start")
 
         if user.is_api_connected and user.encrypted_api_key:
             keyboard = [
@@ -161,7 +157,7 @@ class AccountHandlersMixin(UserSessionMixin):
             )
             return ConversationHandler.END
 
-        self.set_user_session(user.telegram_id, {"step": "api_key"})
+        self.bot.set_user_session(user.telegram_id, {"step": "api_key"})
 
         await update.message.reply_text(
             "🔐 **设置 Bitget API**\n\n"
@@ -188,8 +184,8 @@ class AccountHandlersMixin(UserSessionMixin):
 
     async def settings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /settings."""
-        user = await self._get_or_create_user(update)
-        await self._log_user_action(user, "settings_command")
+        user = await self.bot._get_or_create_user(update)
+        await self.bot._log_user_action(user, "settings_command")
 
         await update.message.reply_text(
             settings_message(getattr(user, "fixed_risk_amount", None)),
@@ -202,7 +198,7 @@ class AccountHandlersMixin(UserSessionMixin):
         current_risk = getattr(user, "fixed_risk_amount", None)
 
         if current_risk is None:
-            self.set_user_session(user.telegram_id, {"step": "risk_amount"})
+            self.bot.set_user_session(user.telegram_id, {"step": "risk_amount"})
 
             await query.edit_message_text(
                 "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n请输入定 R 金额 u（数字）：",
@@ -223,11 +219,11 @@ class AccountHandlersMixin(UserSessionMixin):
 
     async def set_risk_amount(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Store fixed risk amount."""
-        user = await self._get_or_create_user(update)
-        if await self._reply_if_session_expired(update, user.telegram_id):
+        user = await self.bot._get_or_create_user(update)
+        if await self.bot._reply_if_session_expired(update, user.telegram_id):
             return
 
-        if not self.get_active_user_session(user.telegram_id):
+        if not self.bot.get_active_user_session(user.telegram_id):
             await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
             return
 
@@ -238,7 +234,7 @@ class AccountHandlersMixin(UserSessionMixin):
             if amount <= 0:
                 raise ValueError("金额必须大于 0")
 
-            success = await self.user_repo.update_user_risk_amount(user.id, amount)
+            success = await self.bot.user_repo.update_user_risk_amount(user.id, amount)
 
             if success:
                 await update.message.reply_text(
@@ -248,12 +244,12 @@ class AccountHandlersMixin(UserSessionMixin):
             else:
                 await update.message.reply_text("❌ 设置失败，请重试")
 
-            self.user_sessions.pop(user.telegram_id, None)
+            self.bot.delete_user_session(user.telegram_id)
             return
 
         except ValueError:
             await update.message.reply_text("❌ 输入格式不正确，请输入有效数字：\n\n例如：50 或 100.5")
-            self.update_user_session(user.telegram_id, {"step": "risk_amount"})
+            self.bot.update_user_session(user.telegram_id, {"step": "risk_amount"})
             return
 
     async def handle_global_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -263,12 +259,12 @@ class AccountHandlersMixin(UserSessionMixin):
         if not (chat_type == "private" or getattr(chat_type, "value", None) == "private"):
             return
 
-        user = await self._get_or_create_user(update)
+        user = await self.bot._get_or_create_user(update)
 
-        if await self._reply_if_session_expired(update, user.telegram_id):
+        if await self.bot._reply_if_session_expired(update, user.telegram_id):
             return
 
-        session = self.get_active_user_session(user.telegram_id)
+        session = self.bot.get_active_user_session(user.telegram_id)
         if session:
             step = session.get("step")
 
@@ -285,7 +281,7 @@ class AccountHandlersMixin(UserSessionMixin):
                 await self.set_risk_amount(update, context)
                 return
             elif step == "delete_channel":
-                await self.delete_channel_by_number(update, context)
+                await self.bot.delete_channel_by_number(update, context)
                 return
 
     async def _handle_setup_api_callback(self, query, user):
@@ -304,7 +300,7 @@ class AccountHandlersMixin(UserSessionMixin):
             )
             return
 
-        self.set_user_session(user.telegram_id, {"step": "api_key"})
+        self.bot.set_user_session(user.telegram_id, {"step": "api_key"})
 
         await query.edit_message_text(
             "🔐 **设置 Bitget API**\n\n"
@@ -330,10 +326,10 @@ class AccountHandlersMixin(UserSessionMixin):
                 user.encrypted_secret_key,
                 user.encrypted_passphrase,
             )
-            is_connected, message = await self.trade_manager.test_api_connection(credentials)
+            is_connected, message = await self.bot.trade_manager.test_api_connection(credentials)
 
             if is_connected:
-                bitget_uid = await self.trade_manager.get_user_uid(credentials)
+                bitget_uid = await self.bot.trade_manager.get_user_uid(credentials)
                 status_text = f"Bitget UID: {bitget_uid}\n✅ **API 连接状态：正常**"
                 await query.edit_message_text(status_text, parse_mode="Markdown")
             else:
@@ -341,7 +337,9 @@ class AccountHandlersMixin(UserSessionMixin):
 
         except Exception as e:
             classified = classify_bitget_exception(e)
-            await self._record_bitget_failure_alert(classified, "status_callback", {"telegram_id": user.telegram_id})
+            await self.bot._record_bitget_failure_alert(
+                classified, "status_callback", {"telegram_id": user.telegram_id}
+            )
             await query.edit_message_text(f"❌ {classified.user_message}")
 
     async def _handle_balance_callback(self, query, user):
@@ -358,7 +356,7 @@ class AccountHandlersMixin(UserSessionMixin):
                 user.encrypted_secret_key,
                 user.encrypted_passphrase,
             )
-            balance_data = await self.trade_manager.get_account_balance(user.id, credentials)
+            balance_data = await self.bot.trade_manager.get_account_balance(user.id, credentials)
             logger.info(
                 "Account balance refresh summary: user_id=%s telegram_id=%s summary=%s",
                 user.id,
@@ -382,7 +380,9 @@ class AccountHandlersMixin(UserSessionMixin):
 
         except Exception as e:
             classified = classify_bitget_exception(e)
-            await self._record_bitget_failure_alert(classified, "balance_callback", {"telegram_id": user.telegram_id})
+            await self.bot._record_bitget_failure_alert(
+                classified, "balance_callback", {"telegram_id": user.telegram_id}
+            )
             await query.edit_message_text(f"❌ {classified.user_message}")
 
     async def _handle_return_start_callback(self, query, user):
@@ -399,7 +399,7 @@ class AccountHandlersMixin(UserSessionMixin):
 
     async def _handle_confirm_modify_api(self, query, user):
         """Handle API modification confirmation."""
-        self.set_user_session(user.telegram_id, {"step": "api_key"})
+        self.bot.set_user_session(user.telegram_id, {"step": "api_key"})
 
         await query.edit_message_text(
             "🔐 **修改 Bitget API**\n\n"
@@ -412,9 +412,84 @@ class AccountHandlersMixin(UserSessionMixin):
 
     async def _handle_confirm_change_risk(self, query, user):
         """Handle fixed risk amount change confirmation."""
-        self.set_user_session(user.telegram_id, {"step": "risk_amount"})
+        self.bot.set_user_session(user.telegram_id, {"step": "risk_amount"})
 
         await query.edit_message_text(
             "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n请输入定 R 金额 u（数字）：",
             parse_mode="Markdown",
         )
+
+
+class AccountHandlersMixin(UserSessionMixin):
+    @property
+    def account_handlers(self) -> AccountHandlers:
+        if not hasattr(self, "_account_handlers_delegate"):
+            self._account_handlers_delegate = AccountHandlers(self)
+        return self._account_handlers_delegate
+
+    @account_handlers.setter
+    def account_handlers(self, value: AccountHandlers):
+        self._account_handlers_delegate = value
+
+    async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
+        return None
+
+    def _api_setup_service(self) -> TelegramApiSetupService:
+        return self.account_handlers._api_setup_service()
+
+    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.account_handlers.start_command(update, context)
+
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.account_handlers.help_command(update, context)
+
+    async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.account_handlers.status_command(update, context)
+
+    async def balance_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.account_handlers.balance_command(update, context)
+
+    async def set_api_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        return await self.account_handlers.set_api_start(update, context)
+
+    async def set_api_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        return await self.account_handlers.set_api_key(update, context)
+
+    async def set_secret_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        return await self.account_handlers.set_secret_key(update, context)
+
+    async def set_passphrase(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        return await self.account_handlers.set_passphrase(update, context)
+
+    async def settings_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.account_handlers.settings_command(update, context)
+
+    async def _handle_set_risk_start_callback(self, query, user):
+        await self.account_handlers._handle_set_risk_start_callback(query, user)
+
+    async def set_risk_amount(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.account_handlers.set_risk_amount(update, context)
+
+    async def handle_global_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.account_handlers.handle_global_message(update, context)
+
+    async def _handle_setup_api_callback(self, query, user):
+        await self.account_handlers._handle_setup_api_callback(query, user)
+
+    async def _handle_status_callback(self, query, user):
+        await self.account_handlers._handle_status_callback(query, user)
+
+    async def _handle_balance_callback(self, query, user):
+        await self.account_handlers._handle_balance_callback(query, user)
+
+    async def _handle_return_start_callback(self, query, user):
+        await self.account_handlers._handle_return_start_callback(query, user)
+
+    async def _handle_trading_settings_callback(self, query, user):
+        await self.account_handlers._handle_trading_settings_callback(query, user)
+
+    async def _handle_confirm_modify_api(self, query, user):
+        return await self.account_handlers._handle_confirm_modify_api(query, user)
+
+    async def _handle_confirm_change_risk(self, query, user):
+        await self.account_handlers._handle_confirm_change_risk(query, user)

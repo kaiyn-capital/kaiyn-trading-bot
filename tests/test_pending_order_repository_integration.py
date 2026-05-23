@@ -157,6 +157,25 @@ async def load_trade(db, trade_id):
         return result.scalar_one()
 
 
+async def load_user(db, user_id):
+    async with db.get_session() as session:
+        result = await session.execute(select(User).where(User.id == user_id))
+        return result.scalar_one()
+
+
+@pytest.mark.integration
+def test_user_position_cap_defaults_to_null_after_migrations():
+    async def scenario():
+        async with integration_database() as db:
+            user_id = await seed_user(db)
+
+            user = await load_user(db, user_id)
+
+            assert user.max_position_size is None
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.integration
 def test_create_and_claim_pending_order_lifecycle():
     async def scenario():

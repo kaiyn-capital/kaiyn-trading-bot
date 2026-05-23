@@ -16,22 +16,34 @@ class TelegramApiSetupService:
 
     def __init__(
         self,
+        bot: Any = None,
         *,
-        user_repo,
-        trade_manager,
-        encryption_manager,
-        session_owner,
-        get_or_create_user: Callable[[Any], Awaitable[Any]],
-        log_user_action: Callable[[Any, str], Awaitable[Any]],
-        record_bitget_failure_alert: Callable[[Any, str, dict | None], Awaitable[Any]],
+        user_repo: Any = None,
+        trade_manager: Any = None,
+        encryption_manager: Any = None,
+        session_owner: Any = None,
+        get_or_create_user: Callable[[Any], Awaitable[Any]] | None = None,
+        log_user_action: Callable[[Any, str], Awaitable[Any]] | None = None,
+        record_bitget_failure_alert: Callable[[Any, str, dict | None], Awaitable[Any]] | None = None,
     ):
-        self.user_repo = user_repo
-        self.trade_manager = trade_manager
-        self.encryption_manager = encryption_manager
-        self.session_owner = session_owner
-        self.get_or_create_user = get_or_create_user
-        self.log_user_action = log_user_action
-        self.record_bitget_failure_alert = record_bitget_failure_alert
+        if bot is not None:
+            self.user_repo = user_repo or getattr(bot, "user_repo", None)
+            self.trade_manager = trade_manager or getattr(bot, "trade_manager", None)
+            self.encryption_manager = encryption_manager or getattr(bot, "encryption_manager", None)
+            self.session_owner = session_owner or bot
+            self.get_or_create_user = get_or_create_user or getattr(bot, "_get_or_create_user", None)
+            self.log_user_action = log_user_action or getattr(bot, "_log_user_action", None)
+            self.record_bitget_failure_alert = record_bitget_failure_alert or getattr(
+                bot, "_record_bitget_failure_alert", None
+            )
+        else:
+            self.user_repo = user_repo
+            self.trade_manager = trade_manager
+            self.encryption_manager = encryption_manager
+            self.session_owner = session_owner
+            self.get_or_create_user = get_or_create_user
+            self.log_user_action = log_user_action
+            self.record_bitget_failure_alert = record_bitget_failure_alert
 
     async def set_api_key(self, update, context):
         """Store API key during setup."""
@@ -133,7 +145,7 @@ class TelegramApiSetupService:
         secret_key = session.get("secret_key")
 
         if not all([api_key, secret_key]):
-            self.session_owner.user_sessions.pop(user.telegram_id, None)
+            self.session_owner.delete_user_session(user.telegram_id)
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ 设置过程中出现错误，请重新开始。",
@@ -177,6 +189,6 @@ class TelegramApiSetupService:
             )
 
         finally:
-            self.session_owner.user_sessions.pop(user.telegram_id, None)
+            self.session_owner.delete_user_session(user.telegram_id)
 
         return ConversationHandler.END

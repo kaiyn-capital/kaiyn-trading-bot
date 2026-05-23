@@ -23,10 +23,12 @@ from telegram.ext import (
 from .admin_alerts import AdminAlertManager
 from .audit import record_audit_event
 from .bitget_api import BitgetTradeManager
-from .bot_account_handlers import AccountHandlersMixin
-from .bot_admin_handlers import AdminHandlersMixin
+from .bot_account_handlers import AccountHandlers, AccountHandlersMixin
+from .bot_admin_handlers import AdminHandlers, AdminHandlersMixin
 from .bot_admin_permissions import ADMIN_PERMISSION_DENIED_MESSAGE
-from .bot_order_handlers import OrderHandlersMixin
+from .bot_callback_router import CallbackRoute, CallbackRouter
+from .bot_handler_context import BotHandlerContext
+from .bot_order_handlers import OrderHandlers, OrderHandlersMixin
 from .bot_states import WAITING_API_KEY, WAITING_PASSPHRASE, WAITING_SECRET_KEY
 from .config import Config
 from .database import (
@@ -43,6 +45,7 @@ from .health import read_backup_health, read_maintenance_health
 from .log_sanitizer import summarize_telegram_update
 from .models import User
 from .order_reconciliation import PendingOrderReconciliationService
+from .session_store import SessionStore
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +78,15 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         self.started_at: Optional[datetime] = None
         self.health_monitor_task: Optional[asyncio.Task] = None
         self.user_sessions: Dict[int, Dict] = {}
+        self.session_store = SessionStore(
+            sessions_dict=self.user_sessions,
+            ttl_seconds=Config.USER_SESSION_TTL_SECONDS,
+            now_func=self._session_now,
+        )
+        self.handler_context = BotHandlerContext(self)
+        self.account_handlers = AccountHandlers(self.handler_context)
+        self.order_handlers = OrderHandlers(self.handler_context)
+        self.admin_handlers = AdminHandlers(self.handler_context)
 
         self.application = Application.builder().token(self.token).build()
         self.alert_manager = AdminAlertManager(self.application.bot, self.system_log_repo)
@@ -172,7 +184,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
     def _is_admin_callback(self, data: str | None) -> bool:
         """Return whether a callback is restricted to admins."""
-        return isinstance(data, str) and data in self.ADMIN_CALLBACKS
+        return self._callback_router().is_admin_callback(data)
 
     async def _get_or_create_user(self, update: Update) -> User:
         """Get or create the current Telegram user."""
@@ -248,52 +260,58 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         except Exception as exc:
             logger.error(f"Failed to record Bitget alert: {exc}")
 
-    def _exact_callback_handlers(self):
+    def _callback_route(self, data: str, handler, *, include_data: bool = False) -> CallbackRoute:
+        return CallbackRoute(handler=handler, include_data=include_data, admin_only=data in self.ADMIN_CALLBACKS)
+
+    def _exact_callback_routes(self):
         return {
-            "setup_api": self._handle_setup_api_callback,
-            "check_status": self._handle_status_callback,
-            "check_balance": self._handle_balance_callback,
-            "refresh_balance": self._handle_balance_callback,
-            "trading_settings": self._handle_trading_settings_callback,
-            "set_risk_amount": self._handle_set_risk_start_callback,
-            "confirm_modify_api": self._handle_confirm_modify_api,
-            "cancel_modify_api": self._handle_cancel_modify_api_callback,
-            "confirm_change_risk": self._handle_confirm_change_risk,
-            "cancel_change_risk": self._handle_cancel_change_risk_callback,
-            "return_start": self._handle_return_start_callback,
-            "cancel_order": self._handle_cancel_order_callback,
-            "add_new_channel": self._handle_add_new_channel_callback,
-            "manage_channels": self._handle_manage_channels_callback,
-            "delete_channel_start": self._handle_delete_channel_start_callback,
-            "return_admin_channels": self._handle_return_admin_channels_callback,
+            "setup_api": self._callback_route("setup_api", self._handle_setup_api_callback),
+            "check_status": self._callback_route("check_status", self._handle_status_callback),
+            "check_balance": self._callback_route("check_balance", self._handle_balance_callback),
+            "refresh_balance": self._callback_route("refresh_balance", self._handle_balance_callback),
+            "trading_settings": self._callback_route("trading_settings", self._handle_trading_settings_callback),
+            "set_risk_amount": self._callback_route("set_risk_amount", self._handle_set_risk_start_callback),
+            "confirm_modify_api": self._callback_route("confirm_modify_api", self._handle_confirm_modify_api),
+            "cancel_modify_api": self._callback_route("cancel_modify_api", self._handle_cancel_modify_api_callback),
+            "confirm_change_risk": self._callback_route("confirm_change_risk", self._handle_confirm_change_risk),
+            "cancel_change_risk": self._callback_route("cancel_change_risk", self._handle_cancel_change_risk_callback),
+            "return_start": self._callback_route("return_start", self._handle_return_start_callback),
+            "cancel_order": self._callback_route("cancel_order", self._handle_cancel_order_callback),
+            "add_new_channel": self._callback_route("add_new_channel", self._handle_add_new_channel_callback),
+            "manage_channels": self._callback_route("manage_channels", self._handle_manage_channels_callback),
+            "delete_channel_start": self._callback_route(
+                "delete_channel_start", self._handle_delete_channel_start_callback
+            ),
+            "return_admin_channels": self._callback_route(
+                "return_admin_channels", self._handle_return_admin_channels_callback
+            ),
         }
 
-    def _prefix_callback_handlers(self):
+    def _prefix_callback_routes(self):
         return (
-            ("confirm_chart_update_", self._handle_confirm_chart_update_callback),
-            ("cancel_chart_update_", self._handle_cancel_chart_update_callback),
-            ("confirm_signal_", self._handle_confirm_signal_callback),
-            ("cancel_signal_", self._handle_cancel_signal_callback),
-            ("place_order_", self._handle_place_order_callback),
-            ("confirm_order_", self._handle_confirm_pending_order_callback),
-            ("cancel_order_", self._handle_cancel_pending_order_callback),
+            (
+                "confirm_chart_update_",
+                CallbackRoute(self._handle_confirm_chart_update_callback, include_data=True),
+            ),
+            (
+                "cancel_chart_update_",
+                CallbackRoute(self._handle_cancel_chart_update_callback, include_data=True),
+            ),
+            ("confirm_signal_", CallbackRoute(self._handle_confirm_signal_callback, include_data=True)),
+            ("cancel_signal_", CallbackRoute(self._handle_cancel_signal_callback, include_data=True)),
+            ("place_order_", CallbackRoute(self._handle_place_order_callback, include_data=True)),
+            ("confirm_order_", CallbackRoute(self._handle_confirm_pending_order_callback, include_data=True)),
+            ("cancel_order_", CallbackRoute(self._handle_cancel_pending_order_callback, include_data=True)),
+        )
+
+    def _callback_router(self) -> CallbackRouter:
+        return CallbackRouter(
+            exact_routes=self._exact_callback_routes(),
+            prefix_routes=self._prefix_callback_routes(),
         )
 
     async def _dispatch_button_callback(self, query, user, data: str | None) -> bool:
-        if not isinstance(data, str):
-            return False
-
-        exact_handler = self._exact_callback_handlers().get(data)
-        if exact_handler:
-            await exact_handler(query, user)
-            return True
-
-        for prefix, prefix_handler in self._prefix_callback_handlers():
-            if data.startswith(prefix):
-                await prefix_handler(query, user, data)
-                return True
-
-        return False
+        return await self._callback_router().dispatch(query, user, data)
 
     async def _handle_cancel_modify_api_callback(self, query, user):
         await query.answer("已取消")
@@ -301,7 +319,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
     async def _handle_cancel_change_risk_callback(self, query, user):
         await query.answer("已取消")
-        self.user_sessions.pop(user.telegram_id, None)
+        self.delete_user_session(user.telegram_id)
         await query.edit_message_text("✅ 已取消更改风险设置")
 
     async def _handle_cancel_order_callback(self, query, user):
