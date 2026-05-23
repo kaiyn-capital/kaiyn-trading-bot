@@ -29,3 +29,15 @@ def test_signal_message_keeps_integer_prices_compact():
     assert "**Entry：** 81000-80200" in text
     assert "**TP：** 77777/75000" in text
     assert "**SL：** 81700" in text
+
+
+def test_escape_markdown_ignores_dot_and_dash():
+    from app.bot_messages import escape_markdown
+
+    text = "加了一点仓位 止损设置到了2143.12 我这边加仓后的均价是2095.37 此时止损依旧是1R"
+    escaped = escape_markdown(text)
+    assert escaped == text  # Should be exactly the same
+
+    special = "bold * italic _ code ` link ["
+    escaped_special = escape_markdown(special)
+    assert escaped_special == "bold \\* italic \\_ code \\` link \\["

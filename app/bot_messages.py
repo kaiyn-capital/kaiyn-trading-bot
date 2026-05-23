@@ -11,25 +11,12 @@ def escape_markdown(text: str) -> str:
     if not text:
         return text
 
+    # Only escape legacy Markdown (V1) special characters to avoid literal backslashes in Telegram client
     escape_chars = [
         "_",
         "*",
         "[",
-        "]",
-        "(",
-        ")",
-        "~",
         "`",
-        ">",
-        "#",
-        "+",
-        "-",
-        "=",
-        "|",
-        "{",
-        "}",
-        ".",
-        "!",
     ]
     for char in escape_chars:
         text = text.replace(char, f"\\{char}")
