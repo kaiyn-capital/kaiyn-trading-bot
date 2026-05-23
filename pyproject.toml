@@ -23,6 +23,7 @@ dependencies = [
 dev = [
     "pytest==9.0.3",
     "ruff==0.15.14",
+    "mypy==1.16.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -74,3 +75,38 @@ ignore = [
 "app/encryption.py" = ["T20", "S105"]      # __main__ block uses print(); test passwords
 "tests/**" = ["S105", "S106", "B018"]
 "tests/test_pending_order_repository_integration.py" = ["ASYNC221", "S607"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_return_any = false
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "app.order_flow",
+    "app.order_validation",
+    "app.risk_limits",
+    "app.bitget_errors",
+    "app.config",
+]
+disallow_untyped_defs = true
+check_untyped_defs = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = [
+    "telegram.*",
+    "mplfinance.*",
+    "asyncpg.*",
+    "sqlalchemy.*",
+    "alembic.*",
+    "dotenv.*",
+    "cryptography.*",
+    "pandas.*",
+]
+ignore_missing_imports = true

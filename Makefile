@@ -121,6 +121,10 @@ format: ## Apply Ruff lint fixes and formatting
 	$(COMPOSE) run --rm test ruff check --fix .
 	$(COMPOSE) run --rm test ruff format .
 
+.PHONY: mypy
+mypy: ## Run mypy type checking on critical path modules
+	$(COMPOSE) run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
+
 .PHONY: migrate-test
 migrate-test: ## Run Alembic upgrade head on test database
 	$(MAKE) up-db
@@ -155,6 +159,7 @@ verify: ## Run the full Docker-first verification suite
 	$(MAKE) alembic-check
 	$(MAKE) lint
 	$(MAKE) format-check
+	$(MAKE) mypy
 	$(MAKE) test-db
 	$(MAKE) py-compile
 	$(MAKE) diff-check
