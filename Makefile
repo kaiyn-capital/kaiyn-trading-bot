@@ -143,6 +143,10 @@ test-db: ## Run full pytest suite with PostgreSQL integration tests
 	$(MAKE) up-db
 	$(COMPOSE) run --rm test python -m pytest --run-db
 
+.PHONY: coverage
+coverage: ## Run pytest with coverage on critical path modules (70% threshold)
+	$(COMPOSE) run --rm test python -m pytest --cov --cov-report=term-missing --cov-fail-under=70
+
 .PHONY: py-compile
 py-compile: ## Compile Python files
 	$(COMPOSE) run --rm test python -m py_compile $(PY_COMPILE_FILES)
