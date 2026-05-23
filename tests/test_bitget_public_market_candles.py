@@ -69,7 +69,7 @@ def test_get_candles_uses_bitget_contract_candle_endpoint(monkeypatch):
         },
     )
     client = FakeAsyncClient(response)
-    monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda timeout: client)
+    monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda *args, **kwargs: client)
 
     candles = asyncio.run(BitgetPublicMarket().get_candles("btcusdt", granularity="1H", limit=120))
 
@@ -93,7 +93,7 @@ def test_get_candles_accepts_time_window(monkeypatch):
         },
     )
     client = FakeAsyncClient(response)
-    monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda timeout: client)
+    monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda *args, **kwargs: client)
 
     asyncio.run(
         BitgetPublicMarket().get_candles(
@@ -109,7 +109,7 @@ def test_get_candles_accepts_time_window(monkeypatch):
 
 def test_get_candles_raises_bitget_error_on_api_error(monkeypatch):
     response = FakeResponse(200, {"code": "40001", "msg": "bad request", "data": []})
-    monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda timeout: FakeAsyncClient(response))
+    monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda *args, **kwargs: FakeAsyncClient(response))
 
     with pytest.raises(BitgetAPIError):
         asyncio.run(BitgetPublicMarket().get_candles("BTCUSDT"))
