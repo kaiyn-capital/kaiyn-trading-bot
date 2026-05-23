@@ -22,6 +22,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest==9.0.3",
+    "pytest-cov==6.2.1",
     "ruff==0.15.14",
     "mypy==1.16.0",
 ]
@@ -35,6 +36,21 @@ python_files = ["test_*.py"]
 markers = [
     "integration: opt-in PostgreSQL integration tests",
 ]
+
+[tool.coverage.run]
+source = [
+    "app.order_flow",
+    "app.order_validation",
+    "app.risk_limits",
+    "app.bitget_errors",
+    "app.config",
+    "app.signal_delivery_service",
+]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_empty = true
 
 [tool.ruff]
 target-version = "py311"

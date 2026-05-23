@@ -25,6 +25,7 @@ env/
 # Tool caches and reports
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 .coverage
 htmlcov/
 .cache/
