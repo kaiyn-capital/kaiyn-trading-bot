@@ -50,6 +50,9 @@ jobs:
       - name: Check Ruff formatting
         run: docker compose run --rm test ruff format --check .
 
+      - name: Run mypy type checking
+        run: docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
+
       - name: Run pytest with PostgreSQL integration
         run: docker compose run --rm test python -m pytest --run-db
 

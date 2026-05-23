@@ -22,7 +22,9 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest==9.0.3",
+    "pytest-cov==6.2.1",
     "ruff==0.15.14",
+    "mypy==1.16.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -35,13 +37,92 @@ markers = [
     "integration: opt-in PostgreSQL integration tests",
 ]
 
+[tool.coverage.run]
+source = [
+    "app.order_flow",
+    "app.order_validation",
+    "app.risk_limits",
+    "app.bitget_errors",
+    "app.config",
+    "app.signal_delivery_service",
+]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_empty = true
+
 [tool.ruff]
 target-version = "py311"
 line-length = 120
 extend-exclude = ["build"]
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I"]
+select = [
+    "E4", "E7", "E9",   # pycodestyle (existing)
+    "F",                 # pyflakes (existing)
+    "I",                 # isort (existing)
+    "B",                 # flake8-bugbear: common Python pitfalls
+    "C4",                # flake8-comprehensions: unnecessary wrappers
+    "SIM",               # flake8-simplify: simplifiable constructs
+    "UP",                # pyupgrade: modernize syntax for 3.11+
+    "LOG",               # flake8-logging: logging anti-patterns
+    "G",                 # flake8-logging-format: f-string in logging
+    "T20",               # flake8-print: stray print()/pprint()
+    "PIE",               # flake8-pie: misc lints
+    "RET",               # flake8-return: unnecessary return patterns
+    "ASYNC",             # flake8-async: async anti-patterns
+    "S",                 # flake8-bandit: security-adjacent checks
+]
+ignore = [
+    "S101",    # allow assert (used in tests and validation)
+    "S311",    # allow random for non-crypto use
+    "S324",    # sha256 is used for Bitget HMAC signatures, not insecure
+    "B008",    # allow function call in default arg (Telegram handler patterns)
+    "RET504",  # allow unnecessary assignment before return (readability)
+    "RET505",  # allow else after return (pervasive project style, readability)
+    "SIM108",  # allow if-else instead of ternary (readability in complex logic)
+    "G004",    # allow f-string in logging (consistent project style)
+    "UP042",   # allow str+Enum inheritance (intentional design, e.g. BitgetErrorCategory)
+]
 
 [tool.ruff.lint.per-file-ignores]
-"app/main.py" = ["E402"]
+"app/main.py" = ["E402", "T20", "LOG015", "ASYNC240"]  # CLI entrypoint: print, root logger, pathlib in async startup
+"app/encryption.py" = ["T20", "S105"]      # __main__ block uses print(); test passwords
+"tests/**" = ["S105", "S106", "B018"]
+"tests/test_pending_order_repository_integration.py" = ["ASYNC221", "S607"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_return_any = false
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "app.order_flow",
+    "app.order_validation",
+    "app.risk_limits",
+    "app.bitget_errors",
+    "app.config",
+]
+disallow_untyped_defs = true
+check_untyped_defs = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = [
+    "telegram.*",
+    "mplfinance.*",
+    "asyncpg.*",
+    "sqlalchemy.*",
+    "alembic.*",
+    "dotenv.*",
+    "cryptography.*",
+    "pandas.*",
+]
+ignore_missing_imports = true

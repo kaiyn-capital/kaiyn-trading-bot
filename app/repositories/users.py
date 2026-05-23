@@ -1,5 +1,4 @@
 from decimal import Decimal
-from typing import Optional
 
 from sqlalchemy import select
 
@@ -16,9 +15,9 @@ class UserRepository:
     async def create_user(
         self,
         telegram_id: int,
-        username: Optional[str] = None,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
+        username: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
     ) -> User:
         """創建新用戶"""
         async with self.db.get_session() as session:
@@ -37,7 +36,7 @@ class UserRepository:
             await session.flush()
             return user
 
-    async def get_user_by_telegram_id(self, telegram_id: int) -> Optional[User]:
+    async def get_user_by_telegram_id(self, telegram_id: int) -> User | None:
         """根據 Telegram ID 獲取用戶"""
         async with self.db.get_session() as session:
             result = await session.execute(select(User).where(User.telegram_id == telegram_id))

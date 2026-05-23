@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import select
 
@@ -18,7 +17,7 @@ class NotificationRepository:
         message_type: str,
         title: str,
         message: str,
-        extra_data: Optional[dict] = None,
+        extra_data: dict | None = None,
     ) -> NotificationLog:
         """創建通知記錄"""
         async with self.db.get_session() as session:

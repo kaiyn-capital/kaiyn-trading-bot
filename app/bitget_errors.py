@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -39,11 +39,11 @@ class BitgetErrorCategory(str, Enum):
 class ClassifiedBitgetError:
     category: BitgetErrorCategory
     user_message: str
-    raw_code: Optional[str] = None
-    raw_message: Optional[str] = None
-    http_status: Optional[int] = None
+    raw_code: str | None = None
+    raw_message: str | None = None
+    http_status: int | None = None
     is_retryable: bool = False
-    raw_data: Optional[Any] = None
+    raw_data: Any | None = None
 
     def storage_message(self) -> str:
         parts = [f"category={self.category.value}"]
@@ -275,7 +275,7 @@ def _looks_like_bitget_api_error(exc: Exception) -> bool:
     return isinstance(exc, BitgetAPIError) or exc.__class__.__name__ == "BitgetAPIError"
 
 
-def _string_or_none(value) -> Optional[str]:
+def _string_or_none(value: object) -> str | None:
     if value is None:
         return None
     text = str(value)

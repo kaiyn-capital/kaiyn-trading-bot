@@ -1,6 +1,5 @@
 import logging
 from decimal import Decimal
-from typing import Dict, List, Tuple
 
 from .bitget_client import BitgetAPIClient
 from .bitget_errors import BitgetAPIError, classify_bitget_exception
@@ -21,7 +20,7 @@ class BitgetTradeManager:
         self._clients = {}
         self.public_market = BitgetPublicMarket()
 
-    def _get_client(self, user_id: int, encrypted_credentials: Tuple[str, str, str]) -> BitgetAPIClient:
+    def _get_client(self, user_id: int, encrypted_credentials: tuple[str, str, str]) -> BitgetAPIClient:
         if user_id not in self._clients:
             api_key, secret_key, passphrase = self.encryption_manager.decrypt_api_credentials(*encrypted_credentials)
             self._clients[user_id] = BitgetAPIClient(api_key, secret_key, passphrase)
@@ -41,7 +40,7 @@ class BitgetTradeManager:
 
         return True
 
-    async def test_api_connection(self, encrypted_credentials: Tuple[str, str, str]) -> Tuple[bool, str]:
+    async def test_api_connection(self, encrypted_credentials: tuple[str, str, str]) -> tuple[bool, str]:
         client = None
         try:
             api_key, secret_key, passphrase = self.encryption_manager.decrypt_api_credentials(*encrypted_credentials)
@@ -65,11 +64,11 @@ class BitgetTradeManager:
             if client:
                 await client.close()
 
-    async def get_account_balance(self, user_id: int, encrypted_credentials: Tuple[str, str, str]) -> Dict:
+    async def get_account_balance(self, user_id: int, encrypted_credentials: tuple[str, str, str]) -> dict:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.get_account_assets()
 
-    async def get_user_uid(self, encrypted_credentials: Tuple[str, str, str]) -> str:
+    async def get_user_uid(self, encrypted_credentials: tuple[str, str, str]) -> str:
         try:
             api_key, secret_key, passphrase = self.encryption_manager.decrypt_api_credentials(*encrypted_credentials)
             client = BitgetAPIClient(api_key, secret_key, passphrase)
@@ -89,10 +88,10 @@ class BitgetTradeManager:
     async def get_market_price(self, symbol: str) -> Decimal:
         return to_decimal(await self.public_market.get_market_price(symbol))
 
-    async def get_trading_pairs(self, product_type: str = "USDT-FUTURES", force_refresh: bool = False) -> List[Dict]:
+    async def get_trading_pairs(self, product_type: str = "USDT-FUTURES", force_refresh: bool = False) -> list[dict]:
         return await self.public_market.get_trading_pairs(product_type, force_refresh=force_refresh)
 
-    async def get_contract_rules(self, symbol: str, product_type: str = "USDT-FUTURES") -> Dict:
+    async def get_contract_rules(self, symbol: str, product_type: str = "USDT-FUTURES") -> dict:
         return await self.public_market.get_contract_rules(symbol, product_type)
 
     async def get_candles(
@@ -109,7 +108,7 @@ class BitgetTradeManager:
     async def place_market_order(
         self,
         user_id: int,
-        encrypted_credentials: Tuple[str, str, str],
+        encrypted_credentials: tuple[str, str, str],
         symbol: str,
         side: str,
         size: str,
@@ -118,7 +117,7 @@ class BitgetTradeManager:
         trade_side: str = "open",
         stop_loss_price: Decimal = None,
         take_profit_price: Decimal = None,
-    ) -> Dict:
+    ) -> dict:
         client = self._get_client(user_id, encrypted_credentials)
 
         result = await client.place_order(
@@ -139,7 +138,7 @@ class BitgetTradeManager:
     async def place_limit_order(
         self,
         user_id: int,
-        encrypted_credentials: Tuple[str, str, str],
+        encrypted_credentials: tuple[str, str, str],
         symbol: str,
         side: str,
         size: str,
@@ -150,7 +149,7 @@ class BitgetTradeManager:
         stop_loss_price: Decimal = None,
         take_profit_price: Decimal = None,
         force: str = "gtc",
-    ) -> Dict:
+    ) -> dict:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.place_order(
             symbol=symbol,
@@ -170,25 +169,25 @@ class BitgetTradeManager:
     async def get_order_status(
         self,
         user_id: int,
-        encrypted_credentials: Tuple[str, str, str],
+        encrypted_credentials: tuple[str, str, str],
         symbol: str,
         order_id: str = None,
         client_order_id: str = None,
         product_type: str = "USDT-FUTURES",
-    ) -> Dict:
+    ) -> dict:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.get_order_info(symbol, order_id, client_order_id, product_type)
 
     async def get_order_history(
         self,
         user_id: int,
-        encrypted_credentials: Tuple[str, str, str],
+        encrypted_credentials: tuple[str, str, str],
         symbol: str = None,
         limit: int = 50,
         product_type: str = "USDT-FUTURES",
         order_id: str = None,
         client_order_id: str = None,
-    ) -> Dict:
+    ) -> dict:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.get_order_history(
             symbol=symbol,
@@ -201,11 +200,11 @@ class BitgetTradeManager:
     async def cancel_order(
         self,
         user_id: int,
-        encrypted_credentials: Tuple[str, str, str],
+        encrypted_credentials: tuple[str, str, str],
         symbol: str,
         order_id: str = None,
         client_order_id: str = None,
-    ) -> Dict:
+    ) -> dict:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.cancel_order(symbol, order_id, client_order_id)
 

@@ -1,8 +1,9 @@
+import contextlib
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
 from .audit import emit_audit_event, summarize_identifier
 from .bitget_errors import classify_bitget_exception
@@ -45,8 +46,8 @@ class ConfirmedOrderRequest:
     position_value: Decimal
     current_price: Decimal
     order_mode: str = "market"
-    limit_price: Optional[Decimal] = None
-    pending_order_token: Optional[str] = None
+    limit_price: Decimal | None = None
+    pending_order_token: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "quantity", to_decimal(self.quantity))
@@ -173,10 +174,8 @@ class TelegramOrderFlowService:
             )
         except Exception as e:
             logger.error(f"Failed to send private message to {user.telegram_id}: {e}")
-            try:
+            with contextlib.suppress(Exception):
                 await query.answer(f"请查看私人聊天: {text[:50]}...")
-            except Exception:
-                pass
 
     async def handle_place_order_callback(self, query, user, data):
         """Handle market or limit order button."""

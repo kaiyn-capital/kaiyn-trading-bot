@@ -8,7 +8,7 @@ def format_symbol(symbol: str) -> str:
     return symbol.upper().replace("/", "").replace("-", "")
 
 
-def validate_order_params(symbol: str, side: str, order_type: str, quantity: float, price: float = None) -> bool:
+def validate_order_params(symbol: str, side: str, order_type: str, quantity: float, price: float | None = None) -> bool:
     if not symbol or not side or not order_type:
         return False
 
@@ -21,8 +21,8 @@ def validate_order_params(symbol: str, side: str, order_type: str, quantity: flo
     if quantity <= 0:
         return False
 
-    if order_type == "limit" and (price is None or price <= 0):
-        return False
+    if order_type == "limit":
+        return price is not None and price > 0
 
     return True
 

@@ -25,7 +25,7 @@ class Config:
 
     # 多管理員支援
     @classmethod
-    def get_admin_ids(cls):
+    def get_admin_ids(cls) -> list[int]:
         """獲取所有管理員ID列表"""
         admin_ids_str = os.getenv("TELEGRAM_ADMIN_IDS")
         if admin_ids_str:
@@ -73,7 +73,7 @@ class Config:
     MAX_POSITION_SIZE = float(os.getenv("MAX_POSITION_SIZE", "1000"))
 
     @classmethod
-    def validate(cls):
+    def validate(cls) -> bool:
         """驗證必要的配置項"""
         # 檢查必要的環境變數
         if not os.getenv("TELEGRAM_BOT_TOKEN"):
@@ -95,7 +95,7 @@ class Config:
         return True
 
     @classmethod
-    def validate_database_url(cls):
+    def validate_database_url(cls) -> bool:
         """驗證資料庫連線設定"""
         database_url = os.getenv("DATABASE_URL")
         if not database_url:

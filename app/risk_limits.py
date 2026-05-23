@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
 from .config import Config
 from .decimal_utils import decimal_json, to_decimal_or_none
@@ -21,14 +21,14 @@ class RiskLimitExceeded(Exception):
         return self.user_message
 
 
-def _positive_decimal_or_none(value: Any) -> Optional[Decimal]:
+def _positive_decimal_or_none(value: Any) -> Decimal | None:
     parsed = to_decimal_or_none(value)
     if parsed is None:
         return None
     return parsed if parsed > 0 else None
 
 
-def _positive_int_or_none(value: Any) -> Optional[int]:
+def _positive_int_or_none(value: Any) -> int | None:
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -36,31 +36,31 @@ def _positive_int_or_none(value: Any) -> Optional[int]:
     return parsed if parsed > 0 else None
 
 
-def get_effective_position_limit(user_data) -> Decimal:
+def get_effective_position_limit(user_data: object) -> Decimal:
     """Return the stricter positive position cap between global and user settings."""
     global_limit = _positive_decimal_or_none(Config.MAX_POSITION_SIZE) or Decimal("1000.0")
     user_limit = _positive_decimal_or_none(getattr(user_data, "max_position_size", None))
     return min(global_limit, user_limit) if user_limit else global_limit
 
 
-def get_effective_daily_trade_limit(user_data) -> int:
+def get_effective_daily_trade_limit(user_data: object) -> int:
     """Return the stricter positive daily trade cap between global and user settings."""
     global_limit = _positive_int_or_none(Config.MAX_DAILY_TRADES) or 10
     user_limit = _positive_int_or_none(getattr(user_data, "daily_trade_limit", None))
     return min(global_limit, user_limit) if user_limit else global_limit
 
 
-def get_daily_limit_day_start_utc(now: Optional[datetime] = None) -> datetime:
+def get_daily_limit_day_start_utc(now: datetime | None = None) -> datetime:
     """Return naive UTC datetime for the current UTC+8 trading day start."""
     now = now or datetime.utcnow()
     if now.tzinfo is None:
-        now_utc = now.replace(tzinfo=timezone.utc)
+        now_utc = now.replace(tzinfo=UTC)
     else:
-        now_utc = now.astimezone(timezone.utc)
+        now_utc = now.astimezone(UTC)
 
     local_now = now_utc.astimezone(UTC_PLUS_8)
     local_start = datetime.combine(local_now.date(), time.min, tzinfo=UTC_PLUS_8)
-    return local_start.astimezone(timezone.utc).replace(tzinfo=None)
+    return local_start.astimezone(UTC).replace(tzinfo=None)
 
 
 def build_position_limit_error(position_value: Decimal, position_limit: Decimal) -> RiskLimitExceeded:
@@ -101,7 +101,7 @@ def build_daily_trade_limit_error(
     )
 
 
-def ensure_position_within_limit(position_value, user_data) -> None:
+def ensure_position_within_limit(position_value: Decimal | float, user_data: object) -> None:
     position_value = _positive_decimal_or_none(position_value) or Decimal("0")
     position_limit = get_effective_position_limit(user_data)
     if position_value > position_limit:

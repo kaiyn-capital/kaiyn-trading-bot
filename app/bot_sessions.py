@@ -17,7 +17,7 @@ class UserSessionMixin:
     def session_store(self) -> SessionStore:
         if not hasattr(self, "_session_store_delegate"):
             if not hasattr(self, "user_sessions"):
-                self.user_sessions = {}
+                self.user_sessions: dict[int, object] = {}
             self._session_store_delegate = SessionStore(
                 sessions_dict=self.user_sessions,
                 ttl_seconds=Config.USER_SESSION_TTL_SECONDS,

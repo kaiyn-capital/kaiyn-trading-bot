@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 
 import matplotlib
@@ -331,8 +331,8 @@ def _find_signal_anchor_index(data: pd.DataFrame, signal_time: datetime | None) 
 
 def _ensure_aware_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _set_price_limits(ax, data: pd.DataFrame, levels: SignalChartLevels) -> None:
