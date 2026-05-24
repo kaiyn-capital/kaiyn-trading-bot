@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from telegram.error import TelegramError
 
 from app.order_types import SignalDraft
 from app.signal_delivery_service import TELEGRAM_PHOTO_CAPTION_LIMIT, SignalDeliveryService
@@ -21,7 +22,7 @@ class FakeBot:
 
     async def send_photo(self, **kwargs):
         if self.fail_photo or (self.fail_reply_photo and kwargs.get("reply_to_message_id")):
-            raise RuntimeError("photo failed")
+            raise TelegramError("photo failed")
         self.sent_photos.append(kwargs)
         self.next_message_id += 1
         return SimpleNamespace(message_id=self.next_message_id)

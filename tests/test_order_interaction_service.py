@@ -182,6 +182,12 @@ class NoBitgetTradeManager:
         raise AssertionError("Bitget price should not be fetched")
 
 
+class UnexpectedRulesTradeManager(NoBitgetTradeManager):
+    async def get_contract_rules(self, symbol):
+        self.contract_rule_calls.append(symbol)
+        raise RuntimeError("local cache corrupted")
+
+
 class PermissiveRulesTradeManager(RejectingRulesTradeManager):
     async def get_contract_rules(self, symbol):
         self.contract_rule_calls.append(symbol)
@@ -456,6 +462,42 @@ async def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch)
     assert audit_owner.audit_events[-1]["details"]["reason"] == "position_size_limit_exceeded"
     assert audit_owner.audit_events[-1]["details"]["position_limit"] == "500"
     assert system_log_repo.logs[-1]["extra_data"]["position_limit"] == "500"
+
+
+@pytest.mark.asyncio
+async def test_place_order_unexpected_error_is_not_reported_as_bitget_failure():
+    failure_alert = RecordingFailureAlert()
+    signal_repo = FakeSignalRecordRepo(
+        {
+            "tok_unexpected": {
+                "symbol": "BTCUSDT",
+                "direction": "long",
+                "entry_lower": 80200,
+                "entry_upper": 81000,
+                "stop_loss": 79000,
+                "status": "sent",
+            }
+        }
+    )
+    service, bot, audit_owner = make_service(
+        user_repo=FakeUserRepo(),
+        trade_repo=CountingTradeRepo(daily_count=0),
+        trade_manager=UnexpectedRulesTradeManager(),
+        system_log_repo=RecordingSystemLogRepo(),
+        failure_alert_handler=failure_alert,
+        signal_record_repo=signal_repo,
+    )
+
+    await service.handle_place_order_callback(
+        FakeQuery(),
+        make_user(),
+        "place_order_market_tok_unexpected",
+    )
+
+    assert failure_alert.calls == []
+    assert "发生未知错误" in bot.messages[-1]["text"]
+    assert audit_owner.audit_events[-1]["action"] == "pending_order_create_failed"
+    assert audit_owner.audit_events[-1]["details"]["error_category"] == "unexpected"
 
 
 @pytest.mark.asyncio

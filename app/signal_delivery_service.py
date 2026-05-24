@@ -1,6 +1,8 @@
 import logging
 from io import BytesIO
 
+from telegram.error import TelegramError
+
 from .bot_keyboards import signal_order_keyboard
 from .order_types import SignalDraft
 from .telegram_formatting import HTML_PARSE_MODE, html_escape
@@ -66,17 +68,24 @@ class SignalDeliveryService:
                             sent_as=send_result["sent_as"],
                         )
                     sent_to_channels += 1
-                except Exception as e:
+                except TelegramError as e:
                     failed_channels += 1
                     logger.warning(
                         "Failed to send signal to channel "
                         f"{channel_data['chat_id']} "
                         f"thread={channel_data.get('message_thread_id')}: {e}"
                     )
+                except Exception as e:
+                    failed_channels += 1
+                    logger.exception(
+                        "Unexpected error while sending signal to channel "
+                        f"{channel_data['chat_id']} "
+                        f"thread={channel_data.get('message_thread_id')}: {e}"
+                    )
 
         except Exception as e:
             channel_error = type(e).__name__
-            logger.error(f"Error getting channels: {e}")
+            logger.exception("Error getting channels: %s", e)
 
         return {
             "status": "completed" if channel_error is None else "completed_with_channel_lookup_error",
@@ -116,7 +125,7 @@ class SignalDeliveryService:
                     send_kwargs=send_kwargs,
                 )
                 sent_count += 1
-            except Exception as e:
+            except TelegramError as e:
                 logger.warning(
                     "Failed to send chart update as reply to channel %s message=%s: %s",
                     target["chat_id"],
@@ -134,7 +143,7 @@ class SignalDeliveryService:
                     )
                     reply_fallback_count += 1
                     sent_count += 1
-                except Exception as fallback_error:
+                except TelegramError as fallback_error:
                     failed_count += 1
                     logger.warning(
                         "Failed to send chart update fallback to channel %s: %s",
@@ -218,7 +227,7 @@ class SignalDeliveryService:
                     **send_kwargs,
                 )
                 return {"used_fallback": False, "message_id": self._extract_message_id(message), "sent_as": "photo"}
-        except Exception as e:
+        except TelegramError as e:
             logger.warning("Failed to send signal chart to channel %s, falling back to text: %s", chat_id, e)
             message = await bot.send_message(
                 chat_id=chat_id,
