@@ -137,26 +137,3 @@ class UserRepository:
                 }
                 for u in users
             ]
-
-
-def user_to_dict(user: User) -> dict:
-    """Convert a user model to a detached dictionary."""
-    return {
-        "id": user.id,
-        "telegram_id": user.telegram_id,
-        "username": user.username,
-        "first_name": user.first_name,
-        "last_name": user.last_name,
-        "is_api_connected": user.is_api_connected,
-        "encrypted_api_key": user.encrypted_api_key,
-        "encrypted_secret_key": user.encrypted_secret_key,
-        "encrypted_passphrase": user.encrypted_passphrase,
-        "daily_trade_limit": user.daily_trade_limit,
-        "max_position_size": user.max_position_size,
-        "default_stop_loss_percent": user.default_stop_loss_percent,
-        "default_trade_amount": user.default_trade_amount,
-        "fixed_risk_amount": user.fixed_risk_amount,
-        "is_trader": getattr(user, "is_trader", False),
-        "created_at": user.created_at,
-        "updated_at": user.updated_at,
-    }
