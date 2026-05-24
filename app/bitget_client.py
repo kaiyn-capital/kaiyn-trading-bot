@@ -192,8 +192,8 @@ class BitgetAPIClient:
         params = {"productType": product_type}
         return await self._make_request("GET", "/api/v2/mix/market/contracts", params=params)
 
-    async def get_ticker(self, symbol: str) -> dict:
-        params = {"symbol": symbol}
+    async def get_ticker(self, symbol: str, product_type: str = "USDT-FUTURES") -> dict:
+        params = {"symbol": symbol, "productType": product_type}
         return await self._make_request("GET", "/api/v2/mix/market/ticker", params=params)
 
     async def place_order(

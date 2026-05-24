@@ -63,31 +63,62 @@ class BitgetPublicMarket:
             self._client = None
 
     async def get_market_price(self, symbol: str) -> Decimal:
+        normalized_symbol = symbol.upper()
+        endpoint = "/api/v2/mix/market/ticker"
+        params = {
+            "symbol": normalized_symbol,
+            "productType": "USDT-FUTURES",
+        }
         try:
-            logger.info(f"Getting futures market price for {symbol}")
+            logger.info(f"Getting futures market price for {normalized_symbol}")
 
-            url = f"{Config.BITGET_API_URL}/api/v2/mix/market/tickers?productType=USDT-FUTURES"
+            url = f"{Config.BITGET_API_URL}{endpoint}"
 
             logger.info(f"Fetching from URL: {url}")
-            response = await self.client.get(url)
+            response = await self.client.get(url, params=params)
 
             if response.status_code == 200:
                 data = response.json()
 
-                if data.get("code") == "00000" and data.get("data"):
-                    for item in data["data"]:
-                        if item.get("symbol") == symbol:
-                            price = to_decimal(item.get("lastPr", 0))
-                            logger.info(f"Found price for {symbol}: {price}")
-                            return price
+                tickers = data.get("data")
+                if data.get("code") == "00000" and tickers:
+                    ticker = tickers[0] if isinstance(tickers, list) else tickers
+                    if not isinstance(ticker, dict):
+                        error_msg = f"Bitget ticker response has invalid data for {normalized_symbol}"
+                        logger.error(error_msg)
+                        raise BitgetAPIError(
+                            code="invalid_ticker_response",
+                            message=error_msg,
+                            data=data,
+                            http_status=response.status_code,
+                            endpoint=endpoint,
+                            method="GET",
+                        )
+                    last_price = ticker.get("lastPr")
+                    if last_price is None:
+                        error_msg = f"Bitget ticker response missing lastPr for {normalized_symbol}"
+                        logger.error(error_msg)
+                        raise BitgetAPIError(
+                            code="invalid_ticker_response",
+                            message=error_msg,
+                            data=data,
+                            http_status=response.status_code,
+                            endpoint=endpoint,
+                            method="GET",
+                        )
 
-                    error_msg = f"Symbol {symbol} not found in Bitget futures contracts"
+                    price = to_decimal(last_price)
+                    logger.info(f"Found price for {normalized_symbol}: {price}")
+                    return price
+                if data.get("code") == "00000":
+                    error_msg = f"Symbol {normalized_symbol} not found in Bitget futures ticker"
                     logger.error(error_msg)
                     raise BitgetAPIError(
                         code="symbol_not_found",
                         message=error_msg,
-                        data={"symbol": symbol},
-                        endpoint="/api/v2/mix/market/tickers",
+                        data={"symbol": normalized_symbol},
+                        http_status=response.status_code,
+                        endpoint=endpoint,
                         method="GET",
                     )
                 error_msg = f"API returned error: {data}"
@@ -97,7 +128,7 @@ class BitgetPublicMarket:
                     message=data.get("msg", error_msg),
                     data=data,
                     http_status=response.status_code,
-                    endpoint="/api/v2/mix/market/tickers",
+                    endpoint=endpoint,
                     method="GET",
                 )
             error_msg = f"HTTP {response.status_code}: {response.text}"
@@ -107,34 +138,34 @@ class BitgetPublicMarket:
                 message=error_msg,
                 data={"response": response.text[:1000]},
                 http_status=response.status_code,
-                endpoint="/api/v2/mix/market/tickers",
+                endpoint=endpoint,
                 method="GET",
             )
 
         except httpx.TimeoutException as e:
-            error_msg = f"Request timeout for {symbol}: {e}"
+            error_msg = f"Request timeout for {normalized_symbol}: {e}"
             logger.error(error_msg)
             raise BitgetAPIError(
                 code="timeout",
                 message=error_msg,
-                data={"symbol": symbol},
-                endpoint="/api/v2/mix/market/tickers",
+                data={"symbol": normalized_symbol},
+                endpoint=endpoint,
                 method="GET",
             ) from e
         except httpx.RequestError as e:
-            error_msg = f"Network error for {symbol}: {e}"
+            error_msg = f"Network error for {normalized_symbol}: {e}"
             logger.error(error_msg)
             raise BitgetAPIError(
                 code="network_error",
                 message=error_msg,
-                data={"symbol": symbol},
-                endpoint="/api/v2/mix/market/tickers",
+                data={"symbol": normalized_symbol},
+                endpoint=endpoint,
                 method="GET",
             ) from e
         except BitgetAPIError:
             raise
         except Exception as e:
-            error_msg = f"Failed to get futures market price for {symbol}: {e}"
+            error_msg = f"Failed to get futures market price for {normalized_symbol}: {e}"
             logger.error(error_msg)
             raise Exception(error_msg) from e
 
