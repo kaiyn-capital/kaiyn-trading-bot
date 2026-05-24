@@ -1,5 +1,6 @@
-import asyncio
 from types import SimpleNamespace
+
+import pytest
 
 from app.bot_account_handlers import AccountHandlersMixin
 
@@ -45,11 +46,12 @@ class FakeAccountHandler(AccountHandlersMixin):
         return None
 
 
-def test_balance_command_uses_classified_bitget_error_message():
+@pytest.mark.asyncio
+async def test_balance_command_uses_classified_bitget_error_message():
     handler = FakeAccountHandler()
     update = SimpleNamespace(message=FakeMessage())
     context = SimpleNamespace()
 
-    asyncio.run(handler.balance_command(update, context))
+    await handler.balance_command(update, context)
 
     assert update.message.replies[-1]["text"] == "❌ API 设置或权限异常，请检查 API Key 权限。"

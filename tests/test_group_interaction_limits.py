@@ -1,6 +1,6 @@
-import asyncio
 from types import SimpleNamespace
 
+import pytest
 from telegram.ext import CommandHandler, ConversationHandler, MessageHandler
 
 from app import bot as bot_module
@@ -164,11 +164,12 @@ def test_conversation_and_global_text_handlers_are_private_only(monkeypatch):
         assert "PRIVATE" in _filter_text(state_handler)
 
 
-def test_setup_commands_only_sets_private_scope():
+@pytest.mark.asyncio
+async def test_setup_commands_only_sets_private_scope():
     bot = TelegramBot.__new__(TelegramBot)
     bot.application = SimpleNamespace(bot=FakeCommandBot())
 
-    asyncio.run(TelegramBot.setup_commands(bot))
+    await TelegramBot.setup_commands(bot)
 
     deleted_scope_names = [type(call["scope"]).__name__ for call in bot.application.bot.deleted]
     set_scope_name = type(bot.application.bot.set_commands[0]["kwargs"]["scope"]).__name__
@@ -185,7 +186,8 @@ def test_setup_commands_only_sets_private_scope():
     ]
 
 
-def test_group_non_order_callback_is_private_alert_only():
+@pytest.mark.asyncio
+async def test_group_non_order_callback_is_private_alert_only():
     bot = TelegramBot.__new__(TelegramBot)
     bot.user_sessions = {123: {"step": "risk_amount"}}
 
@@ -195,14 +197,15 @@ def test_group_non_order_callback_is_private_alert_only():
     bot._get_or_create_user = fail_if_user_is_loaded
     update = _make_update("supergroup", data="set_risk_amount")
 
-    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+    await TelegramBot.button_callback(bot, update, SimpleNamespace())
 
     assert update.callback_query.answers == [{"text": "请到与机器人的私人聊天操作", "kwargs": {"show_alert": True}}]
     assert update.callback_query.edits == []
     assert bot.user_sessions == {123: {"step": "risk_amount"}}
 
 
-def test_group_order_callback_still_routes_to_order_flow():
+@pytest.mark.asyncio
+async def test_group_order_callback_still_routes_to_order_flow():
     bot = TelegramBot.__new__(TelegramBot)
     bot.user_sessions = {}
     routed = []
@@ -218,46 +221,49 @@ def test_group_order_callback_still_routes_to_order_flow():
     bot._handle_place_order_callback = handle_order
     update = _make_update("supergroup", data="place_order_BTCUSDT_long_market_80000_81000_79000")
 
-    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+    await TelegramBot.button_callback(bot, update, SimpleNamespace())
 
     assert update.callback_query.answers == [{"text": None, "kwargs": {}}]
     assert routed == [{"query": update.callback_query, "user": user, "data": update.callback_query.data}]
 
 
-def test_group_global_message_does_not_continue_private_setup_session():
+@pytest.mark.asyncio
+async def test_group_global_message_does_not_continue_private_setup_session():
     handler = FakeAccountHandler()
     update = SimpleNamespace(
         message=SimpleNamespace(text="100"),
         effective_chat=SimpleNamespace(id=-100123, type="supergroup"),
     )
 
-    asyncio.run(handler.handle_global_message(update, SimpleNamespace()))
+    await handler.handle_global_message(update, SimpleNamespace())
 
     assert handler.get_user_called is False
     assert handler.risk_amount_called is False
 
 
-def test_error_handler_does_not_send_public_group_message():
+@pytest.mark.asyncio
+async def test_error_handler_does_not_send_public_group_message():
     bot = TelegramBot.__new__(TelegramBot)
     bot.user_repo = FakeUserRepo()
     bot.system_log_repo = FakeSystemLogRepo()
     context = SimpleNamespace(error=RuntimeError("boom"), bot=FakeContextBot())
     update = _make_update("supergroup", data=None)
 
-    asyncio.run(TelegramBot.error_handler(bot, update, context))
+    await TelegramBot.error_handler(bot, update, context)
 
     assert bot.system_log_repo.logs[-1]["message"] == "boom"
     assert context.bot.sent_messages == []
 
 
-def test_error_handler_keeps_private_error_message():
+@pytest.mark.asyncio
+async def test_error_handler_keeps_private_error_message():
     bot = TelegramBot.__new__(TelegramBot)
     bot.user_repo = FakeUserRepo()
     bot.system_log_repo = FakeSystemLogRepo()
     context = SimpleNamespace(error=RuntimeError("boom"), bot=FakeContextBot())
     update = _make_update("private", data=None)
 
-    asyncio.run(TelegramBot.error_handler(bot, update, context))
+    await TelegramBot.error_handler(bot, update, context)
 
     assert bot.system_log_repo.logs[-1]["message"] == "boom"
     assert context.bot.sent_messages == [

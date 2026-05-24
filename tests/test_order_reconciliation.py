@@ -1,17 +1,14 @@
-import asyncio
 from datetime import datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
+
+import pytest
 
 from app.bitget_client import BitgetAPIClient
 from app.bitget_errors import BitgetAPIError
 from app.bot import TelegramBot
 from app.order_flow import build_client_order_id
 from app.order_reconciliation import PendingOrderReconciliationService
-
-
-def run(coro):
-    return asyncio.run(coro)
 
 
 def make_pending(**overrides):
@@ -224,21 +221,23 @@ def make_service(
     )
 
 
-def test_reconcile_no_stale_processing_does_not_call_bitget():
+@pytest.mark.asyncio
+async def test_reconcile_no_stale_processing_does_not_call_bitget():
     trade_manager = FakeTradeManager()
     service, _pending_repo, _trade_repo, _manager, _bot, _logs, _alerts = make_service(
         pending_orders=[],
         trade_manager=trade_manager,
     )
 
-    summary = run(service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10))
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
     assert summary.scanned == 0
     assert trade_manager.status_calls == []
     assert trade_manager.history_calls == []
 
 
-def test_reconcile_uses_pending_token_client_order_id():
+@pytest.mark.asyncio
+async def test_reconcile_uses_pending_token_client_order_id():
     pending = make_pending(token="tok_ready")
     trade_manager = FakeTradeManager(detail={"code": "00000", "data": make_order(clientOid="KTB_tok_ready")})
     service, pending_repo, _trade_repo, _manager, _bot, _logs, _alerts = make_service(
@@ -246,7 +245,7 @@ def test_reconcile_uses_pending_token_client_order_id():
         trade_manager=trade_manager,
     )
 
-    summary = run(service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10))
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
     assert summary.recovered == 1
     assert trade_manager.status_calls[-1]["kwargs"]["client_order_id"] == "KTB_tok_ready"
@@ -254,7 +253,8 @@ def test_reconcile_uses_pending_token_client_order_id():
     assert pending_repo.executed == [{"token": "tok_ready", "trade_id": 77}]
 
 
-def test_reconcile_live_order_marks_trade_pending_and_pending_executed():
+@pytest.mark.asyncio
+async def test_reconcile_live_order_marks_trade_pending_and_pending_executed():
     pending = make_pending()
     existing_trade = SimpleNamespace(id=42, client_order_id=build_client_order_id(pending.token), bitget_order_id=None)
     trade_manager = FakeTradeManager(detail={"code": "00000", "data": make_order(state="live", baseVolume="0")})
@@ -264,14 +264,15 @@ def test_reconcile_live_order_marks_trade_pending_and_pending_executed():
         trade_manager=trade_manager,
     )
 
-    summary = run(service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10))
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
     assert summary.recovered == 1
     assert trade_repo.updated[-1]["status"] == "pending"
     assert pending_repo.executed == [{"token": pending.token, "trade_id": 42}]
 
 
-def test_reconcile_filled_order_updates_trade_fields():
+@pytest.mark.asyncio
+async def test_reconcile_filled_order_updates_trade_fields():
     pending = make_pending()
     trade_manager = FakeTradeManager(detail={"code": "00000", "data": make_order(state="filled")})
     service, pending_repo, trade_repo, _manager, _bot, _logs, _alerts = make_service(
@@ -279,7 +280,7 @@ def test_reconcile_filled_order_updates_trade_fields():
         trade_manager=trade_manager,
     )
 
-    summary = run(service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10))
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
     assert summary.recovered == 1
     assert trade_repo.created[-1]["client_order_id"] == build_client_order_id(pending.token)
@@ -291,7 +292,8 @@ def test_reconcile_filled_order_updates_trade_fields():
     assert pending_repo.executed == [{"token": pending.token, "trade_id": 77}]
 
 
-def test_reconcile_cancelled_order_marks_failed_and_notifies_user():
+@pytest.mark.asyncio
+async def test_reconcile_cancelled_order_marks_failed_and_notifies_user():
     pending = make_pending()
     trade_manager = FakeTradeManager(detail={"code": "00000", "data": make_order(state="canceled")})
     service, pending_repo, trade_repo, _manager, bot, _logs, _alerts = make_service(
@@ -299,7 +301,7 @@ def test_reconcile_cancelled_order_marks_failed_and_notifies_user():
         trade_manager=trade_manager,
     )
 
-    summary = run(service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10))
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
     assert summary.failed == 1
     assert trade_repo.updated[-1]["status"] == "cancelled"
@@ -308,7 +310,8 @@ def test_reconcile_cancelled_order_marks_failed_and_notifies_user():
     assert "重新按一次" in bot.messages[-1]["text"]
 
 
-def test_reconcile_detail_not_found_uses_history_order():
+@pytest.mark.asyncio
+async def test_reconcile_detail_not_found_uses_history_order():
     pending = make_pending()
     not_found = BitgetAPIError(code="25204", message="Order does not exist")
     trade_manager = FakeTradeManager(
@@ -320,7 +323,7 @@ def test_reconcile_detail_not_found_uses_history_order():
         trade_manager=trade_manager,
     )
 
-    summary = run(service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10))
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
     assert summary.recovered == 1
     assert trade_manager.history_calls[-1]["kwargs"]["client_order_id"] == build_client_order_id(pending.token)
@@ -328,7 +331,8 @@ def test_reconcile_detail_not_found_uses_history_order():
     assert pending_repo.executed == [{"token": pending.token, "trade_id": 77}]
 
 
-def test_reconcile_detail_and_history_not_found_marks_failed_without_new_trade():
+@pytest.mark.asyncio
+async def test_reconcile_detail_and_history_not_found_marks_failed_without_new_trade():
     pending = make_pending()
     existing_trade = SimpleNamespace(id=42, client_order_id=build_client_order_id(pending.token), bitget_order_id=None)
     not_found = BitgetAPIError(code="25204", message="Order does not exist")
@@ -342,7 +346,7 @@ def test_reconcile_detail_and_history_not_found_marks_failed_without_new_trade()
         trade_manager=trade_manager,
     )
 
-    summary = run(service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10))
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
     assert summary.failed == 1
     assert trade_repo.created == []
@@ -351,7 +355,8 @@ def test_reconcile_detail_and_history_not_found_marks_failed_without_new_trade()
     assert "重新按一次" in bot.messages[-1]["text"]
 
 
-def test_reconcile_network_error_keeps_processing_and_alerts_admin():
+@pytest.mark.asyncio
+async def test_reconcile_network_error_keeps_processing_and_alerts_admin():
     pending = make_pending()
     network_error = BitgetAPIError(code="network_error", message="Bitget network request error")
     trade_manager = FakeTradeManager(detail_exc=network_error)
@@ -360,7 +365,7 @@ def test_reconcile_network_error_keeps_processing_and_alerts_admin():
         trade_manager=trade_manager,
     )
 
-    summary = run(service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10))
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
     assert summary.deferred == 1
     assert pending_repo.failed == []
@@ -370,7 +375,8 @@ def test_reconcile_network_error_keeps_processing_and_alerts_admin():
     assert alerts.alerts
 
 
-def test_bitget_get_order_info_includes_product_type(monkeypatch):
+@pytest.mark.asyncio
+async def test_bitget_get_order_info_includes_product_type(monkeypatch):
     client = BitgetAPIClient("api", "secret", "pass")
     calls = []
 
@@ -380,16 +386,17 @@ def test_bitget_get_order_info_includes_product_type(monkeypatch):
 
     monkeypatch.setattr(client, "_make_request", fake_make_request)
 
-    run(client.get_order_info("BTCUSDT", client_order_id="KTB_tok"))
+    await client.get_order_info("BTCUSDT", client_order_id="KTB_tok")
 
     assert calls[-1]["endpoint"] == "/api/v2/mix/order/detail"
     assert calls[-1]["params"]["productType"] == "USDT-FUTURES"
     assert calls[-1]["params"]["clientOid"] == "KTB_tok"
 
-    run(client.close())
+    await client.close()
 
 
-def test_bitget_get_order_history_supports_client_order_id(monkeypatch):
+@pytest.mark.asyncio
+async def test_bitget_get_order_history_supports_client_order_id(monkeypatch):
     client = BitgetAPIClient("api", "secret", "pass")
     calls = []
 
@@ -399,17 +406,18 @@ def test_bitget_get_order_history_supports_client_order_id(monkeypatch):
 
     monkeypatch.setattr(client, "_make_request", fake_make_request)
 
-    run(client.get_order_history(symbol="BTCUSDT", client_order_id="KTB_tok", limit=20))
+    await client.get_order_history(symbol="BTCUSDT", client_order_id="KTB_tok", limit=20)
 
     assert calls[-1]["endpoint"] == "/api/v2/mix/order/orders-history"
     assert calls[-1]["params"]["productType"] == "USDT-FUTURES"
     assert calls[-1]["params"]["clientOid"] == "KTB_tok"
     assert calls[-1]["params"]["limit"] == "20"
 
-    run(client.close())
+    await client.close()
 
 
-def test_health_monitor_triggers_pending_order_reconciler(monkeypatch):
+@pytest.mark.asyncio
+async def test_health_monitor_triggers_pending_order_reconciler(monkeypatch):
     class FakeDb:
         async def health_check(self):
             return True
@@ -443,6 +451,6 @@ def test_health_monitor_triggers_pending_order_reconciler(monkeypatch):
         pending_order_reconciler=reconciler,
     )
 
-    run(TelegramBot._run_health_monitor_once(bot))
+    await TelegramBot._run_health_monitor_once(bot)
 
     assert reconciler.calls == [{"stale_after_seconds": 900, "limit": 10}]

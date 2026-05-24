@@ -1,7 +1,8 @@
-import asyncio
 import logging
 from decimal import Decimal
 from types import SimpleNamespace
+
+import pytest
 
 from app.bitget_api import BitgetTradeManager
 
@@ -43,34 +44,37 @@ class FakeOrderClient:
         return {"code": "00000", "data": {"orderId": "abc"}}
 
 
-def test_invalidate_user_client_closes_and_removes_cached_client():
+@pytest.mark.asyncio
+async def test_invalidate_user_client_closes_and_removes_cached_client():
     manager = BitgetTradeManager(SimpleNamespace())
     client = FakeCachedClient()
     manager._clients[123] = client
 
-    result = asyncio.run(manager.invalidate_user_client(123))
+    result = await manager.invalidate_user_client(123)
 
     assert result is True
     assert client.closed is True
     assert 123 not in manager._clients
 
 
-def test_invalidate_user_client_returns_false_when_no_cached_client():
+@pytest.mark.asyncio
+async def test_invalidate_user_client_returns_false_when_no_cached_client():
     manager = BitgetTradeManager(SimpleNamespace())
 
-    result = asyncio.run(manager.invalidate_user_client(123))
+    result = await manager.invalidate_user_client(123)
 
     assert result is False
     assert manager._clients == {}
 
 
-def test_invalidate_user_client_removes_cache_when_close_fails(caplog):
+@pytest.mark.asyncio
+async def test_invalidate_user_client_removes_cache_when_close_fails(caplog):
     manager = BitgetTradeManager(SimpleNamespace())
     client = FakeCachedClient(fail_close=True)
     manager._clients[123] = client
 
     with caplog.at_level(logging.WARNING):
-        result = asyncio.run(manager.invalidate_user_client(123))
+        result = await manager.invalidate_user_client(123)
 
     assert result is True
     assert client.closed is True
@@ -78,40 +82,44 @@ def test_invalidate_user_client_removes_cache_when_close_fails(caplog):
     assert "Failed to close cached Bitget client" in caplog.text
 
 
-def test_market_price_delegates_to_public_market_instance():
+@pytest.mark.asyncio
+async def test_market_price_delegates_to_public_market_instance():
     manager = BitgetTradeManager(SimpleNamespace())
     public_market = FakePublicMarket()
     manager.public_market = public_market
 
-    result = asyncio.run(manager.get_market_price("BTCUSDT"))
+    result = await manager.get_market_price("BTCUSDT")
 
     assert result == Decimal("123.45")
     assert public_market.calls == [("get_market_price", "BTCUSDT")]
 
 
-def test_trading_pairs_delegates_to_public_market_instance():
+@pytest.mark.asyncio
+async def test_trading_pairs_delegates_to_public_market_instance():
     manager = BitgetTradeManager(SimpleNamespace())
     public_market = FakePublicMarket()
     manager.public_market = public_market
 
-    result = asyncio.run(manager.get_trading_pairs("USDT-FUTURES", force_refresh=True))
+    result = await manager.get_trading_pairs("USDT-FUTURES", force_refresh=True)
 
     assert result == [{"symbol": "BTCUSDT"}]
     assert public_market.calls == [("get_trading_pairs", "USDT-FUTURES", True)]
 
 
-def test_contract_rules_delegates_to_public_market_instance():
+@pytest.mark.asyncio
+async def test_contract_rules_delegates_to_public_market_instance():
     manager = BitgetTradeManager(SimpleNamespace())
     public_market = FakePublicMarket()
     manager.public_market = public_market
 
-    result = asyncio.run(manager.get_contract_rules("BTCUSDT", "USDT-FUTURES"))
+    result = await manager.get_contract_rules("BTCUSDT", "USDT-FUTURES")
 
     assert result == {"symbol": "BTCUSDT", "productType": "USDT-FUTURES"}
     assert public_market.calls == [("get_contract_rules", "BTCUSDT", "USDT-FUTURES")]
 
 
-def test_market_order_formats_decimal_values_before_bitget_client():
+@pytest.mark.asyncio
+async def test_market_order_formats_decimal_values_before_bitget_client():
     manager = BitgetTradeManager(SimpleNamespace())
     client = FakeOrderClient()
 
@@ -120,16 +128,14 @@ def test_market_order_formats_decimal_values_before_bitget_client():
 
     manager._get_client = get_client
 
-    result = asyncio.run(
-        manager.place_market_order(
-            user_id=7,
-            encrypted_credentials=("api", "secret", "passphrase"),
-            symbol="BTCUSDT",
-            side="buy",
-            size="0.012",
-            client_order_id="KTB_test",
-            stop_loss_price=Decimal("79999.9000"),
-        )
+    result = await manager.place_market_order(
+        user_id=7,
+        encrypted_credentials=("api", "secret", "passphrase"),
+        symbol="BTCUSDT",
+        side="buy",
+        size="0.012",
+        client_order_id="KTB_test",
+        stop_loss_price=Decimal("79999.9000"),
     )
 
     assert result["code"] == "00000"
@@ -137,7 +143,8 @@ def test_market_order_formats_decimal_values_before_bitget_client():
     assert client.orders[-1]["stop_loss_price"] == "79999.9"
 
 
-def test_limit_order_formats_price_and_stop_loss_before_bitget_client():
+@pytest.mark.asyncio
+async def test_limit_order_formats_price_and_stop_loss_before_bitget_client():
     manager = BitgetTradeManager(SimpleNamespace())
     client = FakeOrderClient()
 
@@ -146,17 +153,15 @@ def test_limit_order_formats_price_and_stop_loss_before_bitget_client():
 
     manager._get_client = get_client
 
-    result = asyncio.run(
-        manager.place_limit_order(
-            user_id=7,
-            encrypted_credentials=("api", "secret", "passphrase"),
-            symbol="BTCUSDT",
-            side="sell",
-            size="0.02",
-            price="80200.1",
-            client_order_id="KTB_limit",
-            stop_loss_price=Decimal("81700.000"),
-        )
+    result = await manager.place_limit_order(
+        user_id=7,
+        encrypted_credentials=("api", "secret", "passphrase"),
+        symbol="BTCUSDT",
+        side="sell",
+        size="0.02",
+        price="80200.1",
+        client_order_id="KTB_limit",
+        stop_loss_price=Decimal("81700.000"),
     )
 
     assert result["code"] == "00000"

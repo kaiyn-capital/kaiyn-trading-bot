@@ -1,6 +1,7 @@
-import asyncio
 from decimal import Decimal
 from types import SimpleNamespace
+
+import pytest
 
 from app.bot_order_handlers import OrderHandlersMixin
 from app.order_interaction_service import ConfirmedOrderRequest
@@ -41,73 +42,76 @@ class FakeOrderHandler(OrderHandlersMixin):
         return self.service
 
 
-def test_place_order_callback_delegates_to_order_flow_service():
+@pytest.mark.asyncio
+async def test_place_order_callback_delegates_to_order_flow_service():
     handler = FakeOrderHandler()
     query = SimpleNamespace()
     user = SimpleNamespace(telegram_id=123)
 
-    result = asyncio.run(handler._handle_place_order_callback(query, user, "place_order_market_BTCUSDT_long_1_2_0.9"))
+    result = await handler._handle_place_order_callback(query, user, "place_order_market_BTCUSDT_long_1_2_0.9")
 
     assert result == "placed"
     assert handler.factory_calls == 1
     assert handler.service.calls == [("place", query, user, "place_order_market_BTCUSDT_long_1_2_0.9")]
 
 
-def test_confirm_pending_order_callback_delegates_to_order_flow_service():
+@pytest.mark.asyncio
+async def test_confirm_pending_order_callback_delegates_to_order_flow_service():
     handler = FakeOrderHandler()
     query = SimpleNamespace()
     user = SimpleNamespace(telegram_id=123)
 
-    result = asyncio.run(handler._handle_confirm_pending_order_callback(query, user, "confirm_order_tok_ready"))
+    result = await handler._handle_confirm_pending_order_callback(query, user, "confirm_order_tok_ready")
 
     assert result == "confirmed"
     assert handler.factory_calls == 1
     assert handler.service.calls == [("confirm", query, user, "confirm_order_tok_ready")]
 
 
-def test_cancel_pending_order_callback_delegates_to_order_flow_service():
+@pytest.mark.asyncio
+async def test_cancel_pending_order_callback_delegates_to_order_flow_service():
     handler = FakeOrderHandler()
     query = SimpleNamespace()
     user = SimpleNamespace(telegram_id=123)
 
-    result = asyncio.run(handler._handle_cancel_pending_order_callback(query, user, "cancel_order_tok_ready"))
+    result = await handler._handle_cancel_pending_order_callback(query, user, "cancel_order_tok_ready")
 
     assert result == "cancelled"
     assert handler.factory_calls == 1
     assert handler.service.calls == [("cancel", query, user, "cancel_order_tok_ready")]
 
 
-def test_send_private_message_delegates_to_order_flow_service():
+@pytest.mark.asyncio
+async def test_send_private_message_delegates_to_order_flow_service():
     handler = FakeOrderHandler()
     query = SimpleNamespace()
     user = SimpleNamespace(telegram_id=123)
     reply_markup = SimpleNamespace()
 
-    result = asyncio.run(handler._send_private_message(query, user, "hello", reply_markup))
+    result = await handler._send_private_message(query, user, "hello", reply_markup)
 
     assert result == "sent"
     assert handler.factory_calls == 1
     assert handler.service.calls == [("private", query, user, "hello", reply_markup)]
 
 
-def test_execute_order_delegates_confirmed_request_to_order_flow_service():
+@pytest.mark.asyncio
+async def test_execute_order_delegates_confirmed_request_to_order_flow_service():
     handler = FakeOrderHandler()
     query = SimpleNamespace()
     user = SimpleNamespace(telegram_id=123)
 
-    result = asyncio.run(
-        handler._execute_order(
-            query=query,
-            user=user,
-            symbol="BTCUSDT",
-            direction="long",
-            quantity=0.01,
-            stop_loss=79000,
-            position_value=800,
-            current_price=80000,
-            order_mode="market",
-            pending_order_token="tok_123",
-        )
+    result = await handler._execute_order(
+        query=query,
+        user=user,
+        symbol="BTCUSDT",
+        direction="long",
+        quantity=0.01,
+        stop_loss=79000,
+        position_value=800,
+        current_price=80000,
+        order_mode="market",
+        pending_order_token="tok_123",
     )
 
     assert result == "executed"

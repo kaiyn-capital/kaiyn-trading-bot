@@ -1,4 +1,3 @@
-import asyncio
 import os
 import subprocess
 from contextlib import asynccontextmanager
@@ -74,46 +73,44 @@ async def integration_database():
 
 
 @pytest.mark.integration
-def test_get_active_users_security_filter():
+@pytest.mark.asyncio
+async def test_get_active_users_security_filter():
     if not os.environ.get("TEST_DATABASE_URL"):
         pytest.skip("TEST_DATABASE_URL not set, skipping integration test")
 
-    async def scenario():
-        async with integration_database() as db:
-            # Seed an active user with sensitive credentials
-            async with db.get_session() as session:
-                user = User(
-                    telegram_id=123456789,
-                    username="test_user",
-                    first_name="Test",
-                    last_name="User",
-                    is_active=True,
-                    is_api_connected=True,
-                    is_trader=True,
-                    fixed_risk_amount=Decimal("100.5"),
-                    encrypted_api_key="sensitive_api_key",
-                    encrypted_secret_key="sensitive_secret_key",
-                    encrypted_passphrase="sensitive_passphrase",
-                )
-                session.add(user)
+    async with integration_database() as db:
+        # Seed an active user with sensitive credentials
+        async with db.get_session() as session:
+            user = User(
+                telegram_id=123456789,
+                username="test_user",
+                first_name="Test",
+                last_name="User",
+                is_active=True,
+                is_api_connected=True,
+                is_trader=True,
+                fixed_risk_amount=Decimal("100.5"),
+                encrypted_api_key="sensitive_api_key",
+                encrypted_secret_key="sensitive_secret_key",
+                encrypted_passphrase="sensitive_passphrase",
+            )
+            session.add(user)
 
-            user_repo = UserRepository(db)
-            active_users = await user_repo.get_active_users()
+        user_repo = UserRepository(db)
+        active_users = await user_repo.get_active_users()
 
-            assert len(active_users) >= 1
-            test_u = next(u for u in active_users if u["telegram_id"] == 123456789)
+        assert len(active_users) >= 1
+        test_u = next(u for u in active_users if u["telegram_id"] == 123456789)
 
-            # Verify non-sensitive fields are correct
-            assert test_u["username"] == "test_user"
-            assert test_u["first_name"] == "Test"
-            assert test_u["last_name"] == "User"
-            assert test_u["is_api_connected"] is True
-            assert test_u["is_trader"] is True
-            assert test_u["fixed_risk_amount"] == Decimal("100.5")
+        # Verify non-sensitive fields are correct
+        assert test_u["username"] == "test_user"
+        assert test_u["first_name"] == "Test"
+        assert test_u["last_name"] == "User"
+        assert test_u["is_api_connected"] is True
+        assert test_u["is_trader"] is True
+        assert test_u["fixed_risk_amount"] == Decimal("100.5")
 
-            # Verify sensitive fields are completely omitted
-            assert "encrypted_api_key" not in test_u
-            assert "encrypted_secret_key" not in test_u
-            assert "encrypted_passphrase" not in test_u
-
-    asyncio.run(scenario())
+        # Verify sensitive fields are completely omitted
+        assert "encrypted_api_key" not in test_u
+        assert "encrypted_secret_key" not in test_u
+        assert "encrypted_passphrase" not in test_u

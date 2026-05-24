@@ -1,6 +1,7 @@
-import asyncio
 from datetime import datetime, timedelta
 from types import SimpleNamespace
+
+import pytest
 
 from app.bot_api_setup_service import TelegramApiSetupService
 from app.bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
@@ -132,14 +133,15 @@ def make_context():
     return SimpleNamespace(bot=FakeBot())
 
 
-def test_api_setup_service_advances_key_and_secret_steps_with_refreshed_ttl():
+@pytest.mark.asyncio
+async def test_api_setup_service_advances_key_and_secret_steps_with_refreshed_ttl():
     harness = ApiSetupHarness()
     harness.session_owner.set_user_session(123, {"step": "api_key"})
     harness.session_owner.now += timedelta(seconds=30)
 
     key_update = make_update("valid-api-key-123")
     key_context = make_context()
-    key_result = asyncio.run(harness.service.set_api_key(key_update, key_context))
+    key_result = await harness.service.set_api_key(key_update, key_context)
 
     assert key_result == WAITING_SECRET_KEY
     assert harness.session_owner.user_sessions[123]["api_key"] == "valid-api-key-123"
@@ -148,14 +150,15 @@ def test_api_setup_service_advances_key_and_secret_steps_with_refreshed_ttl():
     harness.session_owner.now += timedelta(seconds=30)
     secret_update = make_update("valid-secret-key-123")
     secret_context = make_context()
-    secret_result = asyncio.run(harness.service.set_secret_key(secret_update, secret_context))
+    secret_result = await harness.service.set_secret_key(secret_update, secret_context)
 
     assert secret_result == WAITING_PASSPHRASE
     assert harness.session_owner.user_sessions[123]["secret_key"] == "valid-secret-key-123"
     assert harness.session_owner.user_sessions[123]["expires_at"] == harness.session_owner.now + timedelta(seconds=300)
 
 
-def test_api_setup_service_expired_passphrase_does_not_use_partial_credentials():
+@pytest.mark.asyncio
+async def test_api_setup_service_expired_passphrase_does_not_use_partial_credentials():
     harness = ApiSetupHarness()
     harness.session_owner.set_user_session(
         123,
@@ -169,7 +172,7 @@ def test_api_setup_service_expired_passphrase_does_not_use_partial_credentials()
     update = make_update("valid-passphrase")
     context = make_context()
 
-    result = asyncio.run(harness.service.set_passphrase(update, context))
+    result = await harness.service.set_passphrase(update, context)
 
     assert result == -1
     assert harness.session_owner.user_sessions == {}
@@ -178,7 +181,8 @@ def test_api_setup_service_expired_passphrase_does_not_use_partial_credentials()
     assert harness.trade_manager.connection_tests == []
 
 
-def test_api_setup_service_successful_passphrase_saves_credentials_and_invalidates_client():
+@pytest.mark.asyncio
+async def test_api_setup_service_successful_passphrase_saves_credentials_and_invalidates_client():
     harness = ApiSetupHarness()
     harness.session_owner.set_user_session(
         123,
@@ -191,7 +195,7 @@ def test_api_setup_service_successful_passphrase_saves_credentials_and_invalidat
     update = make_update("valid-passphrase")
     context = make_context()
 
-    result = asyncio.run(harness.service.set_passphrase(update, context))
+    result = await harness.service.set_passphrase(update, context)
 
     assert result == -1
     assert harness.session_owner.user_sessions == {}
