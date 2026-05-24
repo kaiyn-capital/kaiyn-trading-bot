@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy import func, select
 
 from ..models import PendingOrder
+from ..repository_types import PendingOrderRecord
 
 
 class PendingOrderRepository:
@@ -28,7 +29,7 @@ class PendingOrderRepository:
         position_value: Decimal,
         current_price: Decimal,
         expires_at: datetime,
-    ) -> PendingOrder:
+    ) -> PendingOrderRecord:
         """Create a pending order with a short callback token."""
         async with self.db.get_session() as session:
             for _ in range(5):
@@ -57,9 +58,9 @@ class PendingOrderRepository:
             )
             session.add(pending_order)
             await session.flush()
-            return pending_order
+            return pending_order_record_from_model(pending_order)
 
-    async def claim_pending_order(self, token: str, telegram_id: int) -> tuple[PendingOrder | None, str]:
+    async def claim_pending_order(self, token: str, telegram_id: int) -> tuple[PendingOrderRecord | None, str]:
         """Atomically claim a pending order for execution."""
         async with self.db.get_session() as session:
             result = await session.execute(
@@ -75,16 +76,17 @@ class PendingOrderRepository:
                 return None, "missing"
 
             if pending_order.status != "pending":
-                return pending_order, pending_order.status
+                return pending_order_record_from_model(pending_order), pending_order.status
 
             if pending_order.expires_at <= datetime.utcnow():
                 pending_order.status = "expired"
-                return pending_order, "expired"
+                await session.flush()
+                return pending_order_record_from_model(pending_order), "expired"
 
             pending_order.status = "processing"
             pending_order.updated_at = datetime.utcnow()
             await session.flush()
-            return pending_order, "processing"
+            return pending_order_record_from_model(pending_order), "processing"
 
     async def mark_executed(self, token: str, trade_id: int) -> bool:
         """Mark a pending order as executed."""
@@ -94,7 +96,7 @@ class PendingOrderRepository:
         """Mark a pending order as failed."""
         return await self._update_status(token, "failed", error_message=error_message)
 
-    async def get_stale_processing_orders(self, cutoff: datetime, limit: int) -> list[PendingOrder]:
+    async def get_stale_processing_orders(self, cutoff: datetime, limit: int) -> list[PendingOrderRecord]:
         """Return processing orders that have not changed since cutoff."""
         async with self.db.get_session() as session:
             result = await session.execute(
@@ -106,7 +108,7 @@ class PendingOrderRepository:
                 .order_by(PendingOrder.updated_at.asc())
                 .limit(limit)
             )
-            return list(result.scalars().all())
+            return [pending_order_record_from_model(order) for order in result.scalars().all()]
 
     async def count_stale_processing_orders(self, cutoff: datetime) -> int:
         """Count processing orders that have not changed since cutoff."""
@@ -160,3 +162,28 @@ class PendingOrderRepository:
             pending_order.error_message = error_message
             pending_order.updated_at = datetime.utcnow()
             return True
+
+
+def pending_order_record_from_model(order: PendingOrder) -> PendingOrderRecord:
+    return PendingOrderRecord(
+        id=order.id,
+        token=order.token,
+        user_id=order.user_id,
+        telegram_id=order.telegram_id,
+        symbol=order.symbol,
+        direction=order.direction,
+        order_mode=order.order_mode,
+        limit_price=order.limit_price,
+        entry_lower=order.entry_lower,
+        entry_upper=order.entry_upper,
+        quantity=order.quantity,
+        stop_loss=order.stop_loss,
+        position_value=order.position_value,
+        current_price=order.current_price,
+        status=order.status,
+        trade_id=order.trade_id,
+        error_message=order.error_message,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+        expires_at=order.expires_at,
+    )

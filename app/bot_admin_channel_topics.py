@@ -67,7 +67,7 @@ class AdminChannelTopics:
             await update.message.reply_text("❌ 无效的频道编号，请先使用 /admin_channels 查看列表")
             return
 
-        success = await self.bot.channel_repo.update_channel_topic(channel["chat_id"], message_thread_id, thread_title)
+        success = await self.bot.channel_repo.update_channel_topic(channel.chat_id, message_thread_id, thread_title)
         if not success:
             await emit_audit_event(
                 self.bot,
@@ -77,8 +77,8 @@ class AdminChannelTopics:
                     "status": "failed",
                     "reason": "repository_returned_false",
                     "channel_number": channel_index,
-                    "chat_id": channel["chat_id"],
-                    "channel_title": channel.get("title"),
+                    "chat_id": channel.chat_id,
+                    "channel_title": channel.title,
                     "message_thread_id": message_thread_id,
                     "thread_title": thread_title,
                 },
@@ -94,14 +94,14 @@ class AdminChannelTopics:
             {
                 "status": "success",
                 "channel_number": channel_index,
-                "chat_id": channel["chat_id"],
-                "channel_title": channel.get("title"),
+                "chat_id": channel.chat_id,
+                "channel_title": channel.title,
                 "message_thread_id": message_thread_id,
                 "thread_title": thread_title,
             },
         )
         await update.message.reply_text(
-            format_topic_set_html(channel["title"], message_thread_id, display_title),
+            format_topic_set_html(channel.title, message_thread_id, display_title),
             parse_mode=HTML_PARSE_MODE,
         )
 
@@ -147,7 +147,7 @@ class AdminChannelTopics:
             await update.message.reply_text("❌ 无效的频道编号，请先使用 /admin_channels 查看列表")
             return
 
-        success = await self.bot.channel_repo.clear_channel_topic(channel["chat_id"])
+        success = await self.bot.channel_repo.clear_channel_topic(channel.chat_id)
         if not success:
             await emit_audit_event(
                 self.bot,
@@ -157,8 +157,8 @@ class AdminChannelTopics:
                     "status": "failed",
                     "reason": "repository_returned_false",
                     "channel_number": channel_index,
-                    "chat_id": channel["chat_id"],
-                    "channel_title": channel.get("title"),
+                    "chat_id": channel.chat_id,
+                    "channel_title": channel.title,
                 },
             )
             await update.message.reply_text("❌ 清除指定话题失败，请稍后重试")
@@ -171,12 +171,12 @@ class AdminChannelTopics:
             {
                 "status": "success",
                 "channel_number": channel_index,
-                "chat_id": channel["chat_id"],
-                "channel_title": channel.get("title"),
+                "chat_id": channel.chat_id,
+                "channel_title": channel.title,
             },
         )
         await update.message.reply_text(
-            format_topic_cleared_html(channel["title"]),
+            format_topic_cleared_html(channel.title),
             parse_mode=HTML_PARSE_MODE,
         )
 

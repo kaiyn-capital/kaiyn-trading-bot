@@ -209,8 +209,8 @@ class TelegramOrderFlowService:
         if self.signal_record_repo:
             record = await self.signal_record_repo.get_by_public_id(token)
 
-        if not record or record.get("status") in {"cancelled", "expired", "preview_pending"}:
-            reason = "signal_not_found" if not record else f"signal_{record.get('status')}"
+        if not record or record.status in {"cancelled", "expired", "preview_pending"}:
+            reason = "signal_not_found" if not record else f"signal_{record.status}"
             await emit_audit_event(
                 self.audit_owner,
                 user,
@@ -231,11 +231,11 @@ class TelegramOrderFlowService:
 
         callback_data = OrderCallbackData(
             order_mode=order_mode,
-            symbol=record["symbol"],
-            direction=record["direction"],
-            entry_lower=to_decimal(record["entry_lower"]),
-            entry_upper=to_decimal(record["entry_upper"]),
-            stop_loss=to_decimal(record["stop_loss"]),
+            symbol=record.symbol,
+            direction=record.direction,
+            entry_lower=to_decimal(record.entry_lower),
+            entry_upper=to_decimal(record.entry_upper),
+            stop_loss=to_decimal(record.stop_loss),
         )
 
         await emit_audit_event(

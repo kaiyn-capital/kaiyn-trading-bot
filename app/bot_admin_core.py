@@ -92,14 +92,14 @@ class AdminCore:
 
             users_text = "👥 <b>用户列表</b>\n\n"
             for u in users_data[:20]:
-                api_status = "✅" if u.get("is_api_connected") else "❌"
-                first_name = html_escape(u.get("first_name") or "Unknown")
-                username = html_escape(u.get("username") or "N/A")
-                telegram_id = html_escape(u.get("telegram_id"))
-                created_at = u.get("created_at")
+                api_status = "✅" if u.is_api_connected else "❌"
+                first_name = html_escape(u.first_name or "Unknown")
+                username = html_escape(u.username or "N/A")
+                telegram_id = html_escape(u.telegram_id)
+                created_at = u.created_at
 
-                trader_status = " | ⭐️发单员" if u.get("is_trader") else ""
-                fixed_risk = u.get("fixed_risk_amount")
+                trader_status = " | ⭐️发单员" if u.is_trader else ""
+                fixed_risk = u.fixed_risk_amount
                 risk_status = f" | 1R: {html_escape(decimal_text(fixed_risk))} USDT" if fixed_risk is not None else ""
 
                 users_text += f"{api_status} {first_name} (@{username})\n"

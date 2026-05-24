@@ -45,8 +45,8 @@ from .database import (
 from .encryption import create_encryption_manager
 from .health import read_backup_health, read_maintenance_health
 from .log_sanitizer import summarize_telegram_update
-from .models import User
 from .order_reconciliation import PendingOrderReconciliationService
+from .repository_types import UserAccountRecord
 from .session_store import SessionStore
 
 logger = logging.getLogger(__name__)
@@ -188,7 +188,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         """Return whether a callback is restricted to admins."""
         return self._callback_router().is_admin_callback(data)
 
-    async def _get_or_create_user(self, update: Update) -> User:
+    async def _get_or_create_user(self, update: Update) -> UserAccountRecord:
         """Get or create the current Telegram user."""
         telegram_user = update.effective_user
         user = await self.user_repo.get_user_by_telegram_id(telegram_user.id)
@@ -223,7 +223,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             return update.effective_user.first_name or "Unknown"
         return "Unknown"
 
-    async def _log_user_action(self, user: User, action: str, details: dict | None = None):
+    async def _log_user_action(self, user: UserAccountRecord, action: str, details: dict | None = None):
         """Persist an audit-style user action log."""
         try:
             await self.system_log_repo.log(
@@ -244,7 +244,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 extra_data=details or {},
             )
 
-    async def _audit_action(self, user: User, action: str, details: dict | None = None):
+    async def _audit_action(self, user: UserAccountRecord, action: str, details: dict | None = None):
         """Persist an operator audit event."""
         try:
             await record_audit_event(self.system_log_repo, user, action, details or {})

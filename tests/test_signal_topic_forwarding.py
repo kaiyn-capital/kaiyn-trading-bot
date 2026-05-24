@@ -8,6 +8,66 @@ import app.bot_order_handlers as bot_order_handlers
 from app.bot_order_handlers import OrderHandlersMixin
 from app.bot_sessions import UserSessionMixin
 from app.config import Config
+from app.repository_types import ChannelRecord, SignalChannelMessageRecord, SignalRecordSnapshot
+
+
+def make_channel_record(**overrides):
+    data = {
+        "id": 1,
+        "chat_id": "-1001",
+        "chat_type": "channel",
+        "title": "signals",
+        "username": None,
+        "is_active": True,
+        "auto_forward_signals": True,
+        "forward_with_buttons": True,
+        "message_thread_id": 456,
+        "thread_title": None,
+        "added_by_user_id": 123,
+        "description": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+    data.update(overrides)
+    return ChannelRecord(**data)
+
+
+def signal_record_snapshot_from_data(data: dict) -> SignalRecordSnapshot:
+    now = data.get("created_at") or datetime.utcnow()
+    return SignalRecordSnapshot(
+        id=data["id"],
+        public_id=data["public_id"],
+        user_id=data["user_id"],
+        sender_telegram_id=data["sender_telegram_id"],
+        sender_username=data["sender_username"],
+        symbol=data["symbol"],
+        direction=data["direction"],
+        entry_lower=data["entry_lower"],
+        entry_upper=data["entry_upper"],
+        stop_loss=data["stop_loss"],
+        take_profit_levels=data["take_profit_levels"],
+        remark=data["remark"],
+        signal_text=data["signal_text"],
+        granularity=data["granularity"],
+        status=data["status"],
+        chart_status=data["chart_status"],
+        chart_error=data["chart_error"],
+        created_at=now,
+        updated_at=data.get("updated_at") or now,
+        confirmed_at=data.get("confirmed_at"),
+    )
+
+
+def channel_message_record_from_data(data: dict) -> SignalChannelMessageRecord:
+    return SignalChannelMessageRecord(
+        id=data["id"],
+        signal_record_id=data["signal_record_id"],
+        chat_id=data["chat_id"],
+        message_thread_id=data["message_thread_id"],
+        telegram_message_id=data["telegram_message_id"],
+        sent_as=data["sent_as"],
+        created_at=data.get("created_at"),
+    )
 
 
 class FakeMessage:
@@ -76,16 +136,8 @@ class RecordingCandleTradeManager:
 class FakeChannelRepo:
     async def get_signal_channels(self):
         return [
-            {
-                "chat_id": "-1001",
-                "forward_with_buttons": True,
-                "message_thread_id": 456,
-            },
-            {
-                "chat_id": "-1002",
-                "forward_with_buttons": True,
-                "message_thread_id": None,
-            },
+            make_channel_record(id=1, chat_id="-1001", message_thread_id=456),
+            make_channel_record(id=2, chat_id="-1002", message_thread_id=None),
         ]
 
 
@@ -96,7 +148,8 @@ class FakeSignalRecordRepo:
         self.next_id = 1
 
     async def get_by_public_id(self, public_id):
-        return self.records.get(public_id)
+        record = self.records.get(public_id)
+        return signal_record_snapshot_from_data(record) if record else None
 
     async def create_signal_record(
         self,
@@ -133,7 +186,7 @@ class FakeSignalRecordRepo:
         }
         self.records[public_id] = record
         self.next_id += 1
-        return record
+        return signal_record_snapshot_from_data(record)
 
     async def update_status(self, record_id, status):
         for record in self.records.values():
@@ -152,17 +205,23 @@ class FakeSignalRecordRepo:
         sent_as,
     ):
         message = {
+            "id": len(self.messages) + 1,
             "signal_record_id": signal_record_id,
             "chat_id": chat_id,
             "message_thread_id": message_thread_id,
             "telegram_message_id": telegram_message_id,
             "sent_as": sent_as,
+            "created_at": datetime.utcnow(),
         }
         self.messages.append(message)
-        return message
+        return channel_message_record_from_data(message)
 
     async def get_channel_messages(self, signal_record_id):
-        return [message for message in self.messages if message["signal_record_id"] == signal_record_id]
+        return [
+            channel_message_record_from_data(message)
+            for message in self.messages
+            if message["signal_record_id"] == signal_record_id
+        ]
 
 
 class FakeOrderHandler(OrderHandlersMixin, UserSessionMixin):

@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy import func, or_, select
 
 from ..models import Trade
+from ..repository_types import TradeRecord
 from ..risk_limits import build_daily_trade_limit_error
 
 RISK_LIMIT_ADVISORY_LOCK_NAMESPACE = 724019
@@ -24,7 +25,7 @@ class TradeRepository:
         quantity: Decimal,
         price: Decimal | None = None,
         client_order_id: str | None = None,
-    ) -> Trade:
+    ) -> TradeRecord:
         """創建新交易記錄"""
         async with self.db.get_session() as session:
             trade = Trade(
@@ -38,7 +39,7 @@ class TradeRepository:
             )
             session.add(trade)
             await session.flush()
-            return trade
+            return trade_record_from_model(trade)
 
     async def create_trade_with_daily_limit(
         self,
@@ -51,7 +52,7 @@ class TradeRepository:
         day_start_utc: datetime,
         price: Decimal | None = None,
         client_order_id: str | None = None,
-    ) -> Trade:
+    ) -> TradeRecord:
         """Create a trade after a transaction-scoped per-user daily limit check."""
         async with self.db.get_session() as session:
             await session.execute(select(func.pg_advisory_xact_lock(RISK_LIMIT_ADVISORY_LOCK_NAMESPACE, int(user_id))))
@@ -83,7 +84,7 @@ class TradeRepository:
             )
             session.add(trade)
             await session.flush()
-            return trade
+            return trade_record_from_model(trade)
 
     async def update_trade_result(
         self,
@@ -115,19 +116,20 @@ class TradeRepository:
 
             return True
 
-    async def get_user_trades(self, user_id: int, limit: int = 50) -> list[Trade]:
+    async def get_user_trades(self, user_id: int, limit: int = 50) -> list[TradeRecord]:
         """獲取用戶交易歷史"""
         async with self.db.get_session() as session:
             result = await session.execute(
                 select(Trade).where(Trade.user_id == user_id).order_by(Trade.created_at.desc()).limit(limit)
             )
-            return list(result.scalars().all())
+            return [trade_record_from_model(trade) for trade in result.scalars().all()]
 
-    async def get_by_client_order_id(self, client_order_id: str) -> Trade | None:
+    async def get_by_client_order_id(self, client_order_id: str) -> TradeRecord | None:
         """Return one trade by deterministic client order id."""
         async with self.db.get_session() as session:
             result = await session.execute(select(Trade).where(Trade.client_order_id == client_order_id))
-            return result.scalar_one_or_none()
+            trade = result.scalar_one_or_none()
+            return trade_record_from_model(trade) if trade else None
 
     async def count_daily_non_failed_trades(self, user_id: int, day_start_utc: datetime) -> int:
         """Count today's trades that still consume daily risk budget."""
@@ -147,3 +149,26 @@ class TradeRepository:
         """獲取用戶今日交易次數"""
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         return await self.count_daily_non_failed_trades(user_id, today)
+
+
+def trade_record_from_model(trade: Trade) -> TradeRecord:
+    return TradeRecord(
+        id=trade.id,
+        user_id=trade.user_id,
+        symbol=trade.symbol,
+        side=trade.side,
+        order_type=trade.order_type,
+        quantity=trade.quantity,
+        price=trade.price,
+        bitget_order_id=trade.bitget_order_id,
+        client_order_id=trade.client_order_id,
+        status=trade.status,
+        filled_quantity=trade.filled_quantity,
+        avg_price=trade.avg_price,
+        total_amount=trade.total_amount,
+        fee=trade.fee,
+        error_message=trade.error_message,
+        created_at=trade.created_at,
+        updated_at=trade.updated_at,
+        executed_at=trade.executed_at,
+    )

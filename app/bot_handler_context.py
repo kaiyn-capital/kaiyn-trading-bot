@@ -104,8 +104,8 @@ class BotHandlerContext:
     async def _create_signal_update_chart(self, signal, signal_time, granularity: str):
         return await self._owner._create_signal_update_chart(signal, signal_time, granularity)
 
-    def _get_active_channel_by_number(self, channels, channel_number: int):
-        return self._owner._get_active_channel_by_number(channels, channel_number)
+    async def _get_active_channel_by_number(self, channel_number: int):
+        return await self._owner._get_active_channel_by_number(channel_number)
 
     async def delete_channel_by_number(self, update, context):
         await self._owner.delete_channel_by_number(update, context)

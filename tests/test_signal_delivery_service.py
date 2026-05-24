@@ -4,7 +4,43 @@ import pytest
 from telegram.error import TelegramError
 
 from app.order_types import SignalDraft
+from app.repository_types import ChannelRecord, SignalChannelMessageRecord
 from app.signal_delivery_service import TELEGRAM_PHOTO_CAPTION_LIMIT, SignalDeliveryService
+
+
+def make_channel_record(**overrides):
+    data = {
+        "id": 1,
+        "chat_id": "-1001",
+        "chat_type": "channel",
+        "title": "signals",
+        "username": None,
+        "is_active": True,
+        "auto_forward_signals": True,
+        "forward_with_buttons": True,
+        "message_thread_id": 456,
+        "thread_title": None,
+        "added_by_user_id": 123,
+        "description": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+    data.update(overrides)
+    return ChannelRecord(**data)
+
+
+def make_channel_message_record(**overrides):
+    data = {
+        "id": 1,
+        "signal_record_id": 9,
+        "chat_id": "-1001",
+        "message_thread_id": 456,
+        "telegram_message_id": 777,
+        "sent_as": "photo",
+        "created_at": None,
+    }
+    data.update(overrides)
+    return SignalChannelMessageRecord(**data)
 
 
 class FakeBot:
@@ -30,13 +66,7 @@ class FakeBot:
 
 class FakeChannelRepo:
     def __init__(self, channels=None):
-        self.channels = channels or [
-            {
-                "chat_id": "-1001",
-                "forward_with_buttons": True,
-                "message_thread_id": 456,
-            }
-        ]
+        self.channels = channels or [make_channel_record()]
 
     async def get_signal_channels(self):
         return self.channels
@@ -167,13 +197,7 @@ async def test_forward_chart_update_replies_to_original_message():
         bot,
         b"png",
         "update text",
-        [
-            {
-                "chat_id": "-1001",
-                "message_thread_id": 456,
-                "telegram_message_id": 777,
-            }
-        ],
+        [make_channel_message_record()],
     )
 
     assert result["sent_count"] == 1
@@ -193,13 +217,7 @@ async def test_forward_chart_update_falls_back_to_regular_topic_send_when_reply_
         bot,
         b"png",
         "update text",
-        [
-            {
-                "chat_id": "-1001",
-                "message_thread_id": 456,
-                "telegram_message_id": 777,
-            }
-        ],
+        [make_channel_message_record()],
     )
 
     assert result["sent_count"] == 1

@@ -5,7 +5,29 @@ from app.bot_admin_channel_formatters import (
     format_manage_channels_html,
     manage_channels_keyboard,
 )
+from app.repository_types import ChannelRecord
 from app.telegram_formatting import html_escape
+
+
+def make_channel_record(**overrides):
+    data = {
+        "id": 1,
+        "chat_id": "-1001",
+        "chat_type": "channel",
+        "title": "Kaiyn",
+        "username": None,
+        "is_active": True,
+        "auto_forward_signals": True,
+        "forward_with_buttons": True,
+        "message_thread_id": None,
+        "thread_title": None,
+        "added_by_user_id": 123,
+        "description": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+    data.update(overrides)
+    return ChannelRecord(**data)
 
 
 def test_html_escape_handles_reserved_characters():
@@ -13,23 +35,26 @@ def test_html_escape_handles_reserved_characters():
 
 
 def test_format_channel_topic_uses_thread_title_or_default():
-    assert format_channel_topic({"message_thread_id": None, "thread_title": None}) == "未设置"
-    assert format_channel_topic({"message_thread_id": 456, "thread_title": "交易<信号>"}) == "交易&lt;信号&gt;"
-    assert format_channel_topic({"message_thread_id": 456, "thread_title": None}) == "456"
+    assert format_channel_topic(make_channel_record(message_thread_id=None, thread_title=None)) == "未设置"
+    assert (
+        format_channel_topic(make_channel_record(message_thread_id=456, thread_title="交易<信号>"))
+        == "交易&lt;信号&gt;"
+    )
+    assert format_channel_topic(make_channel_record(message_thread_id=456, thread_title=None)) == "456"
 
 
 def test_format_admin_channels_html_includes_channel_fields():
     text = format_admin_channels_html(
         [
-            {
-                "chat_id": "-1001",
-                "chat_type": "supergroup",
-                "title": "Kaiyn & Co",
-                "username": "kaiyn_group",
-                "auto_forward_signals": True,
-                "message_thread_id": 456,
-                "thread_title": "交易信号",
-            }
+            make_channel_record(
+                chat_id="-1001",
+                chat_type="supergroup",
+                title="Kaiyn & Co",
+                username="kaiyn_group",
+                auto_forward_signals=True,
+                message_thread_id=456,
+                thread_title="交易信号",
+            )
         ]
     )
 
@@ -45,15 +70,15 @@ def test_format_admin_channels_html_includes_channel_fields():
 def test_format_admin_channels_html_shows_missing_topic_and_disabled_forwarding():
     text = format_admin_channels_html(
         [
-            {
-                "chat_id": "-1002",
-                "chat_type": "channel",
-                "title": None,
-                "username": None,
-                "auto_forward_signals": False,
-                "message_thread_id": None,
-                "thread_title": None,
-            }
+            make_channel_record(
+                chat_id="-1002",
+                chat_type="channel",
+                title=None,
+                username=None,
+                auto_forward_signals=False,
+                message_thread_id=None,
+                thread_title=None,
+            )
         ]
     )
 

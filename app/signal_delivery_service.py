@@ -6,6 +6,7 @@ from telegram.error import TelegramError
 
 from .bot_keyboards import signal_order_keyboard
 from .order_types import SignalDraft
+from .repository_types import SignalChannelMessageRecord
 from .telegram_formatting import HTML_PARSE_MODE, html_escape
 
 logger = logging.getLogger(__name__)
@@ -44,14 +45,14 @@ class SignalDeliveryService:
 
             for channel_data in channels_data:
                 try:
-                    channel_markup = reply_markup if channel_data["forward_with_buttons"] else None
+                    channel_markup = reply_markup if channel_data.forward_with_buttons else None
                     send_kwargs = {}
-                    if channel_data.get("message_thread_id"):
-                        send_kwargs["message_thread_id"] = channel_data["message_thread_id"]
+                    if channel_data.message_thread_id:
+                        send_kwargs["message_thread_id"] = channel_data.message_thread_id
 
                     send_result = await self._send_channel_signal(
                         bot,
-                        channel_data["chat_id"],
+                        channel_data.chat_id,
                         signal,
                         signal_text,
                         channel_markup,
@@ -63,8 +64,8 @@ class SignalDeliveryService:
                     if signal_record_id and send_result.get("message_id"):
                         await self.signal_record_repo.add_channel_message(
                             signal_record_id=signal_record_id,
-                            chat_id=str(channel_data["chat_id"]),
-                            message_thread_id=channel_data.get("message_thread_id"),
+                            chat_id=str(channel_data.chat_id),
+                            message_thread_id=channel_data.message_thread_id,
                             telegram_message_id=send_result["message_id"],
                             sent_as=send_result["sent_as"],
                         )
@@ -73,15 +74,15 @@ class SignalDeliveryService:
                     failed_channels += 1
                     logger.warning(
                         "Failed to send signal to channel "
-                        f"{channel_data['chat_id']} "
-                        f"thread={channel_data.get('message_thread_id')}: {e}"
+                        f"{channel_data.chat_id} "
+                        f"thread={channel_data.message_thread_id}: {e}"
                     )
                 except (KeyError, RuntimeError, SQLAlchemyError, TypeError, ValueError) as e:
                     failed_channels += 1
                     logger.exception(
                         "Unexpected error while sending signal to channel "
-                        f"{channel_data['chat_id']} "
-                        f"thread={channel_data.get('message_thread_id')}: {e}"
+                        f"{channel_data.chat_id} "
+                        f"thread={channel_data.message_thread_id}: {e}"
                     )
 
         except SQLAlchemyError as e:
@@ -104,7 +105,7 @@ class SignalDeliveryService:
         bot,
         chart_bytes: bytes,
         update_text: str,
-        target_messages: list[dict],
+        target_messages: list[SignalChannelMessageRecord],
     ) -> dict:
         sent_count = 0
         failed_count = 0
@@ -113,30 +114,30 @@ class SignalDeliveryService:
 
         for target in target_messages:
             send_kwargs = {}
-            if target.get("message_thread_id"):
-                send_kwargs["message_thread_id"] = target["message_thread_id"]
+            if target.message_thread_id:
+                send_kwargs["message_thread_id"] = target.message_thread_id
 
             try:
                 await self._send_chart_update_photo(
                     bot,
-                    target["chat_id"],
+                    target.chat_id,
                     chart_bytes,
                     caption,
-                    reply_to_message_id=target["telegram_message_id"],
+                    reply_to_message_id=target.telegram_message_id,
                     send_kwargs=send_kwargs,
                 )
                 sent_count += 1
             except TelegramError as e:
                 logger.warning(
                     "Failed to send chart update as reply to channel %s message=%s: %s",
-                    target["chat_id"],
-                    target["telegram_message_id"],
+                    target.chat_id,
+                    target.telegram_message_id,
                     e,
                 )
                 try:
                     await self._send_chart_update_photo(
                         bot,
-                        target["chat_id"],
+                        target.chat_id,
                         chart_bytes,
                         caption,
                         reply_to_message_id=None,
@@ -148,7 +149,7 @@ class SignalDeliveryService:
                     failed_count += 1
                     logger.warning(
                         "Failed to send chart update fallback to channel %s: %s",
-                        target["chat_id"],
+                        target.chat_id,
                         fallback_error,
                     )
 

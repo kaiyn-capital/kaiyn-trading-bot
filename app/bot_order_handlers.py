@@ -114,8 +114,8 @@ class OrderHandlers:
                 {
                     "step": SIGNAL_PREVIEW_STEP,
                     "token": token,
-                    "signal_record_id": signal_record["id"],
-                    "signal_public_id": signal_record["public_id"],
+                    "signal_record_id": signal_record.id,
+                    "signal_public_id": signal_record.public_id,
                     "signal": signal,
                     "signal_text": signal_text,
                     "chart_bytes": chart_bytes,
@@ -138,7 +138,7 @@ class OrderHandlers:
                     "stop_loss": signal.stop_loss,
                     "take_profit_levels": signal.take_profit_levels,
                     "remark": signal.remark,
-                    "signal_id": signal_record["public_id"],
+                    "signal_id": signal_record.public_id,
                     "chart_status": chart_status,
                     "chart_error": chart_error,
                 },
@@ -181,11 +181,11 @@ class OrderHandlers:
                 await update.message.reply_text("❌ 只有原发单者或管理员可以更新这笔交易信号")
                 return
 
-            if record["status"] != "sent":
+            if record.status != "sent":
                 await update.message.reply_text("❌ 这笔交易信号尚未成功转发，无法更新图表")
                 return
 
-            target_messages = await self.bot.signal_record_repo.get_channel_messages(record["id"])
+            target_messages = await self.bot.signal_record_repo.get_channel_messages(record.id)
             if not target_messages:
                 await update.message.reply_text("❌ 找不到这笔交易信号的原始转发消息")
                 return
@@ -197,14 +197,14 @@ class OrderHandlers:
             signal = signal_record_service.signal_record_to_draft(record)
             try:
                 chart_bytes = await asyncio.wait_for(
-                    self.bot._create_signal_update_chart(signal, record["created_at"], record["granularity"]),
+                    self.bot._create_signal_update_chart(signal, record.created_at, record.granularity),
                     timeout=Config.SIGNAL_CHART_TIMEOUT_SECONDS,
                 )
             except ValueError:
                 await update.message.reply_text("❌ K 线资料不足，无法生成这笔交易的更新图表")
                 return
 
-            update_text = chart_update_message(record["public_id"], remark)
+            update_text = chart_update_message(record.public_id, remark)
             await self._mark_replaced_active_signal_preview(user.telegram_id)
             token = secrets.token_urlsafe(8)
             self.bot.set_user_session(
@@ -212,8 +212,8 @@ class OrderHandlers:
                 {
                     "step": CHART_UPDATE_PREVIEW_STEP,
                     "token": token,
-                    "signal_record_id": record["id"],
-                    "signal_public_id": record["public_id"],
+                    "signal_record_id": record.id,
+                    "signal_public_id": record.public_id,
                     "chart_bytes": chart_bytes,
                     "update_text": update_text,
                     "target_messages": target_messages,
@@ -232,7 +232,7 @@ class OrderHandlers:
                 "chart_update_preview_created",
                 {
                     "status": "pending",
-                    "signal_id": record["public_id"],
+                    "signal_id": record.public_id,
                     "target_count": len(target_messages),
                 },
             )

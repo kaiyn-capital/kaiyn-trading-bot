@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from ..decimal_utils import to_decimal
 from ..models import User
+from ..repository_types import UserAccountRecord, UserSummaryRecord
 
 
 class UserRepository:
@@ -18,13 +19,13 @@ class UserRepository:
         username: str | None = None,
         first_name: str | None = None,
         last_name: str | None = None,
-    ) -> User:
+    ) -> UserAccountRecord:
         """創建新用戶"""
         async with self.db.get_session() as session:
             result = await session.execute(select(User).where(User.telegram_id == telegram_id))
             existing_user = result.scalar_one_or_none()
             if existing_user:
-                return existing_user
+                return user_account_record_from_model(existing_user)
 
             user = User(
                 telegram_id=telegram_id,
@@ -34,13 +35,14 @@ class UserRepository:
             )
             session.add(user)
             await session.flush()
-            return user
+            return user_account_record_from_model(user)
 
-    async def get_user_by_telegram_id(self, telegram_id: int) -> User | None:
+    async def get_user_by_telegram_id(self, telegram_id: int) -> UserAccountRecord | None:
         """根據 Telegram ID 獲取用戶"""
         async with self.db.get_session() as session:
             result = await session.execute(select(User).where(User.telegram_id == telegram_id))
-            return result.scalar_one_or_none()
+            user = result.scalar_one_or_none()
+            return user_account_record_from_model(user) if user else None
 
     async def update_user_api_credentials(
         self,
@@ -94,7 +96,7 @@ class UserRepository:
             )
             return result.scalar_one_or_none() is not None
 
-    async def get_active_users(self) -> list[dict]:
+    async def get_active_users(self) -> list[UserSummaryRecord]:
         """獲取所有活躍用戶的概要資訊（不包含加密 API 金鑰等敏感資料）"""
         async with self.db.get_session() as session:
             result = await session.execute(
@@ -119,21 +121,45 @@ class UserRepository:
             )
             users = result.all()
             return [
-                {
-                    "id": u.id,
-                    "telegram_id": u.telegram_id,
-                    "username": u.username,
-                    "first_name": u.first_name,
-                    "last_name": u.last_name,
-                    "is_api_connected": u.is_api_connected,
-                    "daily_trade_limit": u.daily_trade_limit,
-                    "max_position_size": u.max_position_size,
-                    "default_stop_loss_percent": u.default_stop_loss_percent,
-                    "default_trade_amount": u.default_trade_amount,
-                    "fixed_risk_amount": u.fixed_risk_amount,
-                    "is_trader": u.is_trader,
-                    "created_at": u.created_at,
-                    "updated_at": u.updated_at,
-                }
+                UserSummaryRecord(
+                    id=u.id,
+                    telegram_id=u.telegram_id,
+                    username=u.username,
+                    first_name=u.first_name,
+                    last_name=u.last_name,
+                    is_api_connected=u.is_api_connected,
+                    daily_trade_limit=u.daily_trade_limit,
+                    max_position_size=u.max_position_size,
+                    default_stop_loss_percent=u.default_stop_loss_percent,
+                    default_trade_amount=u.default_trade_amount,
+                    fixed_risk_amount=u.fixed_risk_amount,
+                    is_trader=u.is_trader,
+                    created_at=u.created_at,
+                    updated_at=u.updated_at,
+                )
                 for u in users
             ]
+
+
+def user_account_record_from_model(user: User) -> UserAccountRecord:
+    return UserAccountRecord(
+        id=user.id,
+        telegram_id=user.telegram_id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        encrypted_api_key=user.encrypted_api_key,
+        encrypted_secret_key=user.encrypted_secret_key,
+        encrypted_passphrase=user.encrypted_passphrase,
+        is_active=user.is_active,
+        is_api_connected=user.is_api_connected,
+        daily_trade_limit=user.daily_trade_limit,
+        max_position_size=user.max_position_size,
+        default_stop_loss_percent=user.default_stop_loss_percent,
+        default_trade_amount=user.default_trade_amount,
+        fixed_risk_amount=user.fixed_risk_amount,
+        is_trader=user.is_trader,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+        last_login=user.last_login,
+    )

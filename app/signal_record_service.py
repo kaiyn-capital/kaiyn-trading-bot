@@ -5,6 +5,7 @@ from .bot_messages import signal_message
 from .config import Config
 from .decimal_utils import to_decimal
 from .order_types import SignalDraft
+from .repository_types import SignalRecordSnapshot
 
 SIGNAL_PUBLIC_ID_ALPHABET = string.ascii_lowercase + string.digits
 SIGNAL_PUBLIC_ID_LENGTH = 7
@@ -35,7 +36,7 @@ class SignalRecordService:
         sender_username: str,
         chart_status: str,
         chart_error: str | None,
-    ) -> tuple[dict, str]:
+    ) -> tuple[SignalRecordSnapshot, str]:
         for _ in range(10):
             public_id = self.public_id_generator()
             existing = await self.signal_record_repo.get_by_public_id(public_id)
@@ -65,16 +66,16 @@ class SignalRecordService:
         status = "sent" if sent_count > 0 else "send_failed"
         return await self.update_status(record_id, status)
 
-    def can_update_signal_record(self, user, record: dict) -> bool:
-        return self.is_admin_checker(user.telegram_id) or record["sender_telegram_id"] == user.telegram_id
+    def can_update_signal_record(self, user, record: SignalRecordSnapshot) -> bool:
+        return self.is_admin_checker(user.telegram_id) or record.sender_telegram_id == user.telegram_id
 
-    def signal_record_to_draft(self, record: dict) -> SignalDraft:
+    def signal_record_to_draft(self, record: SignalRecordSnapshot) -> SignalDraft:
         return SignalDraft(
-            symbol=record["symbol"],
-            direction=record["direction"],
-            entry_lower=to_decimal(record["entry_lower"]),
-            entry_upper=to_decimal(record["entry_upper"]),
-            stop_loss=to_decimal(record["stop_loss"]),
-            take_profit_levels=[to_decimal(tp) for tp in record["take_profit_levels"]],
-            remark=record.get("remark") or "",
+            symbol=record.symbol,
+            direction=record.direction,
+            entry_lower=to_decimal(record.entry_lower),
+            entry_upper=to_decimal(record.entry_upper),
+            stop_loss=to_decimal(record.stop_loss),
+            take_profit_levels=[to_decimal(tp) for tp in record.take_profit_levels],
+            remark=record.remark or "",
         )

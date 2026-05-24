@@ -1,5 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from .repository_types import ChannelRecord
 from .telegram_formatting import html_code, html_escape
 
 ADMIN_CHANNELS_EMPTY_MESSAGE = (
@@ -39,27 +40,27 @@ MANAGE_CHANNELS_EMPTY_MESSAGE = "📺 <b>管理频道</b>\n\n目前没有任何�
 DELETE_CHANNEL_PROMPT_MESSAGE = "🗑️ <b>删除频道</b>\n\n请输入要删除的频道编号："
 
 
-def format_channel_topic(channel) -> str:
-    message_thread_id = channel.get("message_thread_id")
+def format_channel_topic(channel: ChannelRecord) -> str:
+    message_thread_id = channel.message_thread_id
     if not message_thread_id:
         return "未设置"
-    return html_escape(str(channel.get("thread_title") or message_thread_id))
+    return html_escape(str(channel.thread_title or message_thread_id))
 
 
-def format_admin_channels_html(channels) -> str:
+def format_admin_channels_html(channels: list[ChannelRecord]) -> str:
     channels_text = "📺 <b>已管理的频道/群组</b>\n\n"
     for channel in channels:
-        status = "✅" if channel["auto_forward_signals"] else "❌"
-        title = html_escape(str(channel["title"] or "Unknown"))
-        chat_type = html_escape(str(channel["chat_type"]))
-        username = channel["username"]
+        status = "✅" if channel.auto_forward_signals else "❌"
+        title = html_escape(str(channel.title or "Unknown"))
+        chat_type = html_escape(str(channel.chat_type))
+        username = channel.username
 
         channels_text += f"{status} <b>{title}</b>\n"
         channels_text += f"   类型: {chat_type}\n"
-        channels_text += f"   ID: {html_code(channel['chat_id'])}\n"
+        channels_text += f"   ID: {html_code(channel.chat_id)}\n"
         if username:
             channels_text += f"   用户名: @{html_escape(str(username))}\n"
-        channels_text += f"   自动转发: {'开启' if channel['auto_forward_signals'] else '关闭'}\n"
+        channels_text += f"   自动转发: {'开启' if channel.auto_forward_signals else '关闭'}\n"
         channels_text += f"   指定话题: {format_channel_topic(channel)}\n\n"
 
     return channels_text
@@ -75,13 +76,13 @@ def format_manage_channels_html(channels_data) -> str:
     return f"{manage_text}\n请选择操作："
 
 
-def build_manage_channels_data(channels) -> list[dict]:
+def build_manage_channels_data(channels: list[ChannelRecord]) -> list[dict]:
     return [
         {
             "id": index,
-            "chat_id": channel["chat_id"],
-            "title": channel["title"] or "Unknown",
-            "username": channel["username"],
+            "chat_id": channel.chat_id,
+            "title": channel.title or "Unknown",
+            "username": channel.username,
         }
         for index, channel in enumerate(channels, 1)
     ]
