@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from telegram.error import TelegramError
 
 import app.bot_order_handlers as bot_order_handlers
 from app.bot_order_handlers import OrderHandlersMixin
@@ -50,7 +51,7 @@ class FakeBot:
 
     async def send_photo(self, **kwargs):
         if self.fail_photo:
-            raise RuntimeError("photo failed")
+            raise TelegramError("photo failed")
         self.sent_photos.append(kwargs)
         self.next_message_id += 1
         return SimpleNamespace(message_id=self.next_message_id)

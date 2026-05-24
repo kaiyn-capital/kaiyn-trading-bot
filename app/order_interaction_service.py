@@ -5,8 +5,10 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+from telegram.error import TelegramError
+
 from .audit import emit_audit_event, summarize_identifier
-from .bitget_errors import classify_bitget_exception
+from .bitget_errors import UNKNOWN_MESSAGE, BitgetAPIError, classify_bitget_exception
 from .bot_keyboards import pending_order_keyboard
 from .bot_messages import order_preview_message, order_success_message
 from .decimal_utils import decimal_json, to_decimal, to_decimal_or_none
@@ -127,7 +129,7 @@ class TelegramOrderFlowService:
                 },
             )
         except Exception as exc:
-            logger.error("Failed to log risk limit block: %s", exc)
+            logger.exception("Failed to log risk limit block: %s", exc)
 
     async def _send_risk_limit_block_message(
         self,
@@ -181,9 +183,9 @@ class TelegramOrderFlowService:
                 reply_markup=reply_markup,
                 parse_mode=HTML_PARSE_MODE,
             )
-        except Exception as e:
-            logger.error(f"Failed to send private message to {user.telegram_id}: {e}")
-            with contextlib.suppress(Exception):
+        except TelegramError as e:
+            logger.warning("Failed to send private message to %s: %s", user.telegram_id, e)
+            with contextlib.suppress(TelegramError):
                 await query.answer(f"请查看私人聊天: {text[:50]}...")
 
     async def handle_place_order_callback(self, query, user, data):
@@ -411,7 +413,7 @@ class TelegramOrderFlowService:
                 action="order_place_blocked",
                 position_value=e.details.get("position_value"),
             )
-        except Exception as e:
+        except BitgetAPIError as e:
             classified = classify_bitget_exception(e)
             logger.error(f"Place order callback error: {classified.storage_message()}")
             await self._record_bitget_failure_alert(
@@ -443,6 +445,26 @@ class TelegramOrderFlowService:
                 "❌ 无法获取 "
                 f"{html_escape(callback_data.symbol)} 当前价格或交易规则。\n\n"
                 f"{html_escape(classified.user_message)}",
+            )
+        except Exception as e:
+            logger.exception("Unexpected place order callback error")
+            await emit_audit_event(
+                self.audit_owner,
+                user,
+                "pending_order_create_failed",
+                {
+                    "status": "failed",
+                    "symbol": callback_data.symbol,
+                    "direction": callback_data.direction,
+                    "requested_order_mode": callback_data.order_mode,
+                    "error_category": "unexpected",
+                    "raw_message": str(e),
+                },
+            )
+            await self.send_private_message(
+                query,
+                user,
+                f"❌ 无法处理下单请求。\n\n{html_escape(UNKNOWN_MESSAGE)}",
             )
 
     async def handle_confirm_pending_order_callback(self, query, user, data):
@@ -812,12 +834,12 @@ class TelegramOrderFlowService:
                     },
                 )
             except Exception as log_error:
-                logger.error(f"Failed to log unknown Bitget order result: {log_error}")
+                logger.exception("Failed to log unknown Bitget order result: %s", log_error)
 
             await self.send_private_message(query, user, UNKNOWN_ORDER_RESULT_MESSAGE)
             return False
 
-        except Exception as e:
+        except BitgetAPIError as e:
             classified = classify_bitget_exception(e)
             logger.error(f"Order execution error: {classified.storage_message()}")
             await self._record_bitget_failure_alert(
@@ -874,11 +896,70 @@ class TelegramOrderFlowService:
                     },
                 )
             except Exception as log_error:
-                logger.error(f"Failed to log Bitget order error: {log_error}")
+                logger.exception("Failed to log Bitget order error: %s", log_error)
 
             await self.send_private_message(
                 query,
                 user,
                 f"❌ <b>下单失败</b>\n\n{html_escape(classified.user_message)}",
+            )
+            return False
+
+        except RuntimeError as e:
+            error_message = str(e)
+            logger.warning("Local order execution validation failed: %s", error_message)
+            if pending_order_token:
+                await self.pending_order_repo.mark_failed(pending_order_token, error_message)
+
+            await emit_audit_event(
+                self.audit_owner,
+                user,
+                "order_failed",
+                {
+                    "status": "failed",
+                    "symbol": symbol,
+                    "direction": direction,
+                    "quantity": quantity,
+                    "position_value": position_value,
+                    "order_mode": order_mode,
+                    "limit_price": limit_price,
+                    "pending_order_token": summarize_identifier(pending_order_token),
+                    "error_category": "local_validation",
+                    "raw_message": error_message,
+                },
+            )
+            await self.send_private_message(
+                query,
+                user,
+                "❌ <b>下单失败</b>\n\n订单参数或 API 设置异常，请重新点击最新信号下单。",
+            )
+            return False
+
+        except Exception as e:
+            logger.exception("Unexpected order execution error")
+            if pending_order_token:
+                await self.pending_order_repo.mark_failed(pending_order_token, f"unexpected_error: {type(e).__name__}")
+
+            await emit_audit_event(
+                self.audit_owner,
+                user,
+                "order_failed",
+                {
+                    "status": "failed",
+                    "symbol": symbol,
+                    "direction": direction,
+                    "quantity": quantity,
+                    "position_value": position_value,
+                    "order_mode": order_mode,
+                    "limit_price": limit_price,
+                    "pending_order_token": summarize_identifier(pending_order_token),
+                    "error_category": "unexpected",
+                    "raw_message": str(e),
+                },
+            )
+            await self.send_private_message(
+                query,
+                user,
+                f"❌ <b>下单失败</b>\n\n{html_escape(UNKNOWN_MESSAGE)}",
             )
             return False

@@ -376,6 +376,26 @@ async def test_reconcile_network_error_keeps_processing_and_alerts_admin():
 
 
 @pytest.mark.asyncio
+async def test_reconcile_unexpected_query_error_keeps_processing_and_alerts_admin():
+    pending = make_pending()
+    trade_manager = FakeTradeManager(detail_exc=RuntimeError("local parser broke"))
+    service, pending_repo, trade_repo, _manager, bot, logs, alerts = make_service(
+        pending_orders=[pending],
+        trade_manager=trade_manager,
+    )
+
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
+
+    assert summary.deferred == 1
+    assert pending_repo.failed == []
+    assert pending_repo.executed == []
+    assert trade_repo.updated == []
+    assert bot.messages == []
+    assert alerts.alerts
+    assert logs.logs[-1]["extra_data"]["exception_type"] == "RuntimeError"
+
+
+@pytest.mark.asyncio
 async def test_bitget_get_order_info_includes_product_type(monkeypatch):
     client = BitgetAPIClient("api", "secret", "pass")
     calls = []

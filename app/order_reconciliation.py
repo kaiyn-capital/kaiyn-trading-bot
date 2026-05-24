@@ -4,8 +4,10 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+from telegram.error import TelegramError
+
 from .audit import summarize_identifier
-from .bitget_errors import ClassifiedBitgetError, classify_bitget_exception
+from .bitget_errors import BitgetAPIError, ClassifiedBitgetError, classify_bitget_exception
 from .decimal_utils import to_decimal_or_none
 from .order_flow import build_client_order_id
 from .telegram_formatting import HTML_PARSE_MODE, html_escape
@@ -100,9 +102,14 @@ class PendingOrderReconciliationService:
 
         try:
             order_data = await self._find_bitget_order(user, credentials, pending_order, client_order_id)
-        except Exception as exc:
+        except BitgetAPIError as exc:
             classified = classify_bitget_exception(exc)
             await self._record_query_failure(pending_order, client_order_id, classified)
+            return "deferred"
+        except Exception as exc:
+            logger.exception("Unexpected error while reconciling processing order")
+            classified = classify_bitget_exception(exc)
+            await self._record_unexpected_failure(pending_order, client_order_id, classified, exc)
             return "deferred"
 
         if order_data is None:
@@ -161,7 +168,7 @@ class PendingOrderReconciliationService:
             data = detail.get("data") or {}
             if data:
                 return data
-        except Exception as exc:
+        except BitgetAPIError as exc:
             if not _is_order_not_found_error(exc):
                 raise
 
@@ -174,7 +181,7 @@ class PendingOrderReconciliationService:
                 product_type="USDT-FUTURES",
                 client_order_id=client_order_id,
             )
-        except Exception as exc:
+        except BitgetAPIError as exc:
             if _is_order_not_found_error(exc):
                 return None
             raise
@@ -245,6 +252,23 @@ class PendingOrderReconciliationService:
             {"classified_error": classified.to_log_data()},
         )
 
+    async def _record_unexpected_failure(
+        self,
+        pending_order,
+        client_order_id: str,
+        classified: ClassifiedBitgetError,
+        exc: Exception,
+    ):
+        await self._defer_with_admin_alert(
+            pending_order,
+            client_order_id,
+            "Cannot reconcile processing order because an unexpected local error occurred",
+            {
+                "classified_error": classified.to_log_data(),
+                "exception_type": type(exc).__name__,
+            },
+        )
+
     async def _defer_with_admin_alert(self, pending_order, client_order_id: str, message: str, extra_data: dict):
         await self._log_reconciliation_event("WARNING", message, pending_order, client_order_id, extra_data)
         await self.alert_manager.send_alert(
@@ -259,8 +283,8 @@ class PendingOrderReconciliationService:
     async def _notify_user_to_retry(self, telegram_id: int):
         try:
             await self.bot.send_message(chat_id=telegram_id, text=RETRY_ORDER_MESSAGE, parse_mode=HTML_PARSE_MODE)
-        except Exception as exc:
-            logger.error("Failed to notify user about failed processing order: %s", exc)
+        except TelegramError as exc:
+            logger.warning("Failed to notify user about failed processing order: %s", exc)
 
     async def _log_reconciliation_event(
         self,
@@ -286,7 +310,7 @@ class PendingOrderReconciliationService:
                 },
             )
         except Exception as exc:
-            logger.error("Failed to persist order reconciliation log: %s", exc)
+            logger.exception("Failed to persist order reconciliation log: %s", exc)
 
 
 def _has_api_credentials(user) -> bool:

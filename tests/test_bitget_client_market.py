@@ -1,6 +1,15 @@
 import pytest
 
 from app.bitget_client import BitgetAPIClient
+from app.bitget_errors import BitgetAPIError
+
+
+class FakeResponse:
+    status_code = 200
+    text = "not-json"
+
+    def json(self):
+        raise ValueError("invalid json")
 
 
 @pytest.mark.asyncio
@@ -24,6 +33,25 @@ async def test_get_ticker_includes_default_product_type(monkeypatch):
             "data": None,
         }
     ]
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_make_request_wraps_invalid_json_as_bitget_error(monkeypatch):
+    client = BitgetAPIClient("api", "secret", "pass")
+
+    async def fake_get(*args, **kwargs):
+        return FakeResponse()
+
+    monkeypatch.setattr(client.client, "get", fake_get)
+
+    with pytest.raises(BitgetAPIError) as error:
+        await client.get_ticker("BTCUSDT")
+
+    assert error.value.code == "200"
+    assert error.value.endpoint == "/api/v2/mix/market/ticker"
+    assert "Invalid JSON response" in error.value.message
 
     await client.close()
 

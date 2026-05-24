@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from .bitget_errors import ClassifiedBitgetError, classify_bitget_exception
+from .bitget_errors import BitgetAPIError, ClassifiedBitgetError, classify_bitget_exception
 from .decimal_utils import decimal_text, to_decimal
 from .order_types import (
     ContractRules,
@@ -327,8 +327,14 @@ async def execute_order(
             )
 
         if not result or result.get("code") != "00000":
-            error_msg = f"Order failed for {symbol}: {result.get('msg', 'Unknown error') if result else 'No response'}"
-            raise RuntimeError(error_msg)
+            message = result.get("msg", "Unknown error") if result else "No response"
+            raise BitgetAPIError(
+                code=str(result.get("code") or "no_response") if result else "no_response",
+                message=f"Order failed for {symbol}: {message}",
+                data=result or {},
+                endpoint="/api/v2/mix/order/place-order",
+                method="POST",
+            )
 
         order_data = result.get("data", {})
         bitget_order_id = order_data.get("orderId", "")
@@ -352,7 +358,7 @@ async def execute_order(
             limit_price=order_price,
         )
 
-    except Exception as exc:
+    except BitgetAPIError as exc:
         classified = classify_bitget_exception(exc)
         if exchange_submission_started and classified.is_retryable:
             raise OrderExecutionUnknownResult(classified, trade_record_id, client_order_id) from exc

@@ -78,7 +78,17 @@ class BitgetPublicMarket:
             response = await self.client.get(url, params=params)
 
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except ValueError as e:
+                    raise BitgetAPIError(
+                        code="invalid_json_response",
+                        message=f"Invalid JSON response from Bitget HTTP {response.status_code}",
+                        data={"response": response.text[:1000]},
+                        http_status=response.status_code,
+                        endpoint=endpoint,
+                        method="GET",
+                    ) from e
 
                 tickers = data.get("data")
                 if data.get("code") == "00000" and tickers:
@@ -107,7 +117,19 @@ class BitgetPublicMarket:
                             method="GET",
                         )
 
-                    price = to_decimal(last_price)
+                    try:
+                        price = to_decimal(last_price)
+                    except ValueError as e:
+                        error_msg = f"Bitget ticker response has invalid lastPr for {normalized_symbol}"
+                        logger.error(error_msg)
+                        raise BitgetAPIError(
+                            code="invalid_ticker_response",
+                            message=error_msg,
+                            data=data,
+                            http_status=response.status_code,
+                            endpoint=endpoint,
+                            method="GET",
+                        ) from e
                     logger.info(f"Found price for {normalized_symbol}: {price}")
                     return price
                 if data.get("code") == "00000":
@@ -164,22 +186,38 @@ class BitgetPublicMarket:
             ) from e
         except BitgetAPIError:
             raise
-        except Exception as e:
-            error_msg = f"Failed to get futures market price for {normalized_symbol}: {e}"
-            logger.error(error_msg)
-            raise Exception(error_msg) from e
 
     async def get_trading_pairs(self, product_type: str = "USDT-FUTURES", force_refresh: bool = False) -> list[dict]:
         cached = self._contracts_cache.get(product_type)
         if not force_refresh and cached and time.time() - cached["cached_at"] < self._contracts_cache_ttl_seconds:
             return cached["data"]
 
+        endpoint = "/api/v2/mix/market/contracts"
+        params = {"productType": product_type}
         try:
-            response = await self.client.get(
-                f"{Config.BITGET_API_URL}/api/v2/mix/market/contracts?productType={product_type}"
-            )
-            response.raise_for_status()
-            data = response.json()
+            response = await self.client.get(f"{Config.BITGET_API_URL}{endpoint}", params=params)
+            if response.status_code != 200:
+                error_msg = f"HTTP {response.status_code}: {response.text}"
+                logger.error(error_msg)
+                raise BitgetAPIError(
+                    code=str(response.status_code),
+                    message=error_msg,
+                    data={"response": response.text[:1000]},
+                    http_status=response.status_code,
+                    endpoint=endpoint,
+                    method="GET",
+                )
+            try:
+                data = response.json()
+            except ValueError as e:
+                raise BitgetAPIError(
+                    code="invalid_json_response",
+                    message=f"Invalid JSON response from Bitget HTTP {response.status_code}",
+                    data={"response": response.text[:1000]},
+                    http_status=response.status_code,
+                    endpoint=endpoint,
+                    method="GET",
+                ) from e
 
             if data.get("code") == "00000":
                 contracts = data.get("data", [])
@@ -194,7 +232,7 @@ class BitgetPublicMarket:
                     message=data.get("msg", "Failed to get futures trading pairs"),
                     data=data,
                     http_status=response.status_code,
-                    endpoint="/api/v2/mix/market/contracts",
+                    endpoint=endpoint,
                     method="GET",
                 )
 
@@ -204,7 +242,7 @@ class BitgetPublicMarket:
                 code="timeout",
                 message="Bitget request timeout",
                 data={"product_type": product_type},
-                endpoint="/api/v2/mix/market/contracts",
+                endpoint=endpoint,
                 method="GET",
             ) from e
         except httpx.RequestError as e:
@@ -213,11 +251,10 @@ class BitgetPublicMarket:
                 code="network_error",
                 message="Bitget network request error",
                 data={"product_type": product_type},
-                endpoint="/api/v2/mix/market/contracts",
+                endpoint=endpoint,
                 method="GET",
             ) from e
-        except Exception as e:
-            logger.error(f"Failed to get futures trading pairs: {e}")
+        except BitgetAPIError:
             raise
 
     async def get_candles(
@@ -257,7 +294,17 @@ class BitgetPublicMarket:
                     method="GET",
                 )
 
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError as e:
+                raise BitgetAPIError(
+                    code="invalid_json_response",
+                    message=f"Invalid JSON response from Bitget HTTP {response.status_code}",
+                    data={"response": response.text[:1000]},
+                    http_status=response.status_code,
+                    endpoint=endpoint,
+                    method="GET",
+                ) from e
             if data.get("code") != "00000":
                 error_msg = f"API returned error: {data}"
                 logger.error(error_msg)

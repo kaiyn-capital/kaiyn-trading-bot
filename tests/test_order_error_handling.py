@@ -7,15 +7,6 @@ from app.order_flow import OrderExecutionUnknownResult, execute_order
 from app.order_interaction_service import ConfirmedOrderRequest, TelegramOrderFlowService
 
 
-class FakeBitgetAPIError(Exception):
-    def __init__(self, code, message, http_status=None, data=None):
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.http_status = http_status
-        self.data = data or {}
-
-
 class FakeTradeRecord:
     id = 77
 
@@ -43,10 +34,10 @@ class FakeTradeRepo:
 
 class RejectingTradeManager:
     async def place_market_order(self, *args, **kwargs):
-        raise FakeBitgetAPIError("43012", "insufficient balance")
+        raise BitgetAPIError("43012", "insufficient balance")
 
     async def place_limit_order(self, *args, **kwargs):
-        raise FakeBitgetAPIError("43012", "insufficient balance")
+        raise BitgetAPIError("43012", "insufficient balance")
 
 
 class TimeoutTradeManager:
@@ -61,7 +52,7 @@ class TimeoutTradeManager:
 async def test_execute_order_marks_trade_failed_with_classified_error():
     trade_repo = FakeTradeRepo()
 
-    with pytest.raises(FakeBitgetAPIError):
+    with pytest.raises(BitgetAPIError):
         await execute_order(
             user_data=SimpleNamespace(id=7),
             trade_repo=trade_repo,
