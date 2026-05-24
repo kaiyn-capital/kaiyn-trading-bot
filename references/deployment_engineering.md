@@ -14,8 +14,9 @@
 - PostgreSQL、Alembic migration、async SQLAlchemy。
 - `pyproject.toml` 作為 Python 依賴宣告來源，`uv.lock` 作為鎖定檔。
 - Ruff 作為 Python lint 與 format 工具。
+- mypy 作為下單 critical path 的靜態型別檢查工具。
 - pytest 作為測試框架，包含純邏輯、handler 與 PostgreSQL integration tests。
-- GitHub Actions CI，以 Docker Compose 執行 Ruff、pytest、DB integration、py_compile 與 whitespace 檢查。
+- GitHub Actions CI，以 Docker Compose 執行 lockfile、Alembic migration/model、Ruff、mypy、DB integration、coverage output、py_compile 與 whitespace 檢查。
 - GitHub Actions CD，在 CI 通過後發布 GHCR multi-arch image，並透過 SSH 以 image digest 部署到 DigitalOcean VPS。
 - Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 merge。
 - DigitalOcean VPS、SSH CD 與 backup/restore runbooks，涵蓋首次部署、更新、rollback、備份拉取、還原驗證與故障處理。
@@ -78,10 +79,13 @@ CI 執行項目：
 docker compose version
 docker compose build test
 docker compose up -d postgres
+docker compose run --rm test alembic upgrade head
+docker compose run --rm test alembic check
 docker compose run --rm test uv lock --check
 docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
-docker compose run --rm test python -m pytest --run-db
+docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
+docker compose run --rm test python -m pytest --run-db --cov --cov-report=xml:coverage.xml
 docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
 git diff --check
 docker compose down -v --remove-orphans
@@ -143,6 +147,12 @@ make test
 make test-db
 make lint
 make format-check
+make mypy
+make lock-check
+make migrate-test
+make alembic-check
+make py-compile
+make diff-check
 make migrate
 make check-db
 make up
@@ -150,7 +160,7 @@ make logs
 make deploy-image
 ```
 
-- `make verify` 執行完整 Docker-first 檢查。
+- `make verify` 執行完整 Docker-first 檢查：test image build、lockfile、migration、Alembic model consistency、Ruff、mypy、PostgreSQL integration tests、py_compile 與 whitespace。
 - `make deploy` 執行 build、PostgreSQL startup、migration、DB check 與服務啟動。
 - `make deploy-image` 使用 `BOT_IMAGE=<ghcr image digest>` 執行 image-based production deployment。
 - CI 維持直接執行 Docker Compose 命令，避免 CI 行為被 Makefile abstraction 隱藏。

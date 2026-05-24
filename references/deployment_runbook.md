@@ -290,10 +290,13 @@ make verify
 
 ```bash
 docker compose build test
-docker compose up -d postgres
 docker compose run --rm test uv lock --check
+docker compose up -d postgres
+docker compose run --rm test alembic upgrade head
+docker compose run --rm test alembic check
 docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
+docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
 docker compose run --rm test python -m pytest --run-db
 docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
 git diff --check
