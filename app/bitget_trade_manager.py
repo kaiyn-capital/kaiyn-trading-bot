@@ -1,5 +1,8 @@
+import contextlib
 import logging
 from decimal import Decimal
+
+import httpx
 
 from .bitget_client import BitgetAPIClient
 from .bitget_errors import BitgetAPIError, classify_bitget_exception
@@ -35,7 +38,7 @@ class BitgetTradeManager:
 
         try:
             await client.close()
-        except Exception:
+        except (RuntimeError, httpx.HTTPError):
             logger.warning("Failed to close cached Bitget client for user_id=%s", user_id, exc_info=True)
 
         return True
@@ -56,34 +59,39 @@ class BitgetTradeManager:
         except BitgetAPIError as e:
             classified = classify_bitget_exception(e)
             return False, classified.user_message
-        except Exception as e:
+        except (TypeError, ValueError) as e:
             logger.error(f"API 連接測試失敗: {e}")
             classified = classify_bitget_exception(e)
             return False, classified.user_message
         finally:
             if client:
-                await client.close()
+                with contextlib.suppress(RuntimeError, httpx.HTTPError):
+                    await client.close()
 
     async def get_account_balance(self, user_id: int, encrypted_credentials: tuple[str, str, str]) -> dict:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.get_account_assets()
 
     async def get_user_uid(self, encrypted_credentials: tuple[str, str, str]) -> str:
+        client = None
         try:
             api_key, secret_key, passphrase = self.encryption_manager.decrypt_api_credentials(*encrypted_credentials)
             client = BitgetAPIClient(api_key, secret_key, passphrase)
 
             result = await client.get_account_uid()
-            await client.close()
 
             if result.get("code") == "00000" and result.get("data"):
                 return result["data"].get("userId", "Unknown")
             else:
                 return "Unknown"
 
-        except Exception as e:
+        except (BitgetAPIError, TypeError, ValueError) as e:
             logger.error(f"Failed to get user UID: {e}")
             return "Unknown"
+        finally:
+            if client:
+                with contextlib.suppress(RuntimeError, httpx.HTTPError):
+                    await client.close()
 
     async def get_market_price(self, symbol: str) -> Decimal:
         return to_decimal(await self.public_market.get_market_price(symbol))

@@ -30,7 +30,7 @@ class FakeQuery:
 
     async def edit_message_caption(self, caption, **kwargs):
         if self.fail_caption_edit:
-            raise RuntimeError("caption edit failed")
+            raise TelegramError("caption edit failed")
         self.caption_edits.append({"caption": caption, "kwargs": kwargs})
 
     async def edit_message_text(self, text, **kwargs):

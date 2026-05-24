@@ -76,7 +76,7 @@ def parse_log_extra_data(log_entry: Any) -> dict[str, Any]:
         try:
             data = log_entry.get_extra_data()
             return data if isinstance(data, dict) else {}
-        except Exception:
+        except (AttributeError, json.JSONDecodeError, TypeError):
             return {}
 
     raw_data = getattr(log_entry, "extra_data", None)

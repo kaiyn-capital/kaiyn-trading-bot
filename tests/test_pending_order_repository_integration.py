@@ -36,6 +36,7 @@ class IntegrationDatabaseManager:
         try:
             yield session
             await session.commit()
+        # Roll back for assertion failures or setup errors raised inside the test transaction.
         except Exception:
             await session.rollback()
             raise

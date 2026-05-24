@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from .config import Config
 from .telegram_formatting import html_escape
 
@@ -75,7 +77,7 @@ def read_backup_health(
         try:
             with status_path.open("r", encoding="utf-8") as file:
                 data = json.load(file)
-        except Exception as exc:
+        except (OSError, json.JSONDecodeError) as exc:
             return BackupHealth("invalid", f"备份状态文件无法读取：{exc}")
 
         status = str(data.get("status") or "invalid")
@@ -248,7 +250,7 @@ def _count_bitget_categories(logs: list) -> dict[str, int]:
         try:
             extra_data = log.get_extra_data()
             category = extra_data.get("classified_error", {}).get("category") or extra_data.get("category")
-        except Exception:
+        except (AttributeError, json.JSONDecodeError, TypeError):
             category = None
         if category:
             counts[category] = counts.get(category, 0) + 1
@@ -262,7 +264,7 @@ async def _count_stale_processing_orders(pending_order_repo, now: datetime) -> i
     try:
         result = await pending_order_repo.count_stale_processing_orders(cutoff)
         return int(result) if result is not None else None
-    except Exception:
+    except SQLAlchemyError:
         return None
 
 

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, func, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .config import Config
@@ -76,6 +77,7 @@ class DatabaseManager:
         try:
             yield session
             await session.commit()
+        # Roll back for any caller exception raised inside the transaction context.
         except Exception as e:
             await session.rollback()
             logger.error(f"Database session error: {e}")
@@ -89,7 +91,7 @@ class DatabaseManager:
             async with self.get_session() as session:
                 await session.execute(text("SELECT 1"))
             return True
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"Database health check failed: {e}")
             return False
 
@@ -227,6 +229,6 @@ async def health_check() -> bool:
     try:
         manager = get_db_manager()
         return await manager.health_check()
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Database health check failed: {e}")
         return False

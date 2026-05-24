@@ -1,6 +1,8 @@
 import logging
 
+from sqlalchemy.exc import SQLAlchemyError
 from telegram import Update
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from .audit import AUDIT_MODULE, format_audit_log_entry
@@ -41,7 +43,7 @@ class AdminMonitoring:
             await update.message.reply_text(
                 "📋 近期操作审计\n\n" + "\n".join(f"{index}. {line}" for index, line in enumerate(lines, 1))
             )
-        except Exception as e:
+        except (SQLAlchemyError, TelegramError, TypeError, ValueError) as e:
             logger.error(f"Admin audit command error: {e}")
             await update.message.reply_text(f"❌ 获取操作审计时发生错误: {str(e)}")
 
@@ -59,7 +61,7 @@ class AdminMonitoring:
                 pending_order_repo=getattr(self.bot, "pending_order_repo", None),
             )
             await update.message.reply_text(report, parse_mode=HTML_PARSE_MODE)
-        except Exception as e:
+        except (SQLAlchemyError, TelegramError, TypeError, ValueError) as e:
             logger.error(f"Admin health command error: {e}")
             await update.message.reply_text(f"❌ 获取健康状态时发生错误: {str(e)}")
 

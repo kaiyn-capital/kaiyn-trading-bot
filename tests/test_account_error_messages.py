@@ -2,16 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.bitget_errors import BitgetAPIError
 from app.bot_account_handlers import AccountHandlersMixin
-
-
-class FakeBitgetAPIError(Exception):
-    def __init__(self, code, message, http_status=None, data=None):
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.http_status = http_status
-        self.data = data or {}
 
 
 class FakeMessage:
@@ -24,7 +16,7 @@ class FakeMessage:
 
 class FakeTradeManager:
     async def get_account_balance(self, user_id, credentials):
-        raise FakeBitgetAPIError("40001", "invalid API key or permission")
+        raise BitgetAPIError("40001", "invalid API key or permission")
 
 
 class FakeAccountHandler(AccountHandlersMixin):

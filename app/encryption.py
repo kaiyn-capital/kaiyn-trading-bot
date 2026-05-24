@@ -1,8 +1,9 @@
 import base64
+import binascii
 import logging
 import os
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -23,7 +24,7 @@ class EncryptionManager:
         try:
             self.key = encryption_key.encode()
             self.fernet = Fernet(self.key)
-        except Exception as e:
+        except (TypeError, ValueError) as e:
             logger.error(f"Failed to initialize encryption: {e}")
             raise ValueError("Invalid encryption key") from e
 
@@ -43,7 +44,7 @@ class EncryptionManager:
         try:
             encrypted = self.fernet.encrypt(plaintext.encode())
             return base64.b64encode(encrypted).decode()
-        except Exception as e:
+        except (TypeError, ValueError) as e:
             logger.error(f"Encryption failed: {e}")
             raise
 
@@ -64,7 +65,7 @@ class EncryptionManager:
             encrypted_data = base64.b64decode(ciphertext.encode())
             decrypted = self.fernet.decrypt(encrypted_data)
             return decrypted.decode()
-        except Exception as e:
+        except (binascii.Error, InvalidToken, TypeError, UnicodeDecodeError, ValueError) as e:
             logger.error(f"Decryption failed: {e}")
             raise
 
