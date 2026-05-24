@@ -1,6 +1,8 @@
 import logging
 
+from sqlalchemy.exc import SQLAlchemyError
 from telegram import Update
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from .audit import emit_audit_event, summarize_message_text
@@ -50,7 +52,7 @@ class AdminMessaging:
                         send_kwargs["message_thread_id"] = channel["message_thread_id"]
                     await context.bot.send_message(**send_kwargs)
                     sent_to_channels += 1
-                except Exception as e:
+                except TelegramError as e:
                     logger.warning(
                         f"Failed to send broadcast to channel {channel['chat_id']} "
                         f"thread {channel.get('message_thread_id')}: {e}"
@@ -74,7 +76,7 @@ class AdminMessaging:
                 },
             )
 
-        except Exception as e:
+        except (SQLAlchemyError, TelegramError) as e:
             logger.error(f"Broadcast error: {e}")
             await emit_audit_event(
                 self.bot,
@@ -131,7 +133,7 @@ class AdminMessaging:
                 parse_mode=HTML_PARSE_MODE,
             )
 
-        except Exception as e:
+        except (SQLAlchemyError, TelegramError) as e:
             logger.error(f"Send to channel error: {e}")
             await emit_audit_event(
                 self.bot,

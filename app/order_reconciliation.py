@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
 from telegram.error import TelegramError
 
 from .audit import summarize_identifier
@@ -106,7 +107,7 @@ class PendingOrderReconciliationService:
             classified = classify_bitget_exception(exc)
             await self._record_query_failure(pending_order, client_order_id, classified)
             return "deferred"
-        except Exception as exc:
+        except (RuntimeError, TypeError, ValueError) as exc:
             logger.exception("Unexpected error while reconciling processing order")
             classified = classify_bitget_exception(exc)
             await self._record_unexpected_failure(pending_order, client_order_id, classified, exc)
@@ -309,7 +310,7 @@ class PendingOrderReconciliationService:
                     **extra_data,
                 },
             )
-        except Exception as exc:
+        except SQLAlchemyError as exc:
             logger.exception("Failed to persist order reconciliation log: %s", exc)
 
 

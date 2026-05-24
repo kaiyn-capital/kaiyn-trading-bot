@@ -2,9 +2,11 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
+from telegram.error import TelegramError
 from telegram.ext import ConversationHandler
 
-from .bitget_errors import classify_bitget_exception
+from .bitget_errors import UNKNOWN_MESSAGE, BitgetAPIError, classify_bitget_exception
 from .bot_sessions import SESSION_EXPIRED_MESSAGE
 from .bot_states import WAITING_API_KEY, WAITING_PASSPHRASE, WAITING_SECRET_KEY
 from .telegram_formatting import HTML_PARSE_MODE, html_code, html_escape
@@ -61,7 +63,7 @@ class TelegramApiSetupService:
 
         try:
             await update.message.delete()
-        except Exception as e:
+        except TelegramError as e:
             logger.warning(f"Failed to delete API key message: {e}")
 
         if not api_key or len(api_key) < 10:
@@ -97,7 +99,7 @@ class TelegramApiSetupService:
 
         try:
             await update.message.delete()
-        except Exception as e:
+        except TelegramError as e:
             logger.warning(f"Failed to delete secret key message: {e}")
 
         if not secret_key or len(secret_key) < 10:
@@ -133,7 +135,7 @@ class TelegramApiSetupService:
 
         try:
             await update.message.delete()
-        except Exception as e:
+        except TelegramError as e:
             logger.warning(f"Failed to delete passphrase message: {e}")
 
         if not passphrase:
@@ -182,14 +184,21 @@ class TelegramApiSetupService:
                     parse_mode=HTML_PARSE_MODE,
                 )
 
-        except Exception as e:
-            logger.error(f"API setup failed: {e}")
+        except BitgetAPIError as e:
             classified = classify_bitget_exception(e)
             await self.record_bitget_failure_alert(classified, "set_passphrase", {"telegram_id": user.telegram_id})
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text=f"❌ {classified.user_message}",
             )
+        except (SQLAlchemyError, TypeError, ValueError) as e:
+            logger.error(f"API setup failed: {e}")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"❌ {UNKNOWN_MESSAGE}",
+            )
+        except TelegramError as e:
+            logger.warning(f"Failed to update API setup message: {e}")
 
         finally:
             self.session_owner.delete_user_session(user.telegram_id)

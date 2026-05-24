@@ -1,6 +1,8 @@
 import logging
 
+from sqlalchemy.exc import SQLAlchemyError
 from telegram import Update
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from .audit import emit_audit_event
@@ -69,7 +71,7 @@ class AdminCore:
                 {"status": "failed", "reason": "invalid_telegram_id"},
             )
             await update.message.reply_text("❌ Telegram ID 必须是数字")
-        except Exception as e:
+        except (SQLAlchemyError, TelegramError) as e:
             logger.error(f"Add trader error: {e}")
             await emit_audit_event(
                 self.bot,
@@ -111,7 +113,7 @@ class AdminCore:
 
             await update.message.reply_text(users_text, parse_mode=HTML_PARSE_MODE)
 
-        except Exception as e:
+        except (SQLAlchemyError, TelegramError, TypeError, ValueError) as e:
             logger.error(f"Admin users command error: {e}")
             await update.message.reply_text("❌ 获取用户列表时发生错误")
 
@@ -147,7 +149,7 @@ class AdminCore:
 
             await update.message.reply_text(admin_text, parse_mode=HTML_PARSE_MODE)
 
-        except Exception as e:
+        except (SQLAlchemyError, TelegramError, TypeError, ValueError) as e:
             logger.exception(f"Admin command error: {e}")
             await update.message.reply_text(f"❌ 获取管理信息时发生错误: {str(e)}")
 

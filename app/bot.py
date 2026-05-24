@@ -3,6 +3,7 @@ import contextlib
 import logging
 from datetime import datetime
 
+from sqlalchemy.exc import SQLAlchemyError
 from telegram import (
     BotCommand,
     BotCommandScopeAllGroupChats,
@@ -10,6 +11,7 @@ from telegram import (
     BotCommandScopeDefault,
     Update,
 )
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -169,7 +171,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             await self.application.bot.delete_my_commands(scope=BotCommandScopeAllGroupChats())
             await self.application.bot.set_my_commands(commands, scope=BotCommandScopeAllPrivateChats())
             logger.info("Bot commands set for private chats")
-        except Exception as e:
+        except TelegramError as e:
             logger.error(f"Failed to set bot commands: {e}")
 
     def _is_private_chat_update(self, update: Update | None) -> bool:
@@ -209,7 +211,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
         try:
             return await self.user_repo.is_active_trader(telegram_id)
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"Check trader status error: {e}")
             return False
 
@@ -232,7 +234,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 telegram_id=user.telegram_id,
                 extra_data=details or {},
             )
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"Failed to log user action: {e}")
             await self.system_log_repo.log(
                 level="INFO",
@@ -246,7 +248,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         """Persist an operator audit event."""
         try:
             await record_audit_event(self.system_log_repo, user, action, details or {})
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"Failed to record audit event {action}: {e}")
 
     async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
@@ -257,7 +259,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 source=source,
                 context=details or {},
             )
-        except Exception as exc:
+        except (OSError, SQLAlchemyError, TelegramError) as exc:
             logger.error(f"Failed to record Bitget alert: {exc}")
 
     def _callback_route(self, data: str, handler, *, include_data: bool = False) -> CallbackRoute:
@@ -347,12 +349,12 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             if not handled:
                 await query.edit_message_text("❓ 未知操作")
 
-        except Exception as e:
+        except (KeyError, RuntimeError, SQLAlchemyError, TelegramError, TypeError, ValueError) as e:
             logger.error(f"Button callback error: {e}")
             if self._is_private_chat_update(update):
                 await query.edit_message_text("❌ 操作失败，请重试")
             else:
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(TelegramError):
                     await query.answer("操作失败，请到与机器人的私人聊天查看或重试", show_alert=True)
 
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -372,7 +374,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 user = await self.user_repo.get_user_by_telegram_id(telegram_id)
                 if user and hasattr(user, "id"):
                     user_id = user.id
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"Error getting user info for error handler: {e}")
 
         try:
@@ -385,11 +387,11 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 telegram_id=telegram_id,
                 stack_trace=(str(context.error.__traceback__) if context.error.__traceback__ else None),
             )
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error(f"Failed to log error: {e}")
 
         if update and update.effective_chat and self._is_private_chat_update(update):
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(TelegramError):
                 await context.bot.send_message(
                     chat_id=update.effective_chat.id,
                     text="❌ 系统发生错误，请稍后重试。如问题持续，请联系管理员。",
@@ -413,7 +415,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             await self.alert_manager.alert_startup_success()
             self.health_monitor_task = asyncio.create_task(self._health_monitor_loop())
 
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, TelegramError, ValueError) as e:
             logger.error(f"Failed to start bot: {e}")
             await self.alert_manager.alert_startup_failure(e)
             raise
@@ -436,7 +438,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
             logger.info("Telegram bot stopped successfully")
 
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, TelegramError) as e:
             logger.error(f"Error stopping bot: {e}")
 
     async def _health_monitor_loop(self):
@@ -465,7 +467,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 stale_after_seconds=Config.PENDING_ORDER_RECONCILE_AFTER_SECONDS,
                 limit=Config.PENDING_ORDER_RECONCILE_LIMIT,
             )
-        except Exception as exc:
+        except (OSError, RuntimeError, SQLAlchemyError, TelegramError, ValueError) as exc:
             logger.error(f"Health monitor failed: {exc}")
             await self.alert_manager.alert_db_failure("health_monitor", exc)
 

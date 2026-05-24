@@ -1,6 +1,8 @@
 import logging
 
+from sqlalchemy.exc import SQLAlchemyError
 from telegram import Update
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from .audit import emit_audit_event
@@ -106,7 +108,7 @@ class AdminChannels:
                 {"status": "failed", "reason": "invalid_input"},
             )
             await update.message.reply_text("❌ 请输入有效的数字")
-        except Exception as e:
+        except (KeyError, SQLAlchemyError, TelegramError, TypeError) as e:
             logger.error(f"Delete channel error: {e}")
             await emit_audit_event(
                 self.bot,
@@ -139,7 +141,7 @@ class AdminChannels:
                 parse_mode=HTML_PARSE_MODE,
             )
 
-        except Exception as e:
+        except (SQLAlchemyError, TelegramError, TypeError, ValueError) as e:
             logger.exception(f"Admin channels command error: {e}")
             await update.message.reply_text(
                 f"❌ 获取频道列表时发生错误: {html_escape(e)}",
@@ -270,7 +272,7 @@ class AdminChannels:
                 parse_mode=HTML_PARSE_MODE,
             )
 
-        except Exception as e:
+        except (SQLAlchemyError, TelegramError, TypeError, ValueError) as e:
             logger.error(f"Add channel error: {e}")
             await emit_audit_event(
                 self.bot,
@@ -319,7 +321,7 @@ class AdminChannels:
                 parse_mode=HTML_PARSE_MODE,
             )
 
-        except Exception as e:
+        except (SQLAlchemyError, TelegramError, TypeError, ValueError) as e:
             logger.error(f"Manage channels error: {e}")
             await query.edit_message_text(
                 f"❌ 获取频道列表失败\n\n错误详情: {html_escape(e)}\n\n请检查数据库连接状态。",
@@ -355,7 +357,7 @@ class AdminChannels:
                 reply_markup=admin_channels_keyboard(),
                 parse_mode=HTML_PARSE_MODE,
             )
-        except Exception as e:
+        except (SQLAlchemyError, TelegramError, TypeError, ValueError) as e:
             logger.error(f"Return admin channels error: {e}")
             await query.edit_message_text("❌ 获取频道列表失败")
 

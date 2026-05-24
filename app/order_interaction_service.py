@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
 from telegram.error import TelegramError
 
 from .audit import emit_audit_event, summarize_identifier
@@ -128,7 +129,7 @@ class TelegramOrderFlowService:
                     **details,
                 },
             )
-        except Exception as exc:
+        except SQLAlchemyError as exc:
             logger.exception("Failed to log risk limit block: %s", exc)
 
     async def _send_risk_limit_block_message(
@@ -446,7 +447,7 @@ class TelegramOrderFlowService:
                 f"{html_escape(callback_data.symbol)} 当前价格或交易规则。\n\n"
                 f"{html_escape(classified.user_message)}",
             )
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as e:
             logger.exception("Unexpected place order callback error")
             await emit_audit_event(
                 self.audit_owner,
@@ -552,7 +553,7 @@ class TelegramOrderFlowService:
                 )
             )
 
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as e:
             logger.error(f"Confirm pending order error: {e}")
             await emit_audit_event(
                 self.audit_owner,
@@ -833,7 +834,7 @@ class TelegramOrderFlowService:
                         "classified_error": classified.to_log_data(),
                     },
                 )
-            except Exception as log_error:
+            except SQLAlchemyError as log_error:
                 logger.exception("Failed to log unknown Bitget order result: %s", log_error)
 
             await self.send_private_message(query, user, UNKNOWN_ORDER_RESULT_MESSAGE)
@@ -895,7 +896,7 @@ class TelegramOrderFlowService:
                         "classified_error": classified.to_log_data(),
                     },
                 )
-            except Exception as log_error:
+            except SQLAlchemyError as log_error:
                 logger.exception("Failed to log Bitget order error: %s", log_error)
 
             await self.send_private_message(
@@ -935,7 +936,7 @@ class TelegramOrderFlowService:
             )
             return False
 
-        except Exception as e:
+        except (SQLAlchemyError, TypeError, ValueError) as e:
             logger.exception("Unexpected order execution error")
             if pending_order_token:
                 await self.pending_order_repo.mark_failed(pending_order_token, f"unexpected_error: {type(e).__name__}")

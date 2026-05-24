@@ -1,9 +1,10 @@
 import logging
 
+from sqlalchemy.exc import SQLAlchemyError
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler
 
-from .bitget_errors import classify_bitget_exception
+from .bitget_errors import UNKNOWN_MESSAGE, BitgetAPIError, classify_bitget_exception
 from .bot_account_formatters import format_usdt_balance_text
 from .bot_api_setup_service import TelegramApiSetupService
 from .bot_keyboards import (
@@ -84,11 +85,14 @@ class AccountHandlers:
                     parse_mode=HTML_PARSE_MODE,
                 )
 
-        except Exception as e:
+        except BitgetAPIError as e:
             logger.error(f"Status check failed: {e}")
             classified = classify_bitget_exception(e)
             await self.bot._record_bitget_failure_alert(classified, "status_command", {"telegram_id": user.telegram_id})
             await update.message.reply_text(f"❌ {classified.user_message}")
+        except (SQLAlchemyError, TypeError, ValueError) as e:
+            logger.error(f"Status check failed: {e}")
+            await update.message.reply_text(f"❌ {UNKNOWN_MESSAGE}")
 
     async def balance_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /balance."""
@@ -136,13 +140,16 @@ class AccountHandlers:
             else:
                 await update.message.reply_text("❌ 获取余额失败，请检查 API 设置。")
 
-        except Exception as e:
+        except BitgetAPIError as e:
             logger.error(f"Balance check failed: {e}")
             classified = classify_bitget_exception(e)
             await self.bot._record_bitget_failure_alert(
                 classified, "balance_command", {"telegram_id": user.telegram_id}
             )
             await update.message.reply_text(f"❌ {classified.user_message}")
+        except (SQLAlchemyError, TypeError, ValueError) as e:
+            logger.error(f"Balance check failed: {e}")
+            await update.message.reply_text(f"❌ {UNKNOWN_MESSAGE}")
 
     async def set_api_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Start API setup."""
@@ -345,12 +352,15 @@ class AccountHandlers:
                     parse_mode=HTML_PARSE_MODE,
                 )
 
-        except Exception as e:
+        except BitgetAPIError as e:
             classified = classify_bitget_exception(e)
             await self.bot._record_bitget_failure_alert(
                 classified, "status_callback", {"telegram_id": user.telegram_id}
             )
             await query.edit_message_text(f"❌ {classified.user_message}")
+        except (SQLAlchemyError, TypeError, ValueError) as e:
+            logger.error(f"Status callback failed: {e}")
+            await query.edit_message_text(f"❌ {UNKNOWN_MESSAGE}")
 
     async def _handle_balance_callback(self, query, user):
         """Handle balance callback."""
@@ -388,12 +398,15 @@ class AccountHandlers:
             else:
                 await query.edit_message_text("❌ 获取余额失败")
 
-        except Exception as e:
+        except BitgetAPIError as e:
             classified = classify_bitget_exception(e)
             await self.bot._record_bitget_failure_alert(
                 classified, "balance_callback", {"telegram_id": user.telegram_id}
             )
             await query.edit_message_text(f"❌ {classified.user_message}")
+        except (SQLAlchemyError, TypeError, ValueError) as e:
+            logger.error(f"Balance callback failed: {e}")
+            await query.edit_message_text(f"❌ {UNKNOWN_MESSAGE}")
 
     async def _handle_return_start_callback(self, query, user):
         """Handle return-to-start callback."""

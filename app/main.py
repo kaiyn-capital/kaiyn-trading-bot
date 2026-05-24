@@ -10,6 +10,9 @@ import sys
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
+from sqlalchemy.exc import SQLAlchemyError
+from telegram.error import TelegramError
+
 # 添加項目根目錄到 Python 路徑
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -78,7 +81,7 @@ async def check_requirements():
 
         return True
 
-    except Exception as e:
+    except (OSError, SQLAlchemyError, ValueError) as e:
         logging.error(f"Requirements check failed: {e}")
         await send_direct_admin_alert(
             f"❌ Kaiyn Trading Bot 启动前系统检查失败。\n\n错误：{html_escape(e)}",
@@ -115,7 +118,7 @@ async def main():
         logger.info("👋 收到中斷信號，正在關閉...")
         return 0
 
-    except Exception as e:
+    except (OSError, RuntimeError, SQLAlchemyError, TelegramError, ValueError) as e:
         logger.error(f"❌ 啟動失敗: {e}")
         await send_direct_admin_alert(
             f"❌ Kaiyn Trading Bot 启动失败。\n\n错误：{html_escape(e)}",
@@ -163,7 +166,7 @@ async def run_cleanup_retention(dry_run: bool = False) -> int:
         )
         return 0
 
-    except Exception as e:
+    except (OSError, SQLAlchemyError, ValueError) as e:
         logger.error(f"Retention cleanup failed: {e}")
         print(f"❌ Retention cleanup failed: {e}")
         try:
@@ -174,7 +177,7 @@ async def run_cleanup_retention(dry_run: bool = False) -> int:
                 function="run_cleanup_retention",
                 extra_data={"dry_run": dry_run, "error": str(e)},
             )
-        except Exception as log_error:
+        except SQLAlchemyError as log_error:
             logger.error(f"Failed to persist cleanup failure log: {log_error}")
         await send_direct_admin_alert(
             f"❌ Kaiyn Trading Bot maintenance cleanup 失败。\n\n错误：{html_escape(e)}",
@@ -328,7 +331,7 @@ if __name__ == "__main__":
             else:
                 print("❌ 資料庫連接失敗")
                 sys.exit(1)
-        except Exception as e:
+        except (OSError, SQLAlchemyError, ValueError) as e:
             print(f"❌ 資料庫連接失敗: {e}")
             sys.exit(1)
     elif args.create_tables:

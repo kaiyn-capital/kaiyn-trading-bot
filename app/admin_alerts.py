@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
+from telegram.error import TelegramError
 
 from .bitget_errors import BitgetErrorCategory, ClassifiedBitgetError
 from .config import Config
@@ -36,7 +38,7 @@ def _parse_iso_datetime(value: str | None) -> datetime | None:
 def _safe_admin_ids() -> list[int]:
     try:
         return Config.get_admin_ids()
-    except Exception as exc:
+    except ValueError as exc:
         logger.error(f"Invalid TELEGRAM_ADMIN_IDS for admin alert: {exc}")
         return []
 
@@ -55,7 +57,7 @@ class AlertStateStore:
                 return {"sent": {}}
             data.setdefault("sent", {})
             return data
-        except Exception as exc:
+        except (OSError, json.JSONDecodeError) as exc:
             logger.warning(f"Failed to load alert state: {exc}")
             return {"sent": {}}
 
@@ -111,7 +113,7 @@ async def send_direct_admin_alert(
                 )
                 response.raise_for_status()
                 sent_any = True
-            except Exception as exc:
+            except httpx.HTTPError as exc:
                 logger.error(f"Failed to send direct admin alert to {admin_id}: {exc}")
 
     return sent_any
@@ -150,7 +152,7 @@ class AdminAlertManager:
             try:
                 await self.bot.send_message(chat_id=admin_id, text=text, parse_mode=HTML_PARSE_MODE)
                 sent_any = True
-            except Exception as exc:
+            except TelegramError as exc:
                 logger.error(f"Failed to send admin alert to {admin_id}: {exc}")
 
         return sent_any
@@ -237,5 +239,5 @@ class AdminAlertManager:
                     "context": context,
                 },
             )
-        except Exception as exc:
+        except SQLAlchemyError as exc:
             logger.error(f"Failed to persist Bitget failure log: {exc}")

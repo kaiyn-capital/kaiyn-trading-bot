@@ -4,10 +4,13 @@ import secrets
 from datetime import UTC, datetime
 from io import BytesIO
 
+from sqlalchemy.exc import SQLAlchemyError
 from telegram import Update
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from .audit import emit_audit_event
+from .bitget_errors import BitgetAPIError
 from .bot_keyboards import chart_update_preview_keyboard, signal_preview_keyboard
 from .bot_messages import (
     chart_update_message,
@@ -143,7 +146,7 @@ class OrderHandlers:
 
         except ValueError:
             await update.message.reply_text("❌ 格式错误，请使用 entry[] sl[] tp[]，并输入有效数字")
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, TelegramError, TypeError) as e:
             logger.error(f"Send signal error: {e}")
             await emit_audit_event(
                 self.bot,
@@ -233,7 +236,7 @@ class OrderHandlers:
                     "target_count": len(target_messages),
                 },
             )
-        except Exception as e:
+        except (RuntimeError, SQLAlchemyError, TelegramError, TypeError, ValueError) as e:
             logger.error("Update chart error: %s", e)
             await emit_audit_event(
                 self.bot,
@@ -283,7 +286,7 @@ class OrderHandlers:
                 timeout=Config.SIGNAL_CHART_TIMEOUT_SECONDS,
             )
             return chart_bytes, "generated", None
-        except Exception as e:
+        except (TimeoutError, BitgetAPIError, RuntimeError, ValueError) as e:
             logger.warning("Failed to generate signal chart for %s: %s", signal.symbol, e)
             return None, "failed", type(e).__name__
 
@@ -463,7 +466,7 @@ class OrderHandlers:
     async def _edit_signal_preview_message(self, query, text: str, **kwargs):
         try:
             await query.edit_message_caption(caption=text, reply_markup=None, **kwargs)
-        except Exception:
+        except TelegramError:
             await query.edit_message_text(text, reply_markup=None, **kwargs)
 
     async def _send_private_message(self, query, user, text, reply_markup=None):

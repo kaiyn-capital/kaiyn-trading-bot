@@ -1,6 +1,7 @@
 import logging
 from io import BytesIO
 
+from sqlalchemy.exc import SQLAlchemyError
 from telegram.error import TelegramError
 
 from .bot_keyboards import signal_order_keyboard
@@ -75,7 +76,7 @@ class SignalDeliveryService:
                         f"{channel_data['chat_id']} "
                         f"thread={channel_data.get('message_thread_id')}: {e}"
                     )
-                except Exception as e:
+                except (KeyError, RuntimeError, SQLAlchemyError, TypeError, ValueError) as e:
                     failed_channels += 1
                     logger.exception(
                         "Unexpected error while sending signal to channel "
@@ -83,7 +84,7 @@ class SignalDeliveryService:
                         f"thread={channel_data.get('message_thread_id')}: {e}"
                     )
 
-        except Exception as e:
+        except SQLAlchemyError as e:
             channel_error = type(e).__name__
             logger.exception("Error getting channels: %s", e)
 
