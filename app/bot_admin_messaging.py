@@ -44,18 +44,17 @@ class AdminMessaging:
             for channel in channels:
                 try:
                     send_kwargs = {
-                        "chat_id": channel["chat_id"],
+                        "chat_id": channel.chat_id,
                         "text": f"📢 <b>管理员广播</b> by @{html_escape(sender_username)}\n\n{html_escape(message_text)}",
                         "parse_mode": HTML_PARSE_MODE,
                     }
-                    if channel.get("message_thread_id"):
-                        send_kwargs["message_thread_id"] = channel["message_thread_id"]
+                    if channel.message_thread_id:
+                        send_kwargs["message_thread_id"] = channel.message_thread_id
                     await context.bot.send_message(**send_kwargs)
                     sent_to_channels += 1
                 except TelegramError as e:
                     logger.warning(
-                        f"Failed to send broadcast to channel {channel['chat_id']} "
-                        f"thread {channel.get('message_thread_id')}: {e}"
+                        f"Failed to send broadcast to channel {channel.chat_id} thread {channel.message_thread_id}: {e}"
                     )
                     failed_channels += 1
 

@@ -4,9 +4,32 @@ from types import SimpleNamespace
 import pytest
 
 from app.bot_admin_handlers import AdminHandlersMixin
+from app.bot_handler_context import BotHandlerContext
 from app.bot_sessions import SESSION_EXPIRED_MESSAGE
-from app.database import channel_to_dict
 from app.models import ChannelGroup
+from app.repositories.channels import channel_record_from_model
+from app.repository_types import ChannelRecord
+
+
+def make_channel_record(**overrides):
+    data = {
+        "id": 1,
+        "chat_id": "-1001",
+        "chat_type": "channel",
+        "title": "test_kaiyn",
+        "username": "test_kaiyn",
+        "is_active": True,
+        "auto_forward_signals": True,
+        "forward_with_buttons": True,
+        "message_thread_id": None,
+        "thread_title": None,
+        "added_by_user_id": 123,
+        "description": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+    data.update(overrides)
+    return ChannelRecord(**data)
 
 
 class FakeMessage:
@@ -36,17 +59,7 @@ class FakeChannelRepo:
         self.created = None
         self.topic_updated = None
         self.topic_cleared_chat_id = None
-        self.active_channels = [
-            {
-                "chat_id": "-1001",
-                "chat_type": "channel",
-                "title": "test_kaiyn",
-                "username": "test_kaiyn",
-                "auto_forward_signals": True,
-                "message_thread_id": None,
-                "thread_title": None,
-            }
-        ]
+        self.active_channels = [make_channel_record()]
 
     async def deactivate_channel(self, chat_id):
         self.deactivated_chat_id = chat_id
@@ -61,6 +74,7 @@ class FakeChannelRepo:
 
     async def create_channel(self, **kwargs):
         self.created = kwargs
+        return make_channel_record(**kwargs)
 
     async def get_active_channels(self):
         return self.active_channels
@@ -162,6 +176,25 @@ def make_context():
 
 def make_context_with_args(args):
     return SimpleNamespace(args=args, bot=FakeBot())
+
+
+@pytest.mark.asyncio
+async def test_handler_context_delegates_active_channel_lookup():
+    class Owner:
+        def __init__(self):
+            self.calls = []
+
+        async def _get_active_channel_by_number(self, channel_number):
+            self.calls.append(channel_number)
+            return make_channel_record(id=channel_number)
+
+    owner = Owner()
+    context = BotHandlerContext(owner)
+
+    channel = await context._get_active_channel_by_number(2)
+
+    assert owner.calls == [2]
+    assert channel.id == 2
 
 
 @pytest.mark.asyncio
@@ -268,7 +301,7 @@ async def test_add_channel_reactivates_inactive_existing_channel(monkeypatch):
     assert handler.audit_events[-1]["details"]["status"] == "reactivated"
 
 
-def test_channel_to_dict_includes_topic_fields():
+def test_channel_record_from_model_includes_topic_fields():
     channel = ChannelGroup(
         chat_id="-1001",
         chat_type="supergroup",
@@ -279,10 +312,10 @@ def test_channel_to_dict_includes_topic_fields():
         thread_title="交易信号",
     )
 
-    result = channel_to_dict(channel)
+    result = channel_record_from_model(channel)
 
-    assert result["message_thread_id"] == 456
-    assert result["thread_title"] == "交易信号"
+    assert result.message_thread_id == 456
+    assert result.thread_title == "交易信号"
 
 
 @pytest.mark.asyncio
@@ -374,7 +407,7 @@ async def test_admin_broadcast_records_summary_audit(monkeypatch):
 async def test_admin_broadcast_uses_configured_channel_topic(monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
     channel_repo = FakeChannelRepo()
-    channel_repo.active_channels[0]["message_thread_id"] = 456
+    channel_repo.active_channels = [make_channel_record(message_thread_id=456)]
     handler = FakeAdminHandler(channel_repo)
     update = make_update("")
     context = make_context_with_args(["系统维护"])
@@ -388,17 +421,7 @@ async def test_admin_broadcast_uses_configured_channel_topic(monkeypatch):
 async def test_admin_broadcast_sends_to_message_thread_id(monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
     repo = FakeChannelRepo()
-    repo.active_channels = [
-        {
-            "chat_id": "-1001",
-            "chat_type": "channel",
-            "title": "test_kaiyn",
-            "username": "test_kaiyn",
-            "auto_forward_signals": True,
-            "message_thread_id": 42,
-            "thread_title": "Alerts",
-        }
-    ]
+    repo.active_channels = [make_channel_record(message_thread_id=42, thread_title="Alerts")]
     handler = FakeAdminHandler(repo)
     update = make_update("")
     context = make_context_with_args(["系统维护", "请稍候"])

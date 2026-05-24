@@ -1,4 +1,4 @@
-from .channels import ChannelRepository, channel_to_dict
+from .channels import ChannelRepository
 from .notifications import NotificationRepository
 from .pending_orders import PendingOrderRepository
 from .signal_records import SignalRecordRepository
@@ -14,5 +14,4 @@ __all__ = [
     "SystemLogRepository",
     "TradeRepository",
     "UserRepository",
-    "channel_to_dict",
 ]

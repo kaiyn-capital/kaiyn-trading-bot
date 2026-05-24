@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from ..models import ChannelGroup
+from ..repository_types import ChannelRecord
 
 
 class ChannelRepository:
@@ -21,7 +22,7 @@ class ChannelRepository:
         description: str | None = None,
         message_thread_id: int | None = None,
         thread_title: str | None = None,
-    ) -> ChannelGroup:
+    ) -> ChannelRecord:
         """創建頻道記錄"""
         async with self.db.get_session() as session:
             channel = ChannelGroup(
@@ -36,17 +37,17 @@ class ChannelRepository:
             )
             session.add(channel)
             await session.flush()
-            return channel
+            return channel_record_from_model(channel)
 
-    async def get_active_channels(self) -> list[dict]:
+    async def get_active_channels(self) -> list[ChannelRecord]:
         """獲取活躍的頻道"""
         async with self.db.get_session() as session:
             result = await session.execute(
                 select(ChannelGroup).where(ChannelGroup.is_active.is_(True)).order_by(ChannelGroup.created_at)
             )
-            return [channel_to_dict(channel) for channel in result.scalars().all()]
+            return [channel_record_from_model(channel) for channel in result.scalars().all()]
 
-    async def get_signal_channels(self) -> list[dict]:
+    async def get_signal_channels(self) -> list[ChannelRecord]:
         """獲取啟用交易信號轉發的頻道"""
         async with self.db.get_session() as session:
             result = await session.execute(
@@ -55,13 +56,14 @@ class ChannelRepository:
                     ChannelGroup.auto_forward_signals.is_(True),
                 )
             )
-            return [channel_to_dict(channel) for channel in result.scalars().all()]
+            return [channel_record_from_model(channel) for channel in result.scalars().all()]
 
-    async def get_channel_by_chat_id(self, chat_id: str) -> ChannelGroup | None:
+    async def get_channel_by_chat_id(self, chat_id: str) -> ChannelRecord | None:
         """根據聊天ID獲取頻道"""
         async with self.db.get_session() as session:
             result = await session.execute(select(ChannelGroup).where(ChannelGroup.chat_id == chat_id))
-            return result.scalar_one_or_none()
+            channel = result.scalar_one_or_none()
+            return channel_record_from_model(channel) if channel else None
 
     async def update_channel_settings(
         self, chat_id: str, auto_forward: bool = None, forward_with_buttons: bool = None
@@ -168,21 +170,21 @@ class ChannelRepository:
             return int(result.scalar_one())
 
 
-def channel_to_dict(channel: ChannelGroup) -> dict:
-    """Convert a channel model to a detached dictionary."""
-    return {
-        "id": channel.id,
-        "chat_id": channel.chat_id,
-        "chat_type": channel.chat_type,
-        "title": channel.title,
-        "username": channel.username,
-        "is_active": channel.is_active,
-        "auto_forward_signals": channel.auto_forward_signals,
-        "forward_with_buttons": channel.forward_with_buttons,
-        "message_thread_id": channel.message_thread_id,
-        "thread_title": channel.thread_title,
-        "added_by_user_id": channel.added_by_user_id,
-        "description": channel.description,
-        "created_at": channel.created_at,
-        "updated_at": channel.updated_at,
-    }
+def channel_record_from_model(channel: ChannelGroup) -> ChannelRecord:
+    """Convert a channel model to a detached record."""
+    return ChannelRecord(
+        id=channel.id,
+        chat_id=channel.chat_id,
+        chat_type=channel.chat_type,
+        title=channel.title,
+        username=channel.username,
+        is_active=channel.is_active,
+        auto_forward_signals=channel.auto_forward_signals,
+        forward_with_buttons=channel.forward_with_buttons,
+        message_thread_id=channel.message_thread_id,
+        thread_title=channel.thread_title,
+        added_by_user_id=channel.added_by_user_id,
+        description=channel.description,
+        created_at=channel.created_at,
+        updated_at=channel.updated_at,
+    )

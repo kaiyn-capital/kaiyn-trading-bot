@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from ..models import NotificationLog
+from ..repository_types import NotificationRecord
 
 
 class NotificationRepository:
@@ -18,7 +19,7 @@ class NotificationRepository:
         title: str,
         message: str,
         extra_data: dict | None = None,
-    ) -> NotificationLog:
+    ) -> NotificationRecord:
         """創建通知記錄"""
         async with self.db.get_session() as session:
             notification = NotificationLog(user_id=user_id, message_type=message_type, title=title, message=message)
@@ -28,7 +29,7 @@ class NotificationRepository:
 
             session.add(notification)
             await session.flush()
-            return notification
+            return notification_record_from_model(notification)
 
     async def mark_as_sent(self, notification_id: int, telegram_message_id: int) -> bool:
         """標記通知已發送"""
@@ -42,10 +43,25 @@ class NotificationRepository:
             notification.sent_at = datetime.utcnow()
             return True
 
-    async def get_unsent_notifications(self) -> list[NotificationLog]:
+    async def get_unsent_notifications(self) -> list[NotificationRecord]:
         """獲取未發送的通知"""
         async with self.db.get_session() as session:
             result = await session.execute(
                 select(NotificationLog).where(NotificationLog.is_sent.is_(False)).order_by(NotificationLog.created_at)
             )
-            return list(result.scalars().all())
+            return [notification_record_from_model(notification) for notification in result.scalars().all()]
+
+
+def notification_record_from_model(notification: NotificationLog) -> NotificationRecord:
+    return NotificationRecord(
+        id=notification.id,
+        user_id=notification.user_id,
+        message_type=notification.message_type,
+        title=notification.title,
+        message=notification.message,
+        is_sent=notification.is_sent,
+        telegram_message_id=notification.telegram_message_id,
+        extra_data=notification.get_extra_data(),
+        created_at=notification.created_at,
+        sent_at=notification.sent_at,
+    )

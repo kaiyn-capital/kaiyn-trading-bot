@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -5,6 +6,34 @@ import pytest
 
 from app.config import Config
 from app.order_interaction_service import TelegramOrderFlowService
+from app.repository_types import SignalRecordSnapshot
+
+
+def make_signal_record(public_id: str, **overrides):
+    data = {
+        "id": 1,
+        "public_id": public_id,
+        "user_id": 7,
+        "sender_telegram_id": 123456,
+        "sender_username": "admin",
+        "symbol": "BTCUSDT",
+        "direction": "long",
+        "entry_lower": 80200,
+        "entry_upper": 81000,
+        "stop_loss": 79000,
+        "take_profit_levels": [83000],
+        "remark": "",
+        "signal_text": "signal text",
+        "granularity": "1H",
+        "status": "sent",
+        "chart_status": "generated",
+        "chart_error": None,
+        "created_at": datetime(2026, 5, 18, 12, 0, 0),
+        "updated_at": datetime(2026, 5, 18, 12, 0, 0),
+        "confirmed_at": datetime(2026, 5, 18, 12, 0, 0),
+    }
+    data.update(overrides)
+    return SignalRecordSnapshot(**data)
 
 
 class FakeQuery:
@@ -59,8 +88,13 @@ class FakeSignalRecordRepo:
     def __init__(self, records=None):
         self.records = records or {}
 
-    async def get_by_public_id(self, public_id: str) -> dict | None:
-        return self.records.get(public_id.lower())
+    async def get_by_public_id(self, public_id: str) -> SignalRecordSnapshot | None:
+        record = self.records.get(public_id.lower())
+        if isinstance(record, SignalRecordSnapshot):
+            return record
+        if isinstance(record, dict):
+            return make_signal_record(public_id.lower(), **record)
+        return None
 
 
 class RecordingOrderFlowService(TelegramOrderFlowService):

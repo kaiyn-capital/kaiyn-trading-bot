@@ -1,9 +1,38 @@
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
 
 from app.order_types import SignalDraft
+from app.repository_types import SignalRecordSnapshot
 from app.signal_record_service import SignalRecordService
+
+
+def make_signal_record(**overrides):
+    data = {
+        "id": 1,
+        "public_id": "sig0001",
+        "user_id": 7,
+        "sender_telegram_id": 123,
+        "sender_username": "admin",
+        "symbol": "BTCUSDT",
+        "direction": "long",
+        "entry_lower": 100,
+        "entry_upper": 102,
+        "stop_loss": 95,
+        "take_profit_levels": [108, 110],
+        "remark": "wait",
+        "signal_text": "signal text",
+        "granularity": "1H",
+        "status": "preview_pending",
+        "chart_status": "generated",
+        "chart_error": None,
+        "created_at": datetime(2026, 5, 18, 12, 0, 0),
+        "updated_at": datetime(2026, 5, 18, 12, 0, 0),
+        "confirmed_at": None,
+    }
+    data.update(overrides)
+    return SignalRecordSnapshot(**data)
 
 
 class FakeSignalRecordRepo:
@@ -28,25 +57,24 @@ class FakeSignalRecordRepo:
         chart_status,
         chart_error,
     ):
-        record = {
-            "id": len(self.created) + 1,
-            "public_id": public_id,
-            "user_id": user_id,
-            "sender_telegram_id": sender_telegram_id,
-            "sender_username": sender_username,
-            "symbol": signal.symbol,
-            "direction": signal.direction,
-            "entry_lower": signal.entry_lower,
-            "entry_upper": signal.entry_upper,
-            "stop_loss": signal.stop_loss,
-            "take_profit_levels": signal.take_profit_levels,
-            "remark": signal.remark,
-            "signal_text": signal_text,
-            "granularity": granularity,
-            "status": "preview_pending",
-            "chart_status": chart_status,
-            "chart_error": chart_error,
-        }
+        record = make_signal_record(
+            id=len(self.created) + 1,
+            public_id=public_id,
+            user_id=user_id,
+            sender_telegram_id=sender_telegram_id,
+            sender_username=sender_username,
+            symbol=signal.symbol,
+            direction=signal.direction,
+            entry_lower=signal.entry_lower,
+            entry_upper=signal.entry_upper,
+            stop_loss=signal.stop_loss,
+            take_profit_levels=signal.take_profit_levels,
+            remark=signal.remark,
+            signal_text=signal_text,
+            granularity=granularity,
+            chart_status=chart_status,
+            chart_error=chart_error,
+        )
         self.created.append(record)
         self.records[public_id] = record
         return record
@@ -71,7 +99,7 @@ def make_signal():
 @pytest.mark.asyncio
 async def test_create_signal_record_retries_public_id_collision():
     repo = FakeSignalRecordRepo()
-    repo.records["dup0001"] = {"public_id": "dup0001"}
+    repo.records["dup0001"] = make_signal_record(public_id="dup0001")
     generated_ids = iter(["dup0001", "ok00002"])
     service = SignalRecordService(repo, public_id_generator=lambda: next(generated_ids))
     user = SimpleNamespace(id=7, telegram_id=123)
@@ -84,15 +112,15 @@ async def test_create_signal_record_retries_public_id_collision():
         chart_error=None,
     )
 
-    assert record["public_id"] == "ok00002"
-    assert record["sender_telegram_id"] == 123
+    assert record.public_id == "ok00002"
+    assert record.sender_telegram_id == 123
     assert "交易id: <code>ok00002</code>" in signal_text
 
 
 @pytest.mark.asyncio
 async def test_create_signal_record_raises_after_repeated_collisions():
     repo = FakeSignalRecordRepo()
-    repo.records["dup0001"] = {"public_id": "dup0001"}
+    repo.records["dup0001"] = make_signal_record(public_id="dup0001")
     service = SignalRecordService(repo, public_id_generator=lambda: "dup0001")
 
     with pytest.raises(RuntimeError):
@@ -117,7 +145,7 @@ async def test_update_send_status_maps_sent_count_to_record_status():
 
 
 def test_can_update_signal_record_allows_owner_or_admin_only():
-    record = {"sender_telegram_id": 123}
+    record = make_signal_record(sender_telegram_id=123)
     service = SignalRecordService(FakeSignalRecordRepo(), is_admin_checker=lambda telegram_id: telegram_id == 999)
 
     assert service.can_update_signal_record(SimpleNamespace(telegram_id=123), record) is True
@@ -127,15 +155,15 @@ def test_can_update_signal_record_allows_owner_or_admin_only():
 
 def test_signal_record_to_draft_restores_signal_payload():
     service = SignalRecordService(FakeSignalRecordRepo())
-    record = {
-        "symbol": "ETHUSDT",
-        "direction": "short",
-        "entry_lower": 3000,
-        "entry_upper": 3050,
-        "stop_loss": 3100,
-        "take_profit_levels": [2900, 2800],
-        "remark": "pullback",
-    }
+    record = make_signal_record(
+        symbol="ETHUSDT",
+        direction="short",
+        entry_lower=3000,
+        entry_upper=3050,
+        stop_loss=3100,
+        take_profit_levels=[2900, 2800],
+        remark="pullback",
+    )
 
     signal = service.signal_record_to_draft(record)
 

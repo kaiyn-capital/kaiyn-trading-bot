@@ -17,7 +17,6 @@ from .repositories import (
     SystemLogRepository,
     TradeRepository,
     UserRepository,
-    channel_to_dict,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,7 +30,6 @@ __all__ = [
     "SystemLogRepository",
     "TradeRepository",
     "UserRepository",
-    "channel_to_dict",
     "cleanup_retention_records",
     "get_channel_repo",
     "get_db_manager",

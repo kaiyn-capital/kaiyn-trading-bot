@@ -101,17 +101,17 @@ async def test_get_active_users_security_filter():
         active_users = await user_repo.get_active_users()
 
         assert len(active_users) >= 1
-        test_u = next(u for u in active_users if u["telegram_id"] == 123456789)
+        test_u = next(u for u in active_users if u.telegram_id == 123456789)
 
         # Verify non-sensitive fields are correct
-        assert test_u["username"] == "test_user"
-        assert test_u["first_name"] == "Test"
-        assert test_u["last_name"] == "User"
-        assert test_u["is_api_connected"] is True
-        assert test_u["is_trader"] is True
-        assert test_u["fixed_risk_amount"] == Decimal("100.5")
+        assert test_u.username == "test_user"
+        assert test_u.first_name == "Test"
+        assert test_u.last_name == "User"
+        assert test_u.is_api_connected is True
+        assert test_u.is_trader is True
+        assert test_u.fixed_risk_amount == Decimal("100.5")
 
         # Verify sensitive fields are completely omitted
-        assert "encrypted_api_key" not in test_u
-        assert "encrypted_secret_key" not in test_u
-        assert "encrypted_passphrase" not in test_u
+        assert not hasattr(test_u, "encrypted_api_key")
+        assert not hasattr(test_u, "encrypted_secret_key")
+        assert not hasattr(test_u, "encrypted_passphrase")
