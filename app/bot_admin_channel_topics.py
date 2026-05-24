@@ -10,6 +10,7 @@ from .bot_admin_channel_formatters import (
     format_topic_cleared_html,
     format_topic_set_html,
 )
+from .telegram_formatting import HTML_PARSE_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class AdminChannelTopics:
         if len(context.args) < 2:
             await update.message.reply_text(
                 SET_CHANNEL_TOPIC_USAGE_MESSAGE,
-                parse_mode="Markdown",
+                parse_mode=HTML_PARSE_MODE,
             )
             return
 
@@ -101,7 +102,7 @@ class AdminChannelTopics:
         )
         await update.message.reply_text(
             format_topic_set_html(channel["title"], message_thread_id, display_title),
-            parse_mode="HTML",
+            parse_mode=HTML_PARSE_MODE,
         )
 
     async def clear_channel_topic_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -113,7 +114,7 @@ class AdminChannelTopics:
         if len(context.args) != 1:
             await update.message.reply_text(
                 CLEAR_CHANNEL_TOPIC_USAGE_MESSAGE,
-                parse_mode="Markdown",
+                parse_mode=HTML_PARSE_MODE,
             )
             return
 
@@ -176,7 +177,7 @@ class AdminChannelTopics:
         )
         await update.message.reply_text(
             format_topic_cleared_html(channel["title"]),
-            parse_mode="HTML",
+            parse_mode=HTML_PARSE_MODE,
         )
 
     async def _get_active_channel_by_number(self, channel_number: int):

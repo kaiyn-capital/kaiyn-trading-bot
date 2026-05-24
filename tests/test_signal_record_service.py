@@ -88,7 +88,7 @@ def test_create_signal_record_retries_public_id_collision():
 
     assert record["public_id"] == "ok00002"
     assert record["sender_telegram_id"] == 123
-    assert "交易id: `ok00002`" in signal_text
+    assert "交易id: <code>ok00002</code>" in signal_text
 
 
 def test_create_signal_record_raises_after_repeated_collisions():

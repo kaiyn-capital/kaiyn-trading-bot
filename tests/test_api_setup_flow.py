@@ -282,7 +282,8 @@ def test_successful_api_setup_invalidates_cached_trade_client():
     assert handler.trade_manager.invalidated_user_ids == [1]
     assert handler.logged_actions == [{"user_id": 1, "action": "api_setup_success"}]
     assert context.bot.messages[0].text == "🔄 正在测试 API 连接..."
-    assert context.bot.messages[0].edits[-1]["text"].startswith("✅ **API 设置成功！**")
+    assert context.bot.messages[0].edits[-1]["text"].startswith("✅ <b>API 设置成功！</b>")
+    assert context.bot.messages[0].edits[-1]["kwargs"]["parse_mode"] == "HTML"
 
 
 def test_failed_api_setup_does_not_invalidate_cached_trade_client():
@@ -307,7 +308,8 @@ def test_failed_api_setup_does_not_invalidate_cached_trade_client():
     assert handler.user_repo.api_updates == []
     assert handler.trade_manager.invalidated_user_ids == []
     assert handler.logged_actions == []
-    assert context.bot.messages[0].edits[-1]["text"].startswith("❌ **API 连接测试失败**")
+    assert context.bot.messages[0].edits[-1]["text"].startswith("❌ <b>API 连接测试失败</b>")
+    assert context.bot.messages[0].edits[-1]["kwargs"]["parse_mode"] == "HTML"
 
 
 def test_expired_risk_amount_session_does_not_update_amount_and_only_prompts_once():

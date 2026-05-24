@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 
 from .audit import AUDIT_MODULE, format_audit_log_entry
 from .health import build_admin_health_report
+from .telegram_formatting import HTML_PARSE_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class AdminMonitoring:
                 started_at=getattr(self.bot, "started_at", None),
                 pending_order_repo=getattr(self.bot, "pending_order_repo", None),
             )
-            await update.message.reply_text(report, parse_mode="HTML")
+            await update.message.reply_text(report, parse_mode=HTML_PARSE_MODE)
         except Exception as e:
             logger.error(f"Admin health command error: {e}")
             await update.message.reply_text(f"❌ 获取健康状态时发生错误: {str(e)}")

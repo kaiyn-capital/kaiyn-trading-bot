@@ -18,6 +18,7 @@ from .bot_admin_channel_formatters import (
     manage_channels_keyboard,
 )
 from .bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
+from .telegram_formatting import HTML_PARSE_MODE, html_escape
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,8 @@ class AdminChannels:
                     },
                 )
                 await update.message.reply_text(
-                    f"✅ 频道已删除\n\n频道名称：{channel_to_delete['title']}\n已从管理列表中移除。"
+                    f"✅ 频道已删除\n\n频道名称：{html_escape(channel_to_delete['title'])}\n已从管理列表中移除。",
+                    parse_mode=HTML_PARSE_MODE,
                 )
             else:
                 await emit_audit_event(
@@ -126,7 +128,7 @@ class AdminChannels:
             if not channels:
                 await update.message.reply_text(
                     ADMIN_CHANNELS_EMPTY_MESSAGE,
-                    parse_mode="Markdown",
+                    parse_mode=HTML_PARSE_MODE,
                 )
                 return
 
@@ -134,12 +136,15 @@ class AdminChannels:
             await update.message.reply_text(
                 channels_text_html,
                 reply_markup=admin_channels_keyboard(),
-                parse_mode="HTML",
+                parse_mode=HTML_PARSE_MODE,
             )
 
         except Exception as e:
             logger.exception(f"Admin channels command error: {e}")
-            await update.message.reply_text(f"❌ 获取频道列表时发生错误: {str(e)}")
+            await update.message.reply_text(
+                f"❌ 获取频道列表时发生错误: {html_escape(e)}",
+                parse_mode=HTML_PARSE_MODE,
+            )
 
     async def add_channel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Add a managed channel or group."""
@@ -151,7 +156,7 @@ class AdminChannels:
         if not args:
             await update.message.reply_text(
                 ADD_CHANNEL_USAGE_MESSAGE,
-                parse_mode="Markdown",
+                parse_mode=HTML_PARSE_MODE,
             )
             return
 
@@ -192,7 +197,10 @@ class AdminChannels:
                         "chat_type": chat_info.type.value,
                     },
                 )
-                await update.message.reply_text(f"⚠️ 频道/群组 {chat_info.title} 已经在管理列表中")
+                await update.message.reply_text(
+                    f"⚠️ 频道/群组 {html_escape(chat_info.title)} 已经在管理列表中",
+                    parse_mode=HTML_PARSE_MODE,
+                )
                 return
 
             if existing and not existing.is_active:
@@ -233,7 +241,7 @@ class AdminChannels:
                 )
                 await update.message.reply_text(
                     format_channel_added_html(chat_info.title, chat_info.type.value, chat_info.id, description),
-                    parse_mode="HTML",
+                    parse_mode=HTML_PARSE_MODE,
                 )
                 return
 
@@ -259,7 +267,7 @@ class AdminChannels:
             )
             await update.message.reply_text(
                 format_channel_added_html(chat_info.title, chat_info.type.value, chat_info.id, description),
-                parse_mode="HTML",
+                parse_mode=HTML_PARSE_MODE,
             )
 
         except Exception as e:
@@ -280,13 +288,14 @@ class AdminChannels:
                 f"• 频道/群组不存在\n"
                 f"• 机器人没有访问权限\n"
                 f"• ID 格式错误\n\n"
-                f"错误详情：{str(e)}"
+                f"错误详情：{html_escape(e)}",
+                parse_mode=HTML_PARSE_MODE,
             )
 
     async def _handle_add_new_channel_callback(self, query, user):
         await query.edit_message_text(
             ADD_NEW_CHANNEL_CALLBACK_MESSAGE,
-            parse_mode="Markdown",
+            parse_mode=HTML_PARSE_MODE,
         )
 
     async def _handle_manage_channels_callback(self, query, user):
@@ -296,7 +305,7 @@ class AdminChannels:
             if not channels:
                 await query.edit_message_text(
                     MANAGE_CHANNELS_EMPTY_MESSAGE,
-                    parse_mode="Markdown",
+                    parse_mode=HTML_PARSE_MODE,
                 )
                 return
 
@@ -307,12 +316,15 @@ class AdminChannels:
             await query.edit_message_text(
                 format_manage_channels_html(channels_data),
                 reply_markup=manage_channels_keyboard(),
-                parse_mode="HTML",
+                parse_mode=HTML_PARSE_MODE,
             )
 
         except Exception as e:
             logger.error(f"Manage channels error: {e}")
-            await query.edit_message_text(f"❌ 获取频道列表失败\n\n错误详情: {str(e)}\n\n请检查数据库连接状态。")
+            await query.edit_message_text(
+                f"❌ 获取频道列表失败\n\n错误详情: {html_escape(e)}\n\n请检查数据库连接状态。",
+                parse_mode=HTML_PARSE_MODE,
+            )
 
     async def _handle_delete_channel_start_callback(self, query, user):
         session_data = self.bot.get_active_user_session(user.telegram_id)
@@ -323,7 +335,7 @@ class AdminChannels:
 
         await query.edit_message_text(
             DELETE_CHANNEL_PROMPT_MESSAGE,
-            parse_mode="Markdown",
+            parse_mode=HTML_PARSE_MODE,
         )
         self.bot.update_user_session(user.telegram_id, {"step": "delete_channel"})
 
@@ -334,14 +346,14 @@ class AdminChannels:
             if not channels:
                 await query.edit_message_text(
                     ADMIN_CHANNELS_EMPTY_MESSAGE,
-                    parse_mode="Markdown",
+                    parse_mode=HTML_PARSE_MODE,
                 )
                 return
 
             await query.edit_message_text(
                 format_admin_channels_html(channels),
                 reply_markup=admin_channels_keyboard(),
-                parse_mode="HTML",
+                parse_mode=HTML_PARSE_MODE,
             )
         except Exception as e:
             logger.error(f"Return admin channels error: {e}")

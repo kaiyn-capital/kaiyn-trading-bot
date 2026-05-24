@@ -67,7 +67,7 @@ def build_position_limit_error(position_value: Decimal, position_limit: Decimal)
     return RiskLimitExceeded(
         reason="position_size_limit_exceeded",
         user_message=(
-            "❌ **仓位超过风险上限**\n\n"
+            "❌ <b>仓位超过风险上限</b>\n\n"
             f"本次名义仓位为 ${position_value:.2f}，有效上限为 ${position_limit:.2f}。\n\n"
             "请降低 1R，或选择止损距离更大的信号。"
         ),
@@ -88,7 +88,7 @@ def build_daily_trade_limit_error(
     return RiskLimitExceeded(
         reason="daily_trade_limit_exceeded",
         user_message=(
-            "❌ **今日下单次数已达上限**\n\n"
+            "❌ <b>今日下单次数已达上限</b>\n\n"
             f"今日已送出 {current_count} 笔，下单上限为 {daily_trade_limit} 笔。\n\n"
             "请明天再试，或联系管理员调整交易限制。"
         ),

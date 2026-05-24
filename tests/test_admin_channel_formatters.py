@@ -1,15 +1,15 @@
 from app.bot_admin_channel_formatters import (
     admin_channels_keyboard,
-    escape_html,
     format_admin_channels_html,
     format_channel_topic,
     format_manage_channels_html,
     manage_channels_keyboard,
 )
+from app.telegram_formatting import html_escape
 
 
-def test_escape_html_handles_reserved_characters():
-    assert escape_html("A&B <tag>") == "A&amp;B &lt;tag&gt;"
+def test_html_escape_handles_reserved_characters():
+    assert html_escape("A&B <tag>") == "A&amp;B &lt;tag&gt;"
 
 
 def test_format_channel_topic_uses_thread_title_or_default():

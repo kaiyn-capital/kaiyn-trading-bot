@@ -9,8 +9,8 @@ class FakeBot:
     def __init__(self):
         self.messages = []
 
-    async def send_message(self, chat_id, text):
-        self.messages.append({"chat_id": chat_id, "text": text})
+    async def send_message(self, chat_id, text, **kwargs):
+        self.messages.append({"chat_id": chat_id, "text": text, "kwargs": kwargs})
 
 
 class FakeSystemLogRepo:
@@ -56,6 +56,7 @@ def test_bitget_failure_alerts_after_threshold(monkeypatch, tmp_path):
     asyncio.run(manager.record_bitget_failure(classified, "status_command"))
     assert len(bot.messages) == 1
     assert "Bitget API 连续异常" in bot.messages[0]["text"]
+    assert bot.messages[0]["kwargs"]["parse_mode"] == "HTML"
     assert len(system_log_repo.logs) == 3
 
     asyncio.run(manager.record_bitget_failure(classified, "status_command"))

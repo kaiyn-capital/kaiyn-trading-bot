@@ -32,11 +32,12 @@ from .risk_limits import (
     get_effective_daily_trade_limit,
     get_effective_position_limit,
 )
+from .telegram_formatting import HTML_PARSE_MODE, html_code, html_escape
 
 logger = logging.getLogger(__name__)
 
 UNKNOWN_ORDER_RESULT_MESSAGE = (
-    "⚠️ **订单状态待确认**\n\n"
+    "⚠️ <b>订单状态待确认</b>\n\n"
     "下单请求可能已送到 Bitget，但系统没有收到明确结果。\n\n"
     "系统不会自动重送。将保留这笔确认单并稍后用 Bitget 订单查询补状态；"
     "若确认失败，会再通知您回到原信号重新下单。"
@@ -178,7 +179,7 @@ class TelegramOrderFlowService:
                 chat_id=user.telegram_id,
                 text=text,
                 reply_markup=reply_markup,
-                parse_mode="Markdown",
+                parse_mode=HTML_PARSE_MODE,
             )
         except Exception as e:
             logger.error(f"Failed to send private message to {user.telegram_id}: {e}")
@@ -264,7 +265,7 @@ class TelegramOrderFlowService:
             await self.send_private_message(
                 query,
                 user,
-                "❌ **无法下单**\n\n您尚未连接 Bitget API。\n\n请使用 `/setapi` 命令设置您的 API 密钥。",
+                f"❌ <b>无法下单</b>\n\n您尚未连接 Bitget API。\n\n请使用 {html_code('/setapi')} 命令设置您的 API 密钥。",
             )
             return
 
@@ -284,7 +285,7 @@ class TelegramOrderFlowService:
             await self.send_private_message(
                 query,
                 user,
-                "❌ **无法下单**\n\n您尚未设定固定风险金额(1R)。\n\n请使用 `/settings` 命令设置您的风险管理参数。",
+                f"❌ <b>无法下单</b>\n\n您尚未设定固定风险金额(1R)。\n\n请使用 {html_code('/settings')} 命令设置您的风险管理参数。",
             )
             return
 
@@ -346,7 +347,7 @@ class TelegramOrderFlowService:
                         "error_message": validation.error_message,
                     },
                 )
-                await self.send_private_message(query, user, validation.error_message or "❌ 无法下单")
+                await self.send_private_message(query, user, html_escape(validation.error_message or "❌ 无法下单"))
                 return
 
             preview = apply_order_validation(preview, validation)
@@ -439,7 +440,9 @@ class TelegramOrderFlowService:
             await self.send_private_message(
                 query,
                 user,
-                f"❌ 无法获取 {callback_data.symbol} 当前价格或交易规则。\n\n{classified.user_message}",
+                "❌ 无法获取 "
+                f"{html_escape(callback_data.symbol)} 当前价格或交易规则。\n\n"
+                f"{html_escape(classified.user_message)}",
             )
 
     async def handle_confirm_pending_order_callback(self, query, user, data):
@@ -490,7 +493,11 @@ class TelegramOrderFlowService:
                         "pending_order_token": summarize_identifier(token),
                     },
                 )
-                await self.send_private_message(query, user, f"⚠️ 这笔待确认订单目前状态为 {status}，无法重复执行。")
+                await self.send_private_message(
+                    query,
+                    user,
+                    f"⚠️ 这笔待确认订单目前状态为 {html_escape(status)}，无法重复执行。",
+                )
                 return
 
             await emit_audit_event(
@@ -558,7 +565,11 @@ class TelegramOrderFlowService:
         elif status == "missing":
             await self.send_private_message(query, user, "❌ 找不到这笔待确认订单")
         else:
-            await self.send_private_message(query, user, f"⚠️ 这笔待确认订单目前状态为 {status}，无法取消。")
+            await self.send_private_message(
+                query,
+                user,
+                f"⚠️ 这笔待确认订单目前状态为 {html_escape(status)}，无法取消。",
+            )
 
     async def execute_order(self, request: ConfirmedOrderRequest):
         """Execute a confirmed order."""
@@ -575,7 +586,7 @@ class TelegramOrderFlowService:
         pending_order_token = request.pending_order_token
 
         await query.answer("正在执行下单...")
-        await self.send_private_message(query, user, "🔄 **正在执行下单...**")
+        await self.send_private_message(query, user, "🔄 <b>正在执行下单...</b>")
 
         try:
             user_data = await self.user_repo.get_user_by_telegram_id(user.telegram_id)
@@ -651,8 +662,8 @@ class TelegramOrderFlowService:
                 await self.send_private_message(
                     query,
                     user,
-                    "❌ **订单已不符合交易所规则，请重新点击最新信号下单。**\n\n"
-                    f"原因：{error_message.replace('❌ ', '')}",
+                    "❌ <b>订单已不符合交易所规则，请重新点击最新信号下单。</b>\n\n"
+                    f"原因：{html_escape(error_message.replace('❌ ', ''))}",
                 )
                 return False
 
@@ -868,6 +879,6 @@ class TelegramOrderFlowService:
             await self.send_private_message(
                 query,
                 user,
-                f"❌ **下单失败**\n\n{classified.user_message}",
+                f"❌ <b>下单失败</b>\n\n{html_escape(classified.user_message)}",
             )
             return False

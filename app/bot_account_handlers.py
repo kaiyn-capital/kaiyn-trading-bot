@@ -16,6 +16,7 @@ from .bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
 from .bot_states import WAITING_API_KEY
 from .decimal_utils import decimal_text, to_decimal
 from .log_sanitizer import summarize_balance_response
+from .telegram_formatting import HTML_PARSE_MODE, html_code, html_escape
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,13 @@ class AccountHandlers:
         user = await self.bot._get_or_create_user(update)
         await self.bot._log_user_action(user, "start_command")
 
-        await update.message.reply_text(welcome_message(), reply_markup=main_menu_keyboard(), parse_mode="Markdown")
+        await update.message.reply_text(
+            welcome_message(), reply_markup=main_menu_keyboard(), parse_mode=HTML_PARSE_MODE
+        )
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help."""
-        await update.message.reply_text(help_message(), parse_mode="Markdown")
+        await update.message.reply_text(help_message(), parse_mode=HTML_PARSE_MODE)
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /status."""
@@ -53,8 +56,8 @@ class AccountHandlers:
             ]
         ):
             await update.message.reply_text(
-                "❌ API 未连接\n\n请先使用 `/setapi` 命令设置您的 Bitget API 密钥。",
-                parse_mode="Markdown",
+                f"❌ API 未连接\n\n请先使用 {html_code('/setapi')} 命令设置您的 Bitget API 密钥。",
+                parse_mode=HTML_PARSE_MODE,
             )
             return
 
@@ -68,17 +71,17 @@ class AccountHandlers:
 
             if is_connected:
                 bitget_uid = await self.bot.trade_manager.get_user_uid(credentials)
-                status_text = f"""Bitget UID: {bitget_uid}\n✅ **API 连接状态：正常**"""
+                status_text = f"Bitget UID: {html_code(bitget_uid)}\n✅ <b>API 连接状态：正常</b>"
 
                 await update.message.reply_text(
                     status_text,
                     reply_markup=status_actions_keyboard(),
-                    parse_mode="Markdown",
+                    parse_mode=HTML_PARSE_MODE,
                 )
             else:
                 await update.message.reply_text(
-                    f"❌ **API 连接失败**\n\n错误信息: {message}\n\n请检查您的 API 设置或重新配置。",
-                    parse_mode="Markdown",
+                    f"❌ <b>API 连接失败</b>\n\n错误信息: {html_escape(message)}\n\n请检查您的 API 设置或重新配置。",
+                    parse_mode=HTML_PARSE_MODE,
                 )
 
         except Exception as e:
@@ -93,7 +96,10 @@ class AccountHandlers:
         await self.bot._log_user_action(user, "balance_command")
 
         if not user.is_api_connected:
-            await update.message.reply_text("❌ 请先设置 API 连接。使用 `/setapi` 命令。")
+            await update.message.reply_text(
+                f"❌ 请先设置 API 连接。使用 {html_code('/setapi')} 命令。",
+                parse_mode=HTML_PARSE_MODE,
+            )
             return
 
         try:
@@ -126,7 +132,7 @@ class AccountHandlers:
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
-                await update.message.reply_text(balance_text, reply_markup=reply_markup, parse_mode="Markdown")
+                await update.message.reply_text(balance_text, reply_markup=reply_markup, parse_mode=HTML_PARSE_MODE)
             else:
                 await update.message.reply_text("❌ 获取余额失败，请检查 API 设置。")
 
@@ -151,21 +157,21 @@ class AccountHandlers:
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await update.message.reply_text(
-                "🔐 **API 设置**\n\n您已经设置完成 Bitget API 连接。\n\n是否要修改现有的 API 设置？",
+                "🔐 <b>API 设置</b>\n\n您已经设置完成 Bitget API 连接。\n\n是否要修改现有的 API 设置？",
                 reply_markup=reply_markup,
-                parse_mode="Markdown",
+                parse_mode=HTML_PARSE_MODE,
             )
             return ConversationHandler.END
 
         self.bot.set_user_session(user.telegram_id, {"step": "api_key"})
 
         await update.message.reply_text(
-            "🔐 **设置 Bitget API**\n\n"
+            "🔐 <b>设置 Bitget API</b>\n\n"
             "请按顺序提供您的 API 信息。\n\n"
-            "**第 1 步：API Key**\n"
+            "<b>第 1 步：API Key</b>\n"
             "请发送您的 Bitget API Key\n\n"
             "💡 提示：您可以在 Bitget 官网的 API 管理页面获取",
-            parse_mode="Markdown",
+            parse_mode=HTML_PARSE_MODE,
         )
 
         return WAITING_API_KEY
@@ -190,7 +196,7 @@ class AccountHandlers:
         await update.message.reply_text(
             settings_message(getattr(user, "fixed_risk_amount", None)),
             reply_markup=trading_settings_keyboard(),
-            parse_mode="Markdown",
+            parse_mode=HTML_PARSE_MODE,
         )
 
     async def _handle_set_risk_start_callback(self, query, user):
@@ -201,8 +207,8 @@ class AccountHandlers:
             self.bot.set_user_session(user.telegram_id, {"step": "risk_amount"})
 
             await query.edit_message_text(
-                "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n请输入定 R 金额 u（数字）：",
-                parse_mode="Markdown",
+                "💰 <b>设置每单固定止损金额，以进行定 R 开仓。</b>\n\n请输入定 R 金额 u（数字）：",
+                parse_mode=HTML_PARSE_MODE,
             )
         else:
             keyboard = [
@@ -212,9 +218,10 @@ class AccountHandlers:
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await query.edit_message_text(
-                f"💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n您目前已设置定损为 {decimal_text(current_risk)} USDT，要更改吗？",
+                "💰 <b>设置每单固定止损金额，以进行定 R 开仓。</b>\n\n"
+                f"您目前已设置定损为 {html_escape(decimal_text(current_risk))} USDT，要更改吗？",
                 reply_markup=reply_markup,
-                parse_mode="Markdown",
+                parse_mode=HTML_PARSE_MODE,
             )
 
     async def set_risk_amount(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -238,8 +245,8 @@ class AccountHandlers:
 
             if success:
                 await update.message.reply_text(
-                    f"✅ **已设置定 R 止损为 {decimal_text(amount)} USDT**",
-                    parse_mode="Markdown",
+                    f"✅ <b>已设置定 R 止损为 {html_escape(decimal_text(amount))} USDT</b>",
+                    parse_mode=HTML_PARSE_MODE,
                 )
             else:
                 await update.message.reply_text("❌ 设置失败，请重试")
@@ -294,29 +301,29 @@ class AccountHandlers:
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             await query.edit_message_text(
-                "🔐 **API 设置**\n\n您已经设置完成 Bitget API 连接。\n\n是否要修改现有的 API 设置？",
+                "🔐 <b>API 设置</b>\n\n您已经设置完成 Bitget API 连接。\n\n是否要修改现有的 API 设置？",
                 reply_markup=reply_markup,
-                parse_mode="Markdown",
+                parse_mode=HTML_PARSE_MODE,
             )
             return
 
         self.bot.set_user_session(user.telegram_id, {"step": "api_key"})
 
         await query.edit_message_text(
-            "🔐 **设置 Bitget API**\n\n"
+            "🔐 <b>设置 Bitget API</b>\n\n"
             "请按顺序提供您的 API 信息。\n\n"
-            "**第 1 步：API Key**\n"
+            "<b>第 1 步：API Key</b>\n"
             "请发送您的 Bitget API Key\n\n"
             "💡 提示：您可以在 Bitget 官网的 API 管理页面获取",
-            parse_mode="Markdown",
+            parse_mode=HTML_PARSE_MODE,
         )
 
     async def _handle_status_callback(self, query, user):
         """Handle status callback."""
         if not user.is_api_connected:
             await query.edit_message_text(
-                "❌ API 未连接\n\n请先使用 `/setapi` 命令设置您的 API。",
-                parse_mode="Markdown",
+                f"❌ API 未连接\n\n请先使用 {html_code('/setapi')} 命令设置您的 API。",
+                parse_mode=HTML_PARSE_MODE,
             )
             return
 
@@ -330,10 +337,13 @@ class AccountHandlers:
 
             if is_connected:
                 bitget_uid = await self.bot.trade_manager.get_user_uid(credentials)
-                status_text = f"Bitget UID: {bitget_uid}\n✅ **API 连接状态：正常**"
-                await query.edit_message_text(status_text, parse_mode="Markdown")
+                status_text = f"Bitget UID: {html_code(bitget_uid)}\n✅ <b>API 连接状态：正常</b>"
+                await query.edit_message_text(status_text, parse_mode=HTML_PARSE_MODE)
             else:
-                await query.edit_message_text(f"❌ **API 连接失败**\n\n{message}", parse_mode="Markdown")
+                await query.edit_message_text(
+                    f"❌ <b>API 连接失败</b>\n\n{html_escape(message)}",
+                    parse_mode=HTML_PARSE_MODE,
+                )
 
         except Exception as e:
             classified = classify_bitget_exception(e)
@@ -374,7 +384,7 @@ class AccountHandlers:
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
-                await query.edit_message_text(balance_text, reply_markup=reply_markup, parse_mode="Markdown")
+                await query.edit_message_text(balance_text, reply_markup=reply_markup, parse_mode=HTML_PARSE_MODE)
             else:
                 await query.edit_message_text("❌ 获取余额失败")
 
@@ -387,14 +397,14 @@ class AccountHandlers:
 
     async def _handle_return_start_callback(self, query, user):
         """Handle return-to-start callback."""
-        await query.edit_message_text(welcome_message(), reply_markup=main_menu_keyboard(), parse_mode="Markdown")
+        await query.edit_message_text(welcome_message(), reply_markup=main_menu_keyboard(), parse_mode=HTML_PARSE_MODE)
 
     async def _handle_trading_settings_callback(self, query, user):
         """Handle trading settings callback."""
         await query.edit_message_text(
             settings_message(getattr(user, "fixed_risk_amount", None)),
             reply_markup=trading_settings_keyboard(include_return=True),
-            parse_mode="Markdown",
+            parse_mode=HTML_PARSE_MODE,
         )
 
     async def _handle_confirm_modify_api(self, query, user):
@@ -402,11 +412,11 @@ class AccountHandlers:
         self.bot.set_user_session(user.telegram_id, {"step": "api_key"})
 
         await query.edit_message_text(
-            "🔐 **修改 Bitget API**\n\n"
+            "🔐 <b>修改 Bitget API</b>\n\n"
             "请按顺序提供您的新 API 信息。\n\n"
-            "**第 1 步：API Key**\n"
+            "<b>第 1 步：API Key</b>\n"
             "请发送您的 Bitget API Key",
-            parse_mode="Markdown",
+            parse_mode=HTML_PARSE_MODE,
         )
         return WAITING_API_KEY
 
@@ -415,8 +425,8 @@ class AccountHandlers:
         self.bot.set_user_session(user.telegram_id, {"step": "risk_amount"})
 
         await query.edit_message_text(
-            "💰 **设置每单固定止损金额，以进行定 R 开仓。**\n\n请输入定 R 金额 u（数字）：",
-            parse_mode="Markdown",
+            "💰 <b>设置每单固定止损金额，以进行定 R 开仓。</b>\n\n请输入定 R 金额 u（数字）：",
+            parse_mode=HTML_PARSE_MODE,
         )
 
 

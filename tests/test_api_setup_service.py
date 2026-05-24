@@ -205,4 +205,5 @@ def test_api_setup_service_successful_passphrase_saves_credentials_and_invalidat
     ]
     assert harness.trade_manager.invalidated_user_ids == [1]
     assert harness.logged_actions == [{"user_id": 1, "action": "api_setup_success"}]
-    assert context.bot.messages[0].edits[-1]["text"].startswith("✅ **API 设置成功！**")
+    assert context.bot.messages[0].edits[-1]["text"].startswith("✅ <b>API 设置成功！</b>")
+    assert context.bot.messages[0].edits[-1]["kwargs"]["parse_mode"] == "HTML"
