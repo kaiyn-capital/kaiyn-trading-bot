@@ -1,3 +1,6 @@
+from .telegram_formatting import html_escape, html_pre
+
+
 def _to_float(value) -> float:
     return float(value or 0)
 
@@ -30,18 +33,18 @@ def _extract_usdt_balance(assets) -> tuple[float, float, float] | None:
 
 def format_usdt_balance_text(assets, raw_limit: int, compact: bool) -> str:
     """Format account balance API payload for display."""
-    balance_text = "💰 **U本位合约账户余额**\n\n"
+    balance_text = "💰 <b>U本位合约账户余额</b>\n\n"
     usdt_balance = _extract_usdt_balance(assets)
 
     if usdt_balance:
         available, frozen, total = usdt_balance
-        balance_text += "**USDT:**\n"
-        balance_text += f"  可用: {available:.4f}\n"
-        balance_text += f"  冻结: {frozen:.4f}\n"
-        balance_text += f"  总计: {total:.4f}\n\n"
+        balance_text += "<b>USDT:</b>\n"
+        balance_text += f"  可用: {html_escape(f'{available:.4f}')}\n"
+        balance_text += f"  冻结: {html_escape(f'{frozen:.4f}')}\n"
+        balance_text += f"  总计: {html_escape(f'{total:.4f}')}\n\n"
     else:
         balance_text += "暂无 USDT 资产或余额为零\n\n"
-        balance_text += f"📊 **原始API数据：**\n```\n{str(assets)[:raw_limit]}...\n```\n\n"
+        balance_text += f"📊 <b>原始API数据：</b>\n{html_pre(str(assets)[:raw_limit] + '...')}\n\n"
 
-    balance_text += "ℹ️ **说明：** 仅显示 U 本位合约账户的 USDT 余额"
+    balance_text += "ℹ️ <b>说明：</b> 仅显示 U 本位合约账户的 USDT 余额"
     return balance_text

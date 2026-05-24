@@ -22,6 +22,7 @@ from app.database import (
     health_check,
     init_database,
 )
+from app.telegram_formatting import html_escape
 
 
 # 設置日誌
@@ -80,7 +81,7 @@ async def check_requirements():
     except Exception as e:
         logging.error(f"Requirements check failed: {e}")
         await send_direct_admin_alert(
-            f"❌ Kaiyn Trading Bot 启动前系统检查失败。\n\n错误：{e}",
+            f"❌ Kaiyn Trading Bot 启动前系统检查失败。\n\n错误：{html_escape(e)}",
             alert_key="startup_requirements_failure",
         )
         return False
@@ -117,7 +118,7 @@ async def main():
     except Exception as e:
         logger.error(f"❌ 啟動失敗: {e}")
         await send_direct_admin_alert(
-            f"❌ Kaiyn Trading Bot 启动失败。\n\n错误：{e}",
+            f"❌ Kaiyn Trading Bot 启动失败。\n\n错误：{html_escape(e)}",
             alert_key="startup_failure",
         )
         return 1
@@ -176,7 +177,7 @@ async def run_cleanup_retention(dry_run: bool = False) -> int:
         except Exception as log_error:
             logger.error(f"Failed to persist cleanup failure log: {log_error}")
         await send_direct_admin_alert(
-            f"❌ Kaiyn Trading Bot maintenance cleanup 失败。\n\n错误：{e}",
+            f"❌ Kaiyn Trading Bot maintenance cleanup 失败。\n\n错误：{html_escape(e)}",
             alert_key="maintenance_cleanup_failed",
         )
         return 1

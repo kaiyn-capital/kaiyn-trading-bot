@@ -31,7 +31,7 @@ Users can configure encrypted API credentials via Telegram, set a fixed 1R risk 
 - Encrypted API credential storage using Fernet encryption for Bitget API Key, Secret Key, and Passphrase.
 - Admin alerts, health checks, and audit trail via `/admin_health`, `/admin_audit`, startup notifications, and exception alerts.
 - Docker-first deployment with retention and backup, including log rotation, DB retention cleanup, and daily PostgreSQL backups.
-- CI/CD with Ruff, pytest, PostgreSQL integration tests, GHCR image publishing, VPS SSH deployment, and Dependabot.
+- CI/CD with Ruff, mypy, Alembic checks, pytest, PostgreSQL integration tests, GHCR image publishing, VPS SSH deployment, and Dependabot.
 
 ## Architecture
 
@@ -49,7 +49,7 @@ flowchart TD
     backup["db-backup service<br/>daily gzip SQL dump"] --> db
     backup --> files["backups/"]
 
-    ci["GitHub Actions CI"] --> test["test service<br/>Ruff + pytest + DB integration"]
+    ci["GitHub Actions CI"] --> test["test service<br/>Ruff + mypy + pytest + DB integration"]
     test --> db
     ci --> ghcr["GHCR<br/>multi-arch release image"]
     ghcr --> deploy["VPS SSH CD<br/>deploy image digest"]
@@ -108,14 +108,15 @@ sequenceDiagram
 | Runtime | Python 3.11 |
 | Bot framework | `python-telegram-bot` 22.7 |
 | Exchange integration | Bitget USDT-FUTURES REST API via `httpx` 0.28.1 |
-| Database | PostgreSQL 16 + SQLAlchemy asyncio 2.0.49 + `asyncpg` 0.29.0 |
+| Database | PostgreSQL 16 + SQLAlchemy asyncio 2.0.49 + `asyncpg` 0.31.0 |
 | Schema migration | Alembic 1.18.4 |
 | Credential security | `cryptography` Fernet 48.0.0 |
 | Deployment | Docker Compose services: `postgres`, `bot`, `maintenance`, `db-backup` |
 | Dependency lock | uv lockfile + `uv sync --locked` |
 | Long-term operations | Docker log rotation, file log rotation, DB retention, daily SQL backup |
 | Testing | pytest 9.0.3 + opt-in PostgreSQL integration tests |
-| Lint / format | Ruff 0.15.12 |
+| Lint / format | Ruff 0.15.14 |
+| Type checking | mypy 1.16.0 on critical path modules |
 | CI | GitHub Actions with Docker Compose-first checks |
 | CD | GHCR multi-arch image + VPS SSH deployment by digest |
 | Dependency automation | Dependabot weekly updates; GitHub Actions patch/minor auto-merge |
@@ -135,7 +136,7 @@ sequenceDiagram
 - Trading state is persisted in PostgreSQL, so pending confirmations survive Bot restarts and duplicate clicks are guarded by row locking.
 - Exchange execution is validated against Bitget contract rules before confirmation and again before order submission.
 - Operations are part of the product surface: health checks, audit events, retention cleanup, backups, and restore documentation are included.
-- CI mirrors the Docker Compose runtime path, including PostgreSQL integration tests instead of relying on host-local services.
+- CI mirrors the Docker Compose runtime path, including lockfile, migration/model, type, and PostgreSQL integration checks instead of relying on host-local services.
 - CD publishes multi-arch images to GHCR and deploys production through SSH after environment approval.
 
 ## Quick Start
@@ -199,13 +200,18 @@ Equivalent Docker Compose commands:
 ```bash
 docker compose build test
 docker compose run --rm test uv lock --check
+docker compose up -d postgres
+docker compose run --rm test alembic upgrade head
+docker compose run --rm test alembic check
 docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
-docker compose run --rm test python -m pytest
+docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
 docker compose run --rm test python -m pytest --run-db
+docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+git diff --check
 ```
 
-GitHub Actions runs the same Docker Compose flow for Ruff, pytest, PostgreSQL integration tests, `py_compile`, and whitespace checks. After CI passes, the release workflow publishes a multi-arch image to GHCR and deploys it to the VPS via SSH after `production` environment approval. Coolify documentation is retained as an optional deployment variant.
+GitHub Actions runs the same Docker Compose flow for lockfile consistency, Alembic migration/model checks, Ruff, mypy, PostgreSQL integration tests with coverage output, `py_compile`, and whitespace checks. After CI passes, the release workflow publishes a multi-arch image to GHCR and deploys it to the VPS via SSH after `production` environment approval. Coolify documentation is retained as an optional deployment variant.
 
 Dependabot checks Python packages and GitHub Actions weekly. GitHub Actions patch/minor PRs can be auto-squash-merged after CI and branch protection pass. Python dependency PRs require manual review.
 

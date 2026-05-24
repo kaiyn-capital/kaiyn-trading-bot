@@ -3,6 +3,7 @@ from io import BytesIO
 
 from .bot_keyboards import signal_order_keyboard
 from .order_types import SignalDraft
+from .telegram_formatting import HTML_PARSE_MODE, html_escape
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +167,7 @@ class SignalDeliveryService:
             chat_id=chat_id,
             photo=BytesIO(chart_bytes),
             caption=caption,
-            parse_mode="Markdown",
+            parse_mode=HTML_PARSE_MODE,
             **kwargs,
         )
 
@@ -185,7 +186,7 @@ class SignalDeliveryService:
                 chat_id=chat_id,
                 text=signal_text,
                 reply_markup=reply_markup,
-                parse_mode="Markdown",
+                parse_mode=HTML_PARSE_MODE,
                 **send_kwargs,
             )
             return {"used_fallback": False, "message_id": self._extract_message_id(message), "sent_as": "text"}
@@ -197,7 +198,7 @@ class SignalDeliveryService:
                     photo=BytesIO(chart_bytes),
                     caption=signal_text,
                     reply_markup=reply_markup,
-                    parse_mode="Markdown",
+                    parse_mode=HTML_PARSE_MODE,
                     **send_kwargs,
                 )
                 return {"used_fallback": False, "message_id": self._extract_message_id(message), "sent_as": "photo"}
@@ -207,13 +208,13 @@ class SignalDeliveryService:
                     photo=BytesIO(chart_bytes),
                     caption=self._signal_chart_short_caption(signal),
                     reply_markup=reply_markup,
-                    parse_mode="Markdown",
+                    parse_mode=HTML_PARSE_MODE,
                     **send_kwargs,
                 )
                 await bot.send_message(
                     chat_id=chat_id,
                     text=signal_text,
-                    parse_mode="Markdown",
+                    parse_mode=HTML_PARSE_MODE,
                     **send_kwargs,
                 )
                 return {"used_fallback": False, "message_id": self._extract_message_id(message), "sent_as": "photo"}
@@ -223,7 +224,7 @@ class SignalDeliveryService:
                 chat_id=chat_id,
                 text=signal_text,
                 reply_markup=reply_markup,
-                parse_mode="Markdown",
+                parse_mode=HTML_PARSE_MODE,
                 **send_kwargs,
             )
             return {"used_fallback": True, "message_id": self._extract_message_id(message), "sent_as": "text"}
@@ -238,9 +239,20 @@ class SignalDeliveryService:
     def fit_photo_caption(text: str) -> str:
         if len(text) <= TELEGRAM_PHOTO_CAPTION_LIMIT:
             return text
-        return f"{text[: TELEGRAM_PHOTO_CAPTION_LIMIT - 2]}…"
+        truncated = text[: TELEGRAM_PHOTO_CAPTION_LIMIT - 1]
+        last_amp = truncated.rfind("&")
+        last_semicolon = truncated.rfind(";")
+        if last_amp > last_semicolon:
+            truncated = truncated[:last_amp]
+        last_tag_start = truncated.rfind("<")
+        last_tag_end = truncated.rfind(">")
+        if last_tag_start > last_tag_end:
+            truncated = truncated[:last_tag_start]
+        return f"{truncated}…"
 
     @staticmethod
     def _signal_chart_short_caption(signal: SignalDraft) -> str:
         direction_text = "多 Long" if signal.direction == "long" else "空 Short"
-        return f"🚨 **交易信号**\n\n**Symbol：** {signal.symbol}\n**Direction：** {direction_text}"
+        return (
+            f"🚨 <b>交易信号</b>\n\n<b>Symbol：</b> {html_escape(signal.symbol)}\n<b>Direction：</b> {direction_text}"
+        )

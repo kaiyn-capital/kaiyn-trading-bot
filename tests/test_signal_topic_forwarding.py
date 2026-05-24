@@ -219,7 +219,8 @@ def test_send_signal_creates_text_preview_without_forwarding(monkeypatch):
 
     assert context.bot.sent_messages == []
     assert handler.application.bot.sent_messages == []
-    assert update.message.replies[0]["text"].startswith("📋 **请确认是否转发以下交易信号**")
+    assert update.message.replies[0]["text"].startswith("📋 <b>请确认是否转发以下交易信号</b>")
+    assert update.message.replies[0]["kwargs"]["parse_mode"] == "HTML"
     session = handler.user_sessions[handler.user.telegram_id]
     assert session["step"] == "signal_preview"
     assert session["signal_public_id"]
@@ -256,8 +257,8 @@ def test_send_signal_sends_chart_photo_preview(monkeypatch):
 
     asyncio.run(handler.send_signal_command(update, context))
 
-    assert update.message.photos[0]["caption"].startswith("📋 **请确认是否转发以下交易信号**")
-    assert update.message.photos[0]["parse_mode"] == "Markdown"
+    assert update.message.photos[0]["caption"].startswith("📋 <b>请确认是否转发以下交易信号</b>")
+    assert update.message.photos[0]["parse_mode"] == "HTML"
     assert update.message.photos[0]["reply_markup"] is not None
     assert handler.audit_events[-1]["details"]["chart_status"] == "generated"
 
@@ -271,7 +272,8 @@ def test_send_signal_falls_back_to_text_preview_when_chart_generation_fails(monk
 
     asyncio.run(handler.send_signal_command(update, context))
 
-    assert update.message.replies[0]["text"].startswith("📋 **请确认是否转发以下交易信号**")
+    assert update.message.replies[0]["text"].startswith("📋 <b>请确认是否转发以下交易信号</b>")
+    assert update.message.replies[0]["kwargs"]["parse_mode"] == "HTML"
     assert not update.message.photos
     audit = handler.audit_events[-1]
     assert audit["details"]["chart_status"] == "failed"
@@ -293,14 +295,15 @@ def test_confirm_signal_forwards_to_configured_topic(monkeypatch):
     first_photo = handler.application.bot.sent_photos[0]
     assert first_photo["chat_id"] == "-1001"
     assert first_photo["message_thread_id"] == 456
-    assert first_photo["caption"].startswith("🚨 **交易信号**")
-    assert first_photo["parse_mode"] == "Markdown"
+    assert first_photo["caption"].startswith("🚨 <b>交易信号</b>")
+    assert first_photo["parse_mode"] == "HTML"
     assert first_photo["reply_markup"] is not None
     second_photo = handler.application.bot.sent_photos[1]
     assert second_photo["chat_id"] == "-1002"
     assert "message_thread_id" not in second_photo
     assert handler.user_sessions == {}
-    assert query.caption_edits[-1]["caption"].startswith("✅ 交易信号已转发")
+    assert query.caption_edits[-1]["caption"].startswith("✅ <b>交易信号已转发</b>")
+    assert query.caption_edits[-1]["kwargs"]["parse_mode"] == "HTML"
     assert handler.audit_events[-1]["action"] == "signal_sent"
     assert len(handler.signal_record_repo.messages) == 2
     assert handler.signal_record_repo.messages[0]["message_thread_id"] == 456
@@ -320,7 +323,8 @@ def test_confirm_signal_falls_back_to_text_when_photo_send_fails(monkeypatch):
 
     assert len(handler.application.bot.sent_messages) == 2
     assert handler.application.bot.sent_messages[0]["message_thread_id"] == 456
-    assert handler.application.bot.sent_messages[0]["text"].startswith("🚨 **交易信号**")
+    assert handler.application.bot.sent_messages[0]["text"].startswith("🚨 <b>交易信号</b>")
+    assert handler.application.bot.sent_messages[0]["parse_mode"] == "HTML"
     audit = handler.audit_events[-1]
     assert audit["details"]["sent_count"] == 2
     assert audit["details"]["chart_send_fallback_count"] == 2
@@ -398,8 +402,9 @@ def test_update_chart_creates_private_photo_preview(monkeypatch):
     chart_update = make_update()
     asyncio.run(handler.update_chart_command(chart_update, SimpleNamespace(args=[signal_id, "TP1", "到达"])))
 
-    assert chart_update.message.photos[0]["caption"].startswith("📋 **请确认是否转发以下图表更新**")
-    assert f"交易id: `{signal_id}`" in chart_update.message.photos[0]["caption"]
+    assert chart_update.message.photos[0]["caption"].startswith("📋 <b>请确认是否转发以下图表更新</b>")
+    assert chart_update.message.photos[0]["parse_mode"] == "HTML"
+    assert f"交易id: <code>{signal_id}</code>" in chart_update.message.photos[0]["caption"]
     session = handler.user_sessions[handler.user.telegram_id]
     assert session["step"] == "chart_update_preview"
     keyboard = chart_update.message.photos[0]["reply_markup"].inline_keyboard
@@ -429,7 +434,8 @@ def test_confirm_update_chart_replies_to_original_signal_messages(monkeypatch):
     assert first_update_photo["message_thread_id"] == 456
     assert first_update_photo["reply_to_message_id"] == handler.signal_record_repo.messages[0]["telegram_message_id"]
     assert "交易id:" in first_update_photo["caption"]
-    assert query.caption_edits[-1]["caption"].startswith("✅ 图表更新已转发")
+    assert query.caption_edits[-1]["caption"].startswith("✅ <b>图表更新已转发</b>")
+    assert query.caption_edits[-1]["kwargs"]["parse_mode"] == "HTML"
 
 
 def test_update_chart_allows_admin_to_update_other_users_signal(monkeypatch):

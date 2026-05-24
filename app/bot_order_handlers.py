@@ -20,15 +20,16 @@ from .order_types import SignalDraft
 from .signal_charts import render_signal_chart, render_signal_update_chart
 from .signal_delivery_service import TELEGRAM_PHOTO_CAPTION_LIMIT, SignalDeliveryService
 from .signal_record_service import SignalRecordService
+from .telegram_formatting import HTML_PARSE_MODE, html_code
 
 logger = logging.getLogger(__name__)
 
 SIGNAL_PREVIEW_STEP = "signal_preview"
 SIGNAL_PREVIEW_EXPIRED_MESSAGE = "⏳ 预览已过期或已被新的信号取代，请重新发送 /send_signal"
-SIGNAL_PREVIEW_PROMPT = "📋 **请确认是否转发以下交易信号**"
+SIGNAL_PREVIEW_PROMPT = "📋 <b>请确认是否转发以下交易信号</b>"
 CHART_UPDATE_PREVIEW_STEP = "chart_update_preview"
 CHART_UPDATE_PREVIEW_EXPIRED_MESSAGE = "⏳ 预览已过期或已被新的更新取代，请重新发送 /update_chart"
-CHART_UPDATE_PREVIEW_PROMPT = "📋 **请确认是否转发以下图表更新**"
+CHART_UPDATE_PREVIEW_PROMPT = "📋 <b>请确认是否转发以下图表更新</b>"
 
 
 class OrderHandlers:
@@ -84,7 +85,7 @@ class OrderHandlers:
 
         args = context.args
         if len(args) < 3:
-            await update.message.reply_text(signal_usage_message(), parse_mode="Markdown")
+            await update.message.reply_text(signal_usage_message(), parse_mode=HTML_PARSE_MODE)
             return
 
         try:
@@ -150,14 +151,17 @@ class OrderHandlers:
                 "signal_sent",
                 {"status": "failed", "reason": type(e).__name__},
             )
-            await update.message.reply_text("❌ 发送信号时发生错误", parse_mode="Markdown")
+            await update.message.reply_text("❌ 发送信号时发生错误", parse_mode=HTML_PARSE_MODE)
 
     async def update_chart_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Create a confirmed chart update for an existing signal."""
         user = await self.bot._get_or_create_user(update)
         args = context.args
         if not args:
-            await update.message.reply_text("使用方法：`/update_chart 交易id [备注文字]`", parse_mode="Markdown")
+            await update.message.reply_text(
+                f"使用方法：{html_code('/update_chart 交易id [备注文字]')}",
+                parse_mode=HTML_PARSE_MODE,
+            )
             return
 
         public_id = args[0].strip().lower()
@@ -254,7 +258,7 @@ class OrderHandlers:
             photo=BytesIO(chart_bytes),
             caption=SignalDeliveryService.fit_photo_caption(preview_text),
             reply_markup=reply_markup,
-            parse_mode="Markdown",
+            parse_mode=HTML_PARSE_MODE,
         )
 
     async def _handle_place_order_callback(self, query, user, data):
@@ -288,7 +292,7 @@ class OrderHandlers:
     ):
         preview_text = f"{SIGNAL_PREVIEW_PROMPT}\n\n{signal_text}"
         if not chart_bytes:
-            await update.message.reply_text(preview_text, reply_markup=reply_markup, parse_mode="Markdown")
+            await update.message.reply_text(preview_text, reply_markup=reply_markup, parse_mode=HTML_PARSE_MODE)
             return
 
         if len(preview_text) <= TELEGRAM_PHOTO_CAPTION_LIMIT:
@@ -296,16 +300,16 @@ class OrderHandlers:
                 photo=BytesIO(chart_bytes),
                 caption=preview_text,
                 reply_markup=reply_markup,
-                parse_mode="Markdown",
+                parse_mode=HTML_PARSE_MODE,
             )
             return
 
         await update.message.reply_photo(
             photo=BytesIO(chart_bytes),
             caption=SIGNAL_PREVIEW_PROMPT,
-            parse_mode="Markdown",
+            parse_mode=HTML_PARSE_MODE,
         )
-        await update.message.reply_text(signal_text, reply_markup=reply_markup, parse_mode="Markdown")
+        await update.message.reply_text(signal_text, reply_markup=reply_markup, parse_mode=HTML_PARSE_MODE)
 
     async def _handle_confirm_signal_callback(self, query, user, data):
         token = data.removeprefix("confirm_signal_")
@@ -330,8 +334,8 @@ class OrderHandlers:
         self.bot.delete_user_session(user.telegram_id)
         await self._edit_signal_preview_message(
             query,
-            f"✅ 交易信号已转发\n\n📺 发送到频道：{result['sent_count']} 个",
-            parse_mode="Markdown",
+            f"✅ <b>交易信号已转发</b>\n\n📺 发送到频道：{result['sent_count']} 个",
+            parse_mode=HTML_PARSE_MODE,
         )
         await emit_audit_event(
             self.bot,
@@ -393,8 +397,8 @@ class OrderHandlers:
         self.bot.delete_user_session(user.telegram_id)
         await self._edit_signal_preview_message(
             query,
-            f"✅ 图表更新已转发\n\n📺 发送到频道：{result['sent_count']} 个",
-            parse_mode="Markdown",
+            f"✅ <b>图表更新已转发</b>\n\n📺 发送到频道：{result['sent_count']} 个",
+            parse_mode=HTML_PARSE_MODE,
         )
         await emit_audit_event(
             self.bot,

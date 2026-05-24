@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from .audit import emit_audit_event, summarize_message_text
+from .telegram_formatting import HTML_PARSE_MODE, html_code, html_escape
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +24,10 @@ class AdminMessaging:
         message_text = " ".join(context.args)
         if not message_text:
             await update.message.reply_text(
-                "📢 **广播消息**\n\n"
-                "使用方法：`/admin_broadcast 您的消息内容`\n\n"
-                "例如：`/admin_broadcast 系统将于今晚进行维护`",
-                parse_mode="Markdown",
+                "📢 <b>广播消息</b>\n\n"
+                f"使用方法：{html_code('/admin_broadcast 您的消息内容')}\n\n"
+                f"例如：{html_code('/admin_broadcast 系统将于今晚进行维护')}",
+                parse_mode=HTML_PARSE_MODE,
             )
             return
 
@@ -42,8 +43,8 @@ class AdminMessaging:
                 try:
                     send_kwargs = {
                         "chat_id": channel["chat_id"],
-                        "text": f"📢 **管理员广播** by @{sender_username}\n\n{message_text}",
-                        "parse_mode": "Markdown",
+                        "text": f"📢 <b>管理员广播</b> by @{html_escape(sender_username)}\n\n{html_escape(message_text)}",
+                        "parse_mode": HTML_PARSE_MODE,
                     }
                     if channel.get("message_thread_id"):
                         send_kwargs["message_thread_id"] = channel["message_thread_id"]
@@ -57,8 +58,8 @@ class AdminMessaging:
                     failed_channels += 1
 
             await status_msg.edit_text(
-                f"✅ **广播完成**\n\n成功发送：{sent_to_channels} 个频道/群组\n发送失败：{failed_channels} 个频道/群组",
-                parse_mode="Markdown",
+                f"✅ <b>广播完成</b>\n\n成功发送：{sent_to_channels} 个频道/群组\n发送失败：{failed_channels} 个频道/群组",
+                parse_mode=HTML_PARSE_MODE,
             )
             await emit_audit_event(
                 self.bot,
@@ -96,13 +97,13 @@ class AdminMessaging:
         args = context.args
         if len(args) < 2:
             await update.message.reply_text(
-                "📤 **发送到频道**\n\n"
+                "📤 <b>发送到频道</b>\n\n"
                 "使用方法：\n"
-                "`/send_to_channel @channel_username 消息内容`\n"
-                "`/send_to_channel -1001234567890 消息内容`\n\n"
+                f"{html_code('/send_to_channel @channel_username 消息内容')}\n"
+                f"{html_code('/send_to_channel -1001234567890 消息内容')}\n\n"
                 "例如：\n"
-                "`/send_to_channel @my_signals 今日重要公告`",
-                parse_mode="Markdown",
+                f"{html_code('/send_to_channel @my_signals 今日重要公告')}",
+                parse_mode=HTML_PARSE_MODE,
             )
             return
 
@@ -111,7 +112,7 @@ class AdminMessaging:
 
         try:
             sent_message = await context.bot.send_message(
-                chat_id=chat_identifier, text=message_text, parse_mode="Markdown"
+                chat_id=chat_identifier, text=html_escape(message_text), parse_mode=HTML_PARSE_MODE
             )
 
             await emit_audit_event(
@@ -126,8 +127,8 @@ class AdminMessaging:
                 },
             )
             await update.message.reply_text(
-                f"✅ **消息已发送**\n\n目标频道：{chat_identifier}\n消息 ID：{sent_message.message_id}",
-                parse_mode="Markdown",
+                f"✅ <b>消息已发送</b>\n\n目标频道：{html_escape(chat_identifier)}\n消息 ID：{html_escape(sent_message.message_id)}",
+                parse_mode=HTML_PARSE_MODE,
             )
 
         except Exception as e:

@@ -8,11 +8,12 @@ from .audit import summarize_identifier
 from .bitget_errors import ClassifiedBitgetError, classify_bitget_exception
 from .decimal_utils import to_decimal_or_none
 from .order_flow import build_client_order_id
+from .telegram_formatting import HTML_PARSE_MODE, html_escape
 
 logger = logging.getLogger(__name__)
 
 RETRY_ORDER_MESSAGE = (
-    "⚠️ **订单未完成**\n\n"
+    "⚠️ <b>订单未完成</b>\n\n"
     "这笔确认单没有在 Bitget 成功完成，系统不会自动重送。\n\n"
     "请回到原交易信号，重新按一次市价/限价下单。"
 )
@@ -248,16 +249,16 @@ class PendingOrderReconciliationService:
         await self._log_reconciliation_event("WARNING", message, pending_order, client_order_id, extra_data)
         await self.alert_manager.send_alert(
             "⚠️ Kaiyn Trading Bot processing 订单查单无法完成。\n\n"
-            f"Symbol：{pending_order.symbol}\n"
-            f"Pending Token：{summarize_identifier(pending_order.token)}\n"
-            f"Client OID：{summarize_identifier(client_order_id)}\n"
-            f"原因：{message}",
+            f"Symbol：{html_escape(pending_order.symbol)}\n"
+            f"Pending Token：{html_escape(summarize_identifier(pending_order.token))}\n"
+            f"Client OID：{html_escape(summarize_identifier(client_order_id))}\n"
+            f"原因：{html_escape(message)}",
             alert_key="pending_order_reconciliation_deferred",
         )
 
     async def _notify_user_to_retry(self, telegram_id: int):
         try:
-            await self.bot.send_message(chat_id=telegram_id, text=RETRY_ORDER_MESSAGE, parse_mode="Markdown")
+            await self.bot.send_message(chat_id=telegram_id, text=RETRY_ORDER_MESSAGE, parse_mode=HTML_PARSE_MODE)
         except Exception as exc:
             logger.error("Failed to notify user about failed processing order: %s", exc)
 

@@ -1,10 +1,10 @@
-import html
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from .config import Config
+from .telegram_formatting import html_escape
 
 BACKUPS_DIR = Path("backups")
 BACKUP_STATUS_FILE = "backup_status.json"
@@ -213,9 +213,9 @@ def format_admin_health_report(
     processing_text = _format_stale_processing_count(stale_processing_count)
     error_text = _format_recent_errors(recent_errors)
 
-    backup_msg_escaped = html.escape(backup_health.message)
-    backup_file_escaped = html.escape(backup_health.filename) if backup_health.filename else "无"
-    maint_msg_escaped = html.escape(maintenance_health.message)
+    backup_msg_escaped = html_escape(backup_health.message)
+    backup_file_escaped = html_escape(backup_health.filename) if backup_health.filename else "无"
+    maint_msg_escaped = html_escape(maintenance_health.message)
 
     return (
         "🩺 <b>系统健康检查</b>\n\n"
@@ -269,7 +269,7 @@ async def _count_stale_processing_orders(pending_order_repo, now: datetime) -> i
 def _format_bitget_counts(counts: dict[str, int]) -> str:
     if not counts:
         return "✅ 近 24 小时无系统级 API 异常"
-    return "⚠️ " + " / ".join(f"{html.escape(category)}: {count}" for category, count in sorted(counts.items()))
+    return "⚠️ " + " / ".join(f"{html_escape(category)}: {count}" for category, count in sorted(counts.items()))
 
 
 def _format_stale_processing_count(count: int | None) -> str:
@@ -286,6 +286,6 @@ def _format_recent_errors(errors: list) -> str:
         return "✅ 近 24 小时无 ERROR/CRITICAL"
     lines = []
     for error in errors[:5]:
-        message = html.escape(str(error.message).replace("\n", " ")[:120])
+        message = html_escape(str(error.message).replace("\n", " ")[:120])
         lines.append(f"- {format_utc8(error.created_at)} {error.level} {message}")
     return "\n".join(lines)

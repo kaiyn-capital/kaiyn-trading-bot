@@ -1,11 +1,11 @@
 import logging
-import re
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from .audit import emit_audit_event
 from .decimal_utils import decimal_text
+from .telegram_formatting import HTML_PARSE_MODE, html_code, html_escape
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,10 @@ class AdminCore:
 
         if not context.args:
             await update.message.reply_text(
-                "👥 **添加发单员**\n\n使用方法：\n`/add_trader Telegram_ID`\n\n例如：\n`/add_trader 123456789`",
-                parse_mode="Markdown",
+                "👥 <b>添加发单员</b>\n\n"
+                f"使用方法：\n{html_code('/add_trader Telegram_ID')}\n\n"
+                f"例如：\n{html_code('/add_trader 123456789')}",
+                parse_mode=HTML_PARSE_MODE,
             )
             return
 
@@ -41,10 +43,10 @@ class AdminCore:
                     {"status": "success", "target_telegram_id": telegram_id},
                 )
                 await update.message.reply_text(
-                    f"✅ **发单员添加成功**\n\n"
-                    f"Telegram ID：{telegram_id}\n"
-                    f"现在该用户可以使用 `/send_signal` 命令发送交易信号。",
-                    parse_mode="Markdown",
+                    "✅ <b>发单员添加成功</b>\n\n"
+                    f"Telegram ID：{html_escape(telegram_id)}\n"
+                    f"现在该用户可以使用 {html_code('/send_signal')} 命令发送交易信号。",
+                    parse_mode=HTML_PARSE_MODE,
                 )
             else:
                 await emit_audit_event(
@@ -86,29 +88,28 @@ class AdminCore:
         try:
             users_data = await self.bot.user_repo.get_active_users()
 
-            users_text = "👥 **用户列表**\n\n"
+            users_text = "👥 <b>用户列表</b>\n\n"
             for u in users_data[:20]:
                 api_status = "✅" if u.get("is_api_connected") else "❌"
-                first_name = u.get("first_name") or "Unknown"
-                username = u.get("username") or "N/A"
-                telegram_id = u.get("telegram_id")
+                first_name = html_escape(u.get("first_name") or "Unknown")
+                username = html_escape(u.get("username") or "N/A")
+                telegram_id = html_escape(u.get("telegram_id"))
                 created_at = u.get("created_at")
 
                 trader_status = " | ⭐️发单员" if u.get("is_trader") else ""
                 fixed_risk = u.get("fixed_risk_amount")
-                risk_status = f" | 1R: {decimal_text(fixed_risk)} USDT" if fixed_risk is not None else ""
+                risk_status = f" | 1R: {html_escape(decimal_text(fixed_risk))} USDT" if fixed_risk is not None else ""
 
                 users_text += f"{api_status} {first_name} (@{username})\n"
                 users_text += (
-                    f"   ID: {telegram_id} | 注册: {created_at.strftime('%m-%d') if created_at else 'N/A'}"
+                    f"   ID: {telegram_id} | 注册: {html_escape(created_at.strftime('%m-%d') if created_at else 'N/A')}"
                     f"{trader_status}{risk_status}\n\n"
                 )
 
             if len(users_data) > 20:
-                users_text += f"... 还有 {len(users_data) - 20} 位用户"
+                users_text += f"... 还有 {html_escape(len(users_data) - 20)} 位用户"
 
-            users_text_html = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", users_text)
-            await update.message.reply_text(users_text_html, parse_mode="HTML")
+            await update.message.reply_text(users_text, parse_mode=HTML_PARSE_MODE)
 
         except Exception as e:
             logger.error(f"Admin users command error: {e}")
@@ -126,25 +127,25 @@ class AdminCore:
             channel_count = await self.bot.channel_repo.count_active_channels()
             db_ok = await self.bot.user_repo.db.health_check()
 
-            admin_text = "👑 **管理员面板**\n\n"
-            admin_text += "📊 **系统统计**\n"
-            admin_text += f"• 活跃用户：{active_users}\n"
-            admin_text += f"• 管理频道：{channel_count}\n"
+            admin_text = "👑 <b>管理员面板</b>\n\n"
+            admin_text += "📊 <b>系统统计</b>\n"
+            admin_text += f"• 活跃用户：{html_escape(active_users)}\n"
+            admin_text += f"• 管理频道：{html_escape(channel_count)}\n"
             admin_text += f"• 系统状态：{'正常' if db_ok else '异常'}\n\n"
-            admin_text += "🛠️ **管理功能**\n"
-            admin_text += "• `/admin_users` - 查看用户列表\n"
-            admin_text += "• `/admin_channels` - 管理频道/群组\n"
-            admin_text += "• `/add_channel` - 添加频道/群组\n"
-            admin_text += "• `/admin_broadcast` - 广播消息\n"
-            admin_text += "• `/send_signal` - 发送交易信号\n"
-            admin_text += "• `/send_to_channel` - 发送到指定频道\n"
-            admin_text += "• `/set_channel_topic` - 设置频道指定话题\n"
-            admin_text += "• `/clear_channel_topic` - 清除频道指定话题\n"
-            admin_text += "• `/admin_health` - 查看系统健康状态\n"
-            admin_text += "• `/admin_audit` - 查看近期操作审计\n"
-            admin_text += "• `/add_trader` - 添加交易员"
+            admin_text += "🛠️ <b>管理功能</b>\n"
+            admin_text += f"• {html_code('/admin_users')} - 查看用户列表\n"
+            admin_text += f"• {html_code('/admin_channels')} - 管理频道/群组\n"
+            admin_text += f"• {html_code('/add_channel')} - 添加频道/群组\n"
+            admin_text += f"• {html_code('/admin_broadcast')} - 广播消息\n"
+            admin_text += f"• {html_code('/send_signal')} - 发送交易信号\n"
+            admin_text += f"• {html_code('/send_to_channel')} - 发送到指定频道\n"
+            admin_text += f"• {html_code('/set_channel_topic')} - 设置频道指定话题\n"
+            admin_text += f"• {html_code('/clear_channel_topic')} - 清除频道指定话题\n"
+            admin_text += f"• {html_code('/admin_health')} - 查看系统健康状态\n"
+            admin_text += f"• {html_code('/admin_audit')} - 查看近期操作审计\n"
+            admin_text += f"• {html_code('/add_trader')} - 添加交易员"
 
-            await update.message.reply_text(admin_text, parse_mode="Markdown")
+            await update.message.reply_text(admin_text, parse_mode=HTML_PARSE_MODE)
 
         except Exception as e:
             logger.exception(f"Admin command error: {e}")

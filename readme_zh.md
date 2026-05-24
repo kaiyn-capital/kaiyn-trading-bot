@@ -31,7 +31,7 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget USDT-FUTURES 的交易信號執�
 - 使用 Fernet 加密保存 Bitget API Key、Secret Key、Passphrase。
 - 管理員告警、健康檢查與審計紀錄——提供 `/admin_health`、`/admin_audit`、啟動通知與異常告警。
 - Docker-first 部署搭配資料保留與備份，包含 log rotation、DB 資料清理、每日 PostgreSQL 備份。
-- CI/CD 涵蓋 Ruff、pytest、PostgreSQL 整合測試、GHCR image 發布、VPS SSH 部署與 Dependabot。
+- CI/CD 涵蓋 Ruff、mypy、Alembic 檢查、pytest、PostgreSQL 整合測試、GHCR image 發布、VPS SSH 部署與 Dependabot。
 
 ## 架構
 
@@ -49,7 +49,7 @@ flowchart TD
     backup["db-backup 服務<br/>每日 gzip SQL 備份"] --> db
     backup --> files["backups/"]
 
-    ci["GitHub Actions CI"] --> test["test 服務<br/>Ruff + pytest + DB 整合測試"]
+    ci["GitHub Actions CI"] --> test["test 服務<br/>Ruff + mypy + pytest + DB 整合測試"]
     test --> db
     ci --> ghcr["GHCR<br/>多架構 release image"]
     ghcr --> deploy["VPS SSH CD<br/>以 image digest 部署"]
@@ -108,14 +108,15 @@ sequenceDiagram
 | 執行環境 | Python 3.11 |
 | Bot 框架 | `python-telegram-bot` 22.7 |
 | 交易所整合 | Bitget USDT-FUTURES REST API，透過 `httpx` 0.28.1 |
-| 資料庫 | PostgreSQL 16 + SQLAlchemy asyncio 2.0.49 + `asyncpg` 0.29.0 |
+| 資料庫 | PostgreSQL 16 + SQLAlchemy asyncio 2.0.49 + `asyncpg` 0.31.0 |
 | Schema 遷移 | Alembic 1.18.4 |
 | 憑證安全 | `cryptography` Fernet 48.0.0 |
 | 部署方式 | Docker Compose 服務：`postgres`、`bot`、`maintenance`、`db-backup` |
 | 依賴鎖定 | uv lockfile + `uv sync --locked` |
 | 長期運維 | Docker log rotation、檔案 log rotation、DB 資料保留、每日 SQL 備份 |
 | 測試 | pytest 9.0.3 + 可選 PostgreSQL 整合測試 |
-| Lint／格式化 | Ruff 0.15.12 |
+| Lint／格式化 | Ruff 0.15.14 |
+| 型別檢查 | mypy 1.16.0，針對 critical path modules |
 | CI | GitHub Actions 搭配 Docker Compose-first 檢查 |
 | CD | GHCR 多架構 image + VPS SSH 以 digest 部署 |
 | 依賴自動化 | Dependabot 每週更新；GitHub Actions patch/minor 自動合併 |
@@ -135,7 +136,7 @@ sequenceDiagram
 - 交易狀態儲存於 PostgreSQL，待確認訂單在 Bot 重啟後仍然有效，重複點擊由 row locking 防護。
 - 交易所執行在確認前與送單前各驗證一次 Bitget 合約規則。
 - 運維是產品功能的一部分：健康檢查、審計事件、資料清理、備份與還原文件均已內建。
-- CI 使用與正式環境相同的 Docker Compose 流程，包含 PostgreSQL 整合測試，不依賴本機服務。
+- CI 使用與正式環境相同的 Docker Compose 流程，包含 lockfile、migration/model、型別與 PostgreSQL 整合測試，不依賴本機服務。
 - CD 發布多架構 image 到 GHCR，並在 environment approval 後透過 SSH 部署到 VPS。
 
 ## 快速開始
@@ -199,13 +200,18 @@ make verify
 ```bash
 docker compose build test
 docker compose run --rm test uv lock --check
+docker compose up -d postgres
+docker compose run --rm test alembic upgrade head
+docker compose run --rm test alembic check
 docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
-docker compose run --rm test python -m pytest
+docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
 docker compose run --rm test python -m pytest --run-db
+docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+git diff --check
 ```
 
-GitHub Actions 以相同 Docker Compose 流程執行 Ruff、pytest、PostgreSQL 整合測試、`py_compile` 與空白字元檢查。CI 通過後，release workflow 會發布多架構 image 到 GHCR，並在 `production` environment approval 後透過 SSH 部署 image digest 到 VPS。Coolify 文件保留為可選部署方案。
+GitHub Actions 以相同 Docker Compose 流程執行 lockfile 一致性、Alembic migration/model 檢查、Ruff、mypy、PostgreSQL 整合測試與 coverage output、`py_compile` 與空白字元檢查。CI 通過後，release workflow 會發布多架構 image 到 GHCR，並在 `production` environment approval 後透過 SSH 部署 image digest 到 VPS。Coolify 文件保留為可選部署方案。
 
 Dependabot 每週檢查 Python packages 與 GitHub Actions。GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 squash merge；Python dependency PR 維持人工 review。
 

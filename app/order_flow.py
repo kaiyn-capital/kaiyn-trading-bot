@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from .bitget_errors import classify_bitget_exception
+from .bitget_errors import ClassifiedBitgetError, classify_bitget_exception
 from .decimal_utils import decimal_text, to_decimal
 from .order_types import (
     ContractRules,
@@ -22,6 +22,7 @@ __all__ = [
     "ContractRules",
     "OrderCallbackData",
     "OrderExecutionResult",
+    "OrderExecutionUnknownResult",
     "OrderPreview",
     "OrderValidationResult",
     "SignalDraft",
@@ -39,6 +40,25 @@ __all__ = [
 
 _SIGNAL_PRICE_GROUP_PATTERN = re.compile(r"\b(entry|sl|tp)\s*\[([^\]]*)\]", re.IGNORECASE)
 _BITGET_CLIENT_ORDER_ID_PATTERN = re.compile(r"^[0-9A-Za-z_:#\-\+\s]{1,32}$")
+
+
+class OrderExecutionUnknownResult(RuntimeError):
+    """Raised when Bitget submission may have succeeded but no final response was received."""
+
+    classified_error: ClassifiedBitgetError
+    trade_id: int | None
+    client_order_id: str
+
+    def __init__(
+        self,
+        classified_error: ClassifiedBitgetError,
+        trade_id: int | None,
+        client_order_id: str,
+    ) -> None:
+        self.classified_error = classified_error
+        self.trade_id = trade_id
+        self.client_order_id = client_order_id
+        super().__init__(classified_error.storage_message())
 
 
 def build_client_order_id(pending_order_token: str | None = None) -> str:
@@ -254,7 +274,8 @@ async def execute_order(
     quantity_for_api = quantity_text or decimal_text(quantity)
     price_for_api = limit_price_text or (decimal_text(order_price) if order_price is not None else None)
     client_order_id = client_order_id or build_client_order_id()
-    trade_record_id = None
+    trade_record_id: int | None = None
+    exchange_submission_started = False
 
     try:
         trade_payload = {
@@ -277,6 +298,7 @@ async def execute_order(
         trade_record_id = trade_record.id
 
         if is_limit_order:
+            exchange_submission_started = True
             result = await trade_manager.place_limit_order(
                 user_data.id,
                 credentials,
@@ -291,6 +313,7 @@ async def execute_order(
                 force="gtc",
             )
         else:
+            exchange_submission_started = True
             result = await trade_manager.place_market_order(
                 user_data.id,
                 credentials,
@@ -331,6 +354,9 @@ async def execute_order(
 
     except Exception as exc:
         classified = classify_bitget_exception(exc)
+        if exchange_submission_started and classified.is_retryable:
+            raise OrderExecutionUnknownResult(classified, trade_record_id, client_order_id) from exc
+
         if trade_record_id is not None:
             await trade_repo.update_trade_result(
                 trade_record_id,

@@ -7,6 +7,7 @@ from telegram.ext import ConversationHandler
 from .bitget_errors import classify_bitget_exception
 from .bot_sessions import SESSION_EXPIRED_MESSAGE
 from .bot_states import WAITING_API_KEY, WAITING_PASSPHRASE, WAITING_SECRET_KEY
+from .telegram_formatting import HTML_PARSE_MODE, html_code, html_escape
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,8 @@ class TelegramApiSetupService:
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="✅ API Key 已保存\n\n**第 2 步：Secret Key**\n请发送您的 Secret Key",
+            text="✅ API Key 已保存\n\n<b>第 2 步：Secret Key</b>\n请发送您的 Secret Key",
+            parse_mode=HTML_PARSE_MODE,
         )
 
         return WAITING_SECRET_KEY
@@ -110,7 +112,8 @@ class TelegramApiSetupService:
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="✅ Secret Key 已保存\n\n**第 3 步：Passphrase**\n请发送您的 Passphrase",
+            text="✅ Secret Key 已保存\n\n<b>第 3 步：Passphrase</b>\n请发送您的 Passphrase",
+            parse_mode=HTML_PARSE_MODE,
         )
 
         return WAITING_PASSPHRASE
@@ -167,16 +170,16 @@ class TelegramApiSetupService:
                 await self.log_user_action(user, "api_setup_success")
 
                 await test_msg.edit_text(
-                    "✅ **API 设置成功！**\n\n"
+                    "✅ <b>API 设置成功！</b>\n\n"
                     "您的 API 密钥已加密保存，现在可以开始使用交易功能。\n\n"
-                    "使用 `/status` 检查连接状态\n"
-                    "使用 `/settings` 设置交易参数（1R愿意承受止损金额）",
-                    parse_mode="Markdown",
+                    f"使用 {html_code('/status')} 检查连接状态\n"
+                    f"使用 {html_code('/settings')} 设置交易参数（1R愿意承受止损金额）",
+                    parse_mode=HTML_PARSE_MODE,
                 )
             else:
                 await test_msg.edit_text(
-                    f"❌ **API 连接测试失败**\n\n错误信息: {message}\n\n请检查您的 API 凭证是否正确，然后重新设置。",
-                    parse_mode="Markdown",
+                    f"❌ <b>API 连接测试失败</b>\n\n错误信息: {html_escape(message)}\n\n请检查您的 API 凭证是否正确，然后重新设置。",
+                    parse_mode=HTML_PARSE_MODE,
                 )
 
         except Exception as e:

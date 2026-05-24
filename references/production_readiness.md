@@ -38,7 +38,7 @@
 - 備份還原 runbook 與獨立臨時 PostgreSQL 還原驗證流程。
 - 操作審計與 `/admin_audit` 查詢。
 - Docker-first pytest，包含 PostgreSQL integration tests。
-- GitHub Actions CI，涵蓋 Ruff、pytest、PostgreSQL integration、`py_compile` 與 whitespace 檢查。
+- GitHub Actions CI，涵蓋 lockfile、Alembic migration/model、Ruff、mypy、PostgreSQL integration、coverage output、`py_compile` 與 whitespace 檢查。
 - GHCR image pipeline 與 VPS SSH CD，經 `production` environment approval 後以 image digest 部署到 DigitalOcean VPS。
 - DigitalOcean、SSH CD、backup/restore 與 deployment engineering 文件，覆蓋上線、更新、rollback 與災難恢復驗證。
 
@@ -159,12 +159,20 @@ Bitget/API 錯誤會統一分類並轉成簡短使用者訊息。
 ```bash
 docker compose build test
 docker compose run --rm test uv lock --check
+docker compose up -d postgres
+docker compose run --rm test alembic upgrade head
+docker compose run --rm test alembic check
 docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
-docker compose run --rm test python -m pytest
+docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
 docker compose run --rm test python -m pytest --run-db
 docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
 git diff --check
+```
+
+部署 smoke test：
+
+```bash
 docker compose build bot
 docker compose up -d bot
 docker compose logs --tail 40 bot

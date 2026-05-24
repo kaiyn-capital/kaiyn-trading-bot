@@ -100,6 +100,7 @@ def test_forward_signal_to_channels_sends_photo_and_records_message_id():
     assert result["chart_send_fallback_count"] == 0
     assert bot.sent_photos[0]["chat_id"] == "-1001"
     assert bot.sent_photos[0]["message_thread_id"] == 456
+    assert bot.sent_photos[0]["parse_mode"] == "HTML"
     assert record_repo.messages == [
         {
             "signal_record_id": 9,
@@ -131,6 +132,7 @@ def test_forward_signal_to_channels_falls_back_to_text_when_photo_fails():
     assert result["chart_send_fallback_count"] == 1
     assert bot.sent_messages[0]["text"] == "signal text"
     assert bot.sent_messages[0]["message_thread_id"] == 456
+    assert bot.sent_messages[0]["parse_mode"] == "HTML"
 
 
 def test_forward_signal_to_channels_sends_short_caption_and_full_text_when_caption_is_too_long():
@@ -151,8 +153,10 @@ def test_forward_signal_to_channels_sends_short_caption_and_full_text_when_capti
     )
 
     assert result["sent_count"] == 1
-    assert bot.sent_photos[0]["caption"].startswith("🚨 **交易信号**")
+    assert bot.sent_photos[0]["caption"].startswith("🚨 <b>交易信号</b>")
+    assert bot.sent_photos[0]["parse_mode"] == "HTML"
     assert bot.sent_messages[0]["text"] == long_signal_text
+    assert bot.sent_messages[0]["parse_mode"] == "HTML"
 
 
 def test_forward_chart_update_replies_to_original_message():
@@ -178,6 +182,7 @@ def test_forward_chart_update_replies_to_original_message():
     assert result["reply_fallback_count"] == 0
     assert bot.sent_photos[0]["reply_to_message_id"] == 777
     assert bot.sent_photos[0]["message_thread_id"] == 456
+    assert bot.sent_photos[0]["parse_mode"] == "HTML"
 
 
 def test_forward_chart_update_falls_back_to_regular_topic_send_when_reply_fails():
@@ -204,6 +209,7 @@ def test_forward_chart_update_falls_back_to_regular_topic_send_when_reply_fails(
     assert result["reply_fallback_count"] == 1
     assert "reply_to_message_id" not in bot.sent_photos[0]
     assert bot.sent_photos[0]["message_thread_id"] == 456
+    assert bot.sent_photos[0]["parse_mode"] == "HTML"
 
 
 def test_fit_photo_caption_truncates_to_telegram_limit():
@@ -211,5 +217,15 @@ def test_fit_photo_caption_truncates_to_telegram_limit():
 
     caption = SignalDeliveryService.fit_photo_caption(text)
 
-    assert len(caption) == TELEGRAM_PHOTO_CAPTION_LIMIT - 1
+    assert len(caption) <= TELEGRAM_PHOTO_CAPTION_LIMIT
+    assert caption.endswith("…")
+
+
+def test_fit_photo_caption_does_not_cut_inside_html_entity():
+    text = "x" * (TELEGRAM_PHOTO_CAPTION_LIMIT - 2) + "&lt;tail"
+
+    caption = SignalDeliveryService.fit_photo_caption(text)
+
+    assert len(caption) <= TELEGRAM_PHOTO_CAPTION_LIMIT
+    assert not caption.endswith("&…")
     assert caption.endswith("…")

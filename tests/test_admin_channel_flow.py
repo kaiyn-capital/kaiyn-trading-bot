@@ -163,7 +163,7 @@ def make_context_with_args(args):
     return SimpleNamespace(args=args, bot=FakeBot())
 
 
-def test_delete_channel_success_reply_does_not_use_markdown(monkeypatch):
+def test_delete_channel_success_reply_uses_html(monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
     channel_repo = FakeChannelRepo()
     handler = FakeAdminHandler(channel_repo)
@@ -173,7 +173,7 @@ def test_delete_channel_success_reply_does_not_use_markdown(monkeypatch):
 
     assert channel_repo.deactivated_chat_id == "-1001"
     assert update.message.replies[-1]["text"].startswith("✅ 频道已删除")
-    assert "parse_mode" not in update.message.replies[-1]["kwargs"]
+    assert update.message.replies[-1]["kwargs"]["parse_mode"] == "HTML"
     assert handler.audit_events[-1]["action"] == "admin_delete_channel"
     assert handler.audit_events[-1]["details"]["status"] == "success"
 
@@ -344,7 +344,7 @@ def test_admin_broadcast_records_summary_audit(monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
     handler = FakeAdminHandler(FakeChannelRepo())
     update = make_update("")
-    context = make_context_with_args(["系统维护", "请稍候"])
+    context = make_context_with_args(["<b>系统维护</b>", "请稍候"])
 
     asyncio.run(handler.admin_broadcast_command(update, context))
 
@@ -352,8 +352,10 @@ def test_admin_broadcast_records_summary_audit(monkeypatch):
     assert audit["action"] == "admin_broadcast"
     assert audit["details"]["target_count"] == 1
     assert audit["details"]["sent_count"] == 1
-    assert audit["details"]["message"]["length"] == len("系统维护 请稍候")
+    assert audit["details"]["message"]["length"] == len("<b>系统维护</b> 请稍候")
     assert "message_thread_id" not in context.bot.sent_messages[-1]
+    assert context.bot.sent_messages[-1]["parse_mode"] == "HTML"
+    assert "&lt;b&gt;系统维护&lt;/b&gt; 请稍候" in context.bot.sent_messages[-1]["text"]
 
 
 def test_admin_broadcast_uses_configured_channel_topic(monkeypatch):
@@ -393,6 +395,21 @@ def test_admin_broadcast_sends_to_message_thread_id(monkeypatch):
     assert sent["chat_id"] == "-1001"
     assert sent["message_thread_id"] == 42
     assert "系统维护 请稍候" in sent["text"]
+    assert sent["parse_mode"] == "HTML"
+
+
+def test_send_to_channel_treats_free_text_as_plain_text(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+    handler = FakeAdminHandler(FakeChannelRepo())
+    update = make_update("")
+    context = make_context_with_args(["@test_kaiyn", "<b>公告</b>", "&", "maintenance"])
+
+    asyncio.run(handler.send_to_channel_command(update, context))
+
+    sent = context.bot.sent_messages[0]
+    assert sent["chat_id"] == "@test_kaiyn"
+    assert sent["text"] == "&lt;b&gt;公告&lt;/b&gt; &amp; maintenance"
+    assert sent["parse_mode"] == "HTML"
 
 
 def test_admin_audit_rejects_non_admin(monkeypatch):
@@ -447,7 +464,7 @@ def test_admin_health_replies_report(monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
 
     async def fake_build_admin_health_report(**kwargs):
-        return "🩺 **系统健康检查**\n\nDB：✅ 正常", {"db_ok": True}
+        return "🩺 <b>系统健康检查</b>\n\nDB：✅ 正常", {"db_ok": True}
 
     monkeypatch.setattr(
         "app.bot_admin_monitoring.build_admin_health_report",

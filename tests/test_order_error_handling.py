@@ -3,7 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.order_flow import execute_order
+from app.bitget_errors import BitgetAPIError
+from app.order_flow import OrderExecutionUnknownResult, execute_order
 from app.order_interaction_service import ConfirmedOrderRequest, TelegramOrderFlowService
 
 
@@ -49,6 +50,14 @@ class RejectingTradeManager:
         raise FakeBitgetAPIError("43012", "insufficient balance")
 
 
+class TimeoutTradeManager:
+    async def place_market_order(self, *args, **kwargs):
+        raise BitgetAPIError("timeout", "Bitget request timeout")
+
+    async def place_limit_order(self, *args, **kwargs):
+        raise BitgetAPIError("timeout", "Bitget request timeout")
+
+
 def test_execute_order_marks_trade_failed_with_classified_error():
     trade_repo = FakeTradeRepo()
 
@@ -74,6 +83,32 @@ def test_execute_order_marks_trade_failed_with_classified_error():
     assert "category=exchange_rejected" in failed_update["error_message"]
     assert "code=43012" in failed_update["error_message"]
     assert "insufficient balance" in failed_update["error_message"]
+
+
+def test_execute_order_keeps_trade_pending_when_submission_result_unknown():
+    trade_repo = FakeTradeRepo()
+
+    with pytest.raises(OrderExecutionUnknownResult) as exc_info:
+        asyncio.run(
+            execute_order(
+                user_data=SimpleNamespace(id=7),
+                trade_repo=trade_repo,
+                trade_manager=TimeoutTradeManager(),
+                credentials=("api", "secret", "passphrase"),
+                telegram_id=123,
+                symbol="BTCUSDT",
+                direction="long",
+                quantity=0.01,
+                stop_loss=79000,
+                position_value=800,
+                client_order_id="KTB_tok_timeout",
+            )
+        )
+
+    assert exc_info.value.trade_id == 77
+    assert exc_info.value.client_order_id == "KTB_tok_timeout"
+    assert exc_info.value.classified_error.is_retryable is True
+    assert trade_repo.updated_results == []
 
 
 class FakeUserRepo:
@@ -126,6 +161,14 @@ class FakeOrderTradeManager(RejectingTradeManager):
         return 80000
 
 
+class TimeoutOrderTradeManager(FakeOrderTradeManager):
+    async def place_market_order(self, *args, **kwargs):
+        raise BitgetAPIError("timeout", "Bitget request timeout")
+
+    async def place_limit_order(self, *args, **kwargs):
+        raise BitgetAPIError("timeout", "Bitget request timeout")
+
+
 class FakeQuery:
     def __init__(self):
         self.answers = []
@@ -148,6 +191,20 @@ class FakeAuditOwner:
 
     async def _audit_action(self, user, action, details=None):
         self.audit_events.append({"action": action, "details": details or {}})
+
+
+class RecordingFailureAlert:
+    def __init__(self):
+        self.calls = []
+
+    async def __call__(self, classified_error, source, details=None):
+        self.calls.append(
+            {
+                "classified_error": classified_error,
+                "source": source,
+                "details": details or {},
+            }
+        )
 
 
 def test_order_flow_service_marks_pending_failed_and_sends_user_message():
@@ -195,3 +252,52 @@ def test_order_flow_service_marks_pending_failed_and_sends_user_message():
     assert audit_owner.audit_events[-1]["action"] == "order_failed"
     assert audit_owner.audit_events[-1]["details"]["error_category"] == "exchange_rejected"
     assert audit_owner.audit_events[-1]["details"]["pending_order_token"] == "***_123"
+
+
+def test_order_flow_service_keeps_pending_processing_when_submission_result_unknown():
+    bot = FakeBot()
+    pending_order_repo = FakePendingOrderRepo()
+    system_log_repo = FakeSystemLogRepo()
+    audit_owner = FakeAuditOwner()
+    trade_repo = FakeTradeRepo()
+    failure_alert = RecordingFailureAlert()
+    service = TelegramOrderFlowService(
+        bot=bot,
+        user_repo=FakeUserRepo(),
+        pending_order_repo=pending_order_repo,
+        trade_repo=trade_repo,
+        trade_manager=TimeoutOrderTradeManager(),
+        system_log_repo=system_log_repo,
+        audit_owner=audit_owner,
+        failure_alert_handler=failure_alert,
+    )
+    query = FakeQuery()
+    user = SimpleNamespace(telegram_id=123)
+
+    result = asyncio.run(
+        service.execute_order(
+            ConfirmedOrderRequest(
+                query=query,
+                user=user,
+                symbol="BTCUSDT",
+                direction="long",
+                quantity=0.01,
+                stop_loss=79000,
+                position_value=800,
+                current_price=80000,
+                order_mode="market",
+                pending_order_token="tok_timeout",
+            )
+        )
+    )
+
+    assert result is False
+    assert pending_order_repo.failed == []
+    assert trade_repo.updated_results == []
+    assert "订单状态待确认" in bot.messages[-1]["text"]
+    assert system_log_repo.logs[-1]["message"] == "Bitget order execution result unknown"
+    assert system_log_repo.logs[-1]["extra_data"]["classified_error"]["is_retryable"] is True
+    assert failure_alert.calls[-1]["source"] == "_execute_order_unknown_result"
+    assert audit_owner.audit_events[-1]["action"] == "order_execution_deferred"
+    assert audit_owner.audit_events[-1]["details"]["status"] == "processing"
+    assert audit_owner.audit_events[-1]["details"]["reason"] == "bitget_submission_result_unknown"

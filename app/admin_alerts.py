@@ -7,6 +7,7 @@ import httpx
 
 from .bitget_errors import BitgetErrorCategory, ClassifiedBitgetError
 from .config import Config
+from .telegram_formatting import HTML_PARSE_MODE, html_escape
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ async def send_direct_admin_alert(
             try:
                 response = await client.post(
                     url,
-                    json={"chat_id": admin_id, "text": text},
+                    json={"chat_id": admin_id, "text": text, "parse_mode": HTML_PARSE_MODE},
                 )
                 response.raise_for_status()
                 sent_any = True
@@ -147,7 +148,7 @@ class AdminAlertManager:
         sent_any = False
         for admin_id in admin_ids:
             try:
-                await self.bot.send_message(chat_id=admin_id, text=text)
+                await self.bot.send_message(chat_id=admin_id, text=text, parse_mode=HTML_PARSE_MODE)
                 sent_any = True
             except Exception as exc:
                 logger.error(f"Failed to send admin alert to {admin_id}: {exc}")
@@ -164,26 +165,26 @@ class AdminAlertManager:
 
     async def alert_startup_failure(self, error: Exception):
         return await send_direct_admin_alert(
-            f"❌ Kaiyn Trading Bot 启动失败。\n\n错误：{error}",
+            f"❌ Kaiyn Trading Bot 启动失败。\n\n错误：{html_escape(error)}",
             alert_key="startup_failure",
         )
 
     async def alert_db_failure(self, source: str, error: Exception | None = None):
-        suffix = f"\n\n错误：{error}" if error else ""
+        suffix = f"\n\n错误：{html_escape(error)}" if error else ""
         return await self.send_alert(
-            f"❌ Kaiyn Trading Bot DB 健康检查失败。\n\n来源：{source}{suffix}",
+            f"❌ Kaiyn Trading Bot DB 健康检查失败。\n\n来源：{html_escape(source)}{suffix}",
             alert_key=f"db_failure:{source}",
         )
 
     async def alert_backup_problem(self, message: str):
         return await self.send_alert(
-            f"❌ Kaiyn Trading Bot 备份状态异常。\n\n{message}",
+            f"❌ Kaiyn Trading Bot 备份状态异常。\n\n{html_escape(message)}",
             alert_key="backup_problem",
         )
 
     async def alert_maintenance_problem(self, message: str):
         return await self.send_alert(
-            f"❌ Kaiyn Trading Bot 维护任务异常。\n\n{message}",
+            f"❌ Kaiyn Trading Bot 维护任务异常。\n\n{html_escape(message)}",
             alert_key="maintenance_problem",
         )
 
@@ -210,10 +211,10 @@ class AdminAlertManager:
 
         return await self.send_alert(
             "⚠️ Kaiyn Trading Bot Bitget API 连续异常。\n\n"
-            f"分类：{category}\n"
+            f"分类：{html_escape(category)}\n"
             f"次数：{len(failures)} / {Config.BITGET_ALERT_WINDOW_SECONDS} 秒\n"
-            f"来源：{source}\n"
-            f"最近错误：{classified_error.storage_message()}",
+            f"来源：{html_escape(source)}\n"
+            f"最近错误：{html_escape(classified_error.storage_message())}",
             alert_key=f"bitget_failure:{category}",
         )
 
