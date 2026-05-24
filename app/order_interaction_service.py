@@ -12,6 +12,7 @@ from .bot_messages import order_preview_message, order_success_message
 from .decimal_utils import decimal_json, to_decimal, to_decimal_or_none
 from .order_flow import (
     OrderCallbackData,
+    OrderExecutionUnknownResult,
     OrderPreview,
     apply_order_validation,
     build_client_order_id,
@@ -33,6 +34,13 @@ from .risk_limits import (
 )
 
 logger = logging.getLogger(__name__)
+
+UNKNOWN_ORDER_RESULT_MESSAGE = (
+    "⚠️ **订单状态待确认**\n\n"
+    "下单请求可能已送到 Bitget，但系统没有收到明确结果。\n\n"
+    "系统不会自动重送。将保留这笔确认单并稍后用 Bitget 订单查询补状态；"
+    "若确认失败，会再通知您回到原信号重新下单。"
+)
 
 
 @dataclass(frozen=True)
@@ -729,6 +737,73 @@ class TelegramOrderFlowService:
                 position_value=e.details.get("position_value", position_value),
                 mark_pending_failed=True,
             )
+            return False
+
+        except OrderExecutionUnknownResult as e:
+            classified = e.classified_error
+            logger.warning("Order execution result unknown: %s", classified.storage_message())
+            await self._record_bitget_failure_alert(
+                classified,
+                "_execute_order_unknown_result",
+                {
+                    "telegram_id": user.telegram_id,
+                    "symbol": symbol,
+                    "direction": direction,
+                    "order_mode": order_mode,
+                    "trade_id": e.trade_id,
+                    "client_order_id": summarize_identifier(e.client_order_id),
+                    "pending_order_token": summarize_identifier(pending_order_token),
+                },
+            )
+
+            await emit_audit_event(
+                self.audit_owner,
+                user,
+                "order_execution_deferred",
+                {
+                    "status": "processing",
+                    "reason": "bitget_submission_result_unknown",
+                    "symbol": symbol,
+                    "direction": direction,
+                    "quantity": quantity,
+                    "position_value": position_value,
+                    "order_mode": order_mode,
+                    "limit_price": limit_price,
+                    "trade_id": e.trade_id,
+                    "client_order_id": summarize_identifier(e.client_order_id),
+                    "pending_order_token": summarize_identifier(pending_order_token),
+                    "error_category": classified.category.value,
+                    "raw_code": classified.raw_code,
+                    "raw_message": classified.raw_message,
+                    "http_status": classified.http_status,
+                },
+            )
+
+            try:
+                await self.system_log_repo.log(
+                    level="WARNING",
+                    message="Bitget order execution result unknown",
+                    module="telegram_bot",
+                    function="_execute_order",
+                    user_id=getattr(user, "id", None),
+                    telegram_id=user.telegram_id,
+                    extra_data={
+                        "symbol": symbol,
+                        "direction": direction,
+                        "quantity": quantity,
+                        "position_value": position_value,
+                        "order_mode": order_mode,
+                        "limit_price": limit_price,
+                        "trade_id": e.trade_id,
+                        "client_order_id": summarize_identifier(e.client_order_id),
+                        "pending_order_token": summarize_identifier(pending_order_token),
+                        "classified_error": classified.to_log_data(),
+                    },
+                )
+            except Exception as log_error:
+                logger.error(f"Failed to log unknown Bitget order result: {log_error}")
+
+            await self.send_private_message(query, user, UNKNOWN_ORDER_RESULT_MESSAGE)
             return False
 
         except Exception as e:
