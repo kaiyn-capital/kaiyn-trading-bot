@@ -73,7 +73,7 @@ class BitgetAPIClient:
 
             try:
                 result = response.json()
-            except Exception as e:
+            except ValueError as e:
                 raise BitgetAPIError(
                     code=str(response.status_code),
                     message=f"Invalid JSON response from Bitget HTTP {response.status_code}",
@@ -136,7 +136,7 @@ class BitgetAPIClient:
                     )
             except BitgetAPIError:
                 raise
-            except Exception as json_error:
+            except ValueError as json_error:
                 logger.warning(f"Failed to parse error JSON: {json_error}")
 
             raise BitgetAPIError(
@@ -165,8 +165,7 @@ class BitgetAPIClient:
                 endpoint=endpoint,
                 method=method,
             ) from e
-        except Exception as e:
-            logger.error(f"Request error: {e}")
+        except BitgetAPIError:
             raise
 
     async def get_account_info(self, product_type: str = "USDT-FUTURES") -> dict:

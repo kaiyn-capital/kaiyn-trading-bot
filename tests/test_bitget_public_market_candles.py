@@ -10,12 +10,15 @@ from app.bitget_public_market import BitgetPublicMarket, parse_bitget_candles_pa
 
 
 class FakeResponse:
-    def __init__(self, status_code, payload, text=""):
+    def __init__(self, status_code, payload, text="", json_exc=None):
         self.status_code = status_code
         self._payload = payload
         self.text = text
+        self.json_exc = json_exc
 
     def json(self):
+        if self.json_exc is not None:
+            raise self.json_exc
         return self._payload
 
 
@@ -127,6 +130,30 @@ async def test_get_market_price_raises_on_missing_last_price(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_market_price_raises_on_invalid_last_price(monkeypatch):
+    response = FakeResponse(200, {"code": "00000", "data": [{"symbol": "BTCUSDT", "lastPr": "nan"}]})
+    monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda *args, **kwargs: FakeAsyncClient(response))
+
+    with pytest.raises(BitgetAPIError) as error:
+        await BitgetPublicMarket().get_market_price("BTCUSDT")
+
+    assert error.value.code == "invalid_ticker_response"
+    assert error.value.endpoint == "/api/v2/mix/market/ticker"
+
+
+@pytest.mark.asyncio
+async def test_get_market_price_wraps_invalid_json_response(monkeypatch):
+    response = FakeResponse(200, {}, text="not-json", json_exc=ValueError("invalid json"))
+    monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda *args, **kwargs: FakeAsyncClient(response))
+
+    with pytest.raises(BitgetAPIError) as error:
+        await BitgetPublicMarket().get_market_price("BTCUSDT")
+
+    assert error.value.code == "invalid_json_response"
+    assert error.value.endpoint == "/api/v2/mix/market/ticker"
+
+
+@pytest.mark.asyncio
 async def test_get_market_price_raises_bitget_error_on_http_error(monkeypatch):
     response = FakeResponse(500, {}, text="bad gateway")
     monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda *args, **kwargs: FakeAsyncClient(response))
@@ -222,3 +249,30 @@ async def test_get_candles_raises_bitget_error_on_api_error(monkeypatch):
 
     with pytest.raises(BitgetAPIError):
         await BitgetPublicMarket().get_candles("BTCUSDT")
+
+
+@pytest.mark.asyncio
+async def test_get_trading_pairs_wraps_invalid_json_response(monkeypatch):
+    response = FakeResponse(200, {}, text="not-json", json_exc=ValueError("invalid json"))
+    client = FakeAsyncClient(response)
+    monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda *args, **kwargs: client)
+
+    with pytest.raises(BitgetAPIError) as error:
+        await BitgetPublicMarket().get_trading_pairs()
+
+    assert client.requests[0]["url"].endswith("/api/v2/mix/market/contracts")
+    assert client.requests[0]["params"] == {"productType": "USDT-FUTURES"}
+    assert error.value.code == "invalid_json_response"
+    assert error.value.endpoint == "/api/v2/mix/market/contracts"
+
+
+@pytest.mark.asyncio
+async def test_get_candles_wraps_invalid_json_response(monkeypatch):
+    response = FakeResponse(200, {}, text="not-json", json_exc=ValueError("invalid json"))
+    monkeypatch.setattr(market_module.httpx, "AsyncClient", lambda *args, **kwargs: FakeAsyncClient(response))
+
+    with pytest.raises(BitgetAPIError) as error:
+        await BitgetPublicMarket().get_candles("BTCUSDT")
+
+    assert error.value.code == "invalid_json_response"
+    assert error.value.endpoint == "/api/v2/mix/market/candles"
