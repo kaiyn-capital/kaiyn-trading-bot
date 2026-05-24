@@ -1,4 +1,3 @@
-import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -69,21 +68,20 @@ def make_signal():
     )
 
 
-def test_create_signal_record_retries_public_id_collision():
+@pytest.mark.asyncio
+async def test_create_signal_record_retries_public_id_collision():
     repo = FakeSignalRecordRepo()
     repo.records["dup0001"] = {"public_id": "dup0001"}
     generated_ids = iter(["dup0001", "ok00002"])
     service = SignalRecordService(repo, public_id_generator=lambda: next(generated_ids))
     user = SimpleNamespace(id=7, telegram_id=123)
 
-    record, signal_text = asyncio.run(
-        service.create_signal_record(
-            user=user,
-            signal=make_signal(),
-            sender_username="admin",
-            chart_status="generated",
-            chart_error=None,
-        )
+    record, signal_text = await service.create_signal_record(
+        user=user,
+        signal=make_signal(),
+        sender_username="admin",
+        chart_status="generated",
+        chart_error=None,
     )
 
     assert record["public_id"] == "ok00002"
@@ -91,29 +89,29 @@ def test_create_signal_record_retries_public_id_collision():
     assert "交易id: <code>ok00002</code>" in signal_text
 
 
-def test_create_signal_record_raises_after_repeated_collisions():
+@pytest.mark.asyncio
+async def test_create_signal_record_raises_after_repeated_collisions():
     repo = FakeSignalRecordRepo()
     repo.records["dup0001"] = {"public_id": "dup0001"}
     service = SignalRecordService(repo, public_id_generator=lambda: "dup0001")
 
     with pytest.raises(RuntimeError):
-        asyncio.run(
-            service.create_signal_record(
-                user=SimpleNamespace(id=7, telegram_id=123),
-                signal=make_signal(),
-                sender_username="admin",
-                chart_status="generated",
-                chart_error=None,
-            )
+        await service.create_signal_record(
+            user=SimpleNamespace(id=7, telegram_id=123),
+            signal=make_signal(),
+            sender_username="admin",
+            chart_status="generated",
+            chart_error=None,
         )
 
 
-def test_update_send_status_maps_sent_count_to_record_status():
+@pytest.mark.asyncio
+async def test_update_send_status_maps_sent_count_to_record_status():
     repo = FakeSignalRecordRepo()
     service = SignalRecordService(repo)
 
-    asyncio.run(service.update_send_status(1, 2))
-    asyncio.run(service.update_send_status(2, 0))
+    await service.update_send_status(1, 2)
+    await service.update_send_status(2, 0)
 
     assert repo.status_updates == [(1, "sent"), (2, "send_failed")]
 

@@ -1,5 +1,6 @@
-import asyncio
 from types import SimpleNamespace
+
+import pytest
 
 from app.bot import TelegramBot
 from app.bot_admin_handlers import AdminHandlersMixin
@@ -59,7 +60,8 @@ def make_bot(user):
     return bot
 
 
-def test_button_callback_dispatches_exact_callback():
+@pytest.mark.asyncio
+async def test_button_callback_dispatches_exact_callback():
     user = make_user()
     bot = make_bot(user)
     routed = []
@@ -70,13 +72,14 @@ def test_button_callback_dispatches_exact_callback():
     bot._handle_status_callback = handle_status
     update = make_update("check_status")
 
-    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+    await TelegramBot.button_callback(bot, update, SimpleNamespace())
 
     assert update.callback_query.answers == [{"text": None, "kwargs": {}}]
     assert routed == [{"query": update.callback_query, "user": user}]
 
 
-def test_callback_router_dispatches_exact_and_prefix_callbacks():
+@pytest.mark.asyncio
+async def test_callback_router_dispatches_exact_and_prefix_callbacks():
     routed = []
 
     async def exact_handler(query, user):
@@ -91,9 +94,9 @@ def test_callback_router_dispatches_exact_and_prefix_callbacks():
     )
     user = make_user()
 
-    assert asyncio.run(router.dispatch(FakeQuery("check_status"), user, "check_status")) is True
-    assert asyncio.run(router.dispatch(FakeQuery("confirm_order_tok"), user, "confirm_order_tok")) is True
-    assert asyncio.run(router.dispatch(FakeQuery("unknown"), user, "unknown")) is False
+    assert await router.dispatch(FakeQuery("check_status"), user, "check_status") is True
+    assert await router.dispatch(FakeQuery("confirm_order_tok"), user, "confirm_order_tok") is True
+    assert await router.dispatch(FakeQuery("unknown"), user, "unknown") is False
     assert routed == [
         ("exact", "check_status", user.telegram_id),
         ("prefix", "confirm_order_tok", user.telegram_id),
@@ -113,7 +116,8 @@ def test_callback_router_identifies_admin_only_callbacks():
     assert router.is_admin_callback("missing") is False
 
 
-def test_button_callback_dispatches_prefix_callbacks():
+@pytest.mark.asyncio
+async def test_button_callback_dispatches_prefix_callbacks():
     user = make_user()
     bot = make_bot(user)
     routed = []
@@ -124,13 +128,14 @@ def test_button_callback_dispatches_prefix_callbacks():
     bot._handle_confirm_pending_order_callback = handle_confirm
     update = make_update("confirm_order_token")
 
-    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+    await TelegramBot.button_callback(bot, update, SimpleNamespace())
 
     assert update.callback_query.answers == [{"text": None, "kwargs": {}}]
     assert routed == [{"query": update.callback_query, "user": user, "data": "confirm_order_token"}]
 
 
-def test_button_callback_dispatches_signal_preview_prefix_callbacks():
+@pytest.mark.asyncio
+async def test_button_callback_dispatches_signal_preview_prefix_callbacks():
     user = make_user()
     bot = make_bot(user)
     routed = []
@@ -141,13 +146,14 @@ def test_button_callback_dispatches_signal_preview_prefix_callbacks():
     bot._handle_confirm_signal_callback = handle_confirm_signal
     update = make_update("confirm_signal_token")
 
-    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+    await TelegramBot.button_callback(bot, update, SimpleNamespace())
 
     assert update.callback_query.answers == [{"text": None, "kwargs": {}}]
     assert routed == [{"query": update.callback_query, "user": user, "data": "confirm_signal_token"}]
 
 
-def test_button_callback_dispatches_chart_update_preview_prefix_callbacks():
+@pytest.mark.asyncio
+async def test_button_callback_dispatches_chart_update_preview_prefix_callbacks():
     user = make_user()
     bot = make_bot(user)
     routed = []
@@ -158,17 +164,18 @@ def test_button_callback_dispatches_chart_update_preview_prefix_callbacks():
     bot._handle_confirm_chart_update_callback = handle_confirm_chart_update
     update = make_update("confirm_chart_update_token")
 
-    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+    await TelegramBot.button_callback(bot, update, SimpleNamespace())
 
     assert update.callback_query.answers == [{"text": None, "kwargs": {}}]
     assert routed == [{"query": update.callback_query, "user": user, "data": "confirm_chart_update_token"}]
 
 
-def test_cancel_modify_api_callback_keeps_existing_response():
+@pytest.mark.asyncio
+async def test_cancel_modify_api_callback_keeps_existing_response():
     bot = make_bot(make_user())
     update = make_update("cancel_modify_api")
 
-    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+    await TelegramBot.button_callback(bot, update, SimpleNamespace())
 
     assert update.callback_query.answers == [
         {"text": None, "kwargs": {}},
@@ -177,19 +184,21 @@ def test_cancel_modify_api_callback_keeps_existing_response():
     assert update.callback_query.edits == [{"text": "✅ 已取消修改 API 设置", "kwargs": {}}]
 
 
-def test_cancel_change_risk_callback_clears_session():
+@pytest.mark.asyncio
+async def test_cancel_change_risk_callback_clears_session():
     user = make_user()
     bot = make_bot(user)
     bot.user_sessions = {user.telegram_id: {"step": "risk_amount"}}
     update = make_update("cancel_change_risk")
 
-    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+    await TelegramBot.button_callback(bot, update, SimpleNamespace())
 
     assert bot.user_sessions == {}
     assert update.callback_query.edits == [{"text": "✅ 已取消更改风险设置", "kwargs": {}}]
 
 
-def test_cancel_order_callback_uses_private_message_wrapper():
+@pytest.mark.asyncio
+async def test_cancel_order_callback_uses_private_message_wrapper():
     user = make_user()
     bot = make_bot(user)
     sent = []
@@ -207,7 +216,7 @@ def test_cancel_order_callback_uses_private_message_wrapper():
     bot._send_private_message = send_private_message
     update = make_update("cancel_order")
 
-    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+    await TelegramBot.button_callback(bot, update, SimpleNamespace())
 
     assert update.callback_query.answers == [
         {"text": None, "kwargs": {}},
@@ -223,36 +232,39 @@ def test_cancel_order_callback_uses_private_message_wrapper():
     ]
 
 
-def test_unknown_callback_keeps_unknown_operation_message():
+@pytest.mark.asyncio
+async def test_unknown_callback_keeps_unknown_operation_message():
     bot = make_bot(make_user())
     update = make_update("unknown_callback")
 
-    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+    await TelegramBot.button_callback(bot, update, SimpleNamespace())
 
     assert update.callback_query.answers == [{"text": None, "kwargs": {}}]
     assert update.callback_query.edits == [{"text": "❓ 未知操作", "kwargs": {}}]
 
 
-def test_admin_callback_rejects_non_admin_without_editing_or_session(monkeypatch):
+@pytest.mark.asyncio
+async def test_admin_callback_rejects_non_admin_without_editing_or_session(monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "999")
     user = make_user(telegram_id=123)
     bot = make_bot(user)
     bot.user_sessions = {}
     update = make_update("manage_channels", telegram_id=user.telegram_id)
 
-    asyncio.run(TelegramBot.button_callback(bot, update, SimpleNamespace()))
+    await TelegramBot.button_callback(bot, update, SimpleNamespace())
 
     assert update.callback_query.answers == [{"text": ADMIN_PERMISSION_DENIED_MESSAGE, "kwargs": {"show_alert": True}}]
     assert update.callback_query.edits == []
     assert bot.user_sessions == {}
 
 
-def test_require_admin_rejects_non_admin(monkeypatch):
+@pytest.mark.asyncio
+async def test_require_admin_rejects_non_admin(monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "999")
     handler = FakeAdminHandler(make_user(telegram_id=123))
     update = SimpleNamespace(message=FakeMessage())
 
-    result = asyncio.run(handler._require_admin(update))
+    result = await handler._require_admin(update)
 
     assert result is None
     assert update.message.replies == [{"text": ADMIN_PERMISSION_DENIED_MESSAGE, "kwargs": {}}]

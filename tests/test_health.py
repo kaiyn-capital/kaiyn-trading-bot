@@ -1,7 +1,8 @@
-import asyncio
 import json
 from datetime import datetime, timedelta
 from types import SimpleNamespace
+
+import pytest
 
 from app.health import (
     format_admin_health_report,
@@ -78,19 +79,21 @@ class FakeSystemLogRepo:
         return self.latest
 
 
-def test_maintenance_health_reports_recent_success():
+@pytest.mark.asyncio
+async def test_maintenance_health_reports_recent_success():
     latest = SimpleNamespace(
         level="INFO",
         message="Retention cleanup completed",
         created_at=datetime.utcnow(),
     )
 
-    result = asyncio.run(read_maintenance_health(FakeSystemLogRepo(latest)))
+    result = await read_maintenance_health(FakeSystemLogRepo(latest))
 
     assert result.status == "ok"
 
 
-def test_maintenance_health_reports_stale_success():
+@pytest.mark.asyncio
+async def test_maintenance_health_reports_stale_success():
     now = datetime(2026, 5, 13, 12, 0, 0)
     latest = SimpleNamespace(
         level="INFO",
@@ -98,7 +101,7 @@ def test_maintenance_health_reports_stale_success():
         created_at=now - timedelta(hours=48),
     )
 
-    result = asyncio.run(read_maintenance_health(FakeSystemLogRepo(latest), stale_hours=36, now=now))
+    result = await read_maintenance_health(FakeSystemLogRepo(latest), stale_hours=36, now=now)
 
     assert result.status == "stale"
 

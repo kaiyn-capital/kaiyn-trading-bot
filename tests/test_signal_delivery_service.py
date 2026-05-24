@@ -1,5 +1,6 @@
-import asyncio
 from types import SimpleNamespace
+
+import pytest
 
 from app.order_types import SignalDraft
 from app.signal_delivery_service import TELEGRAM_PHOTO_CAPTION_LIMIT, SignalDeliveryService
@@ -79,21 +80,20 @@ def make_service(channel_repo=None, signal_record_repo=None):
     return SignalDeliveryService(channel_repo or FakeChannelRepo(), signal_record_repo or FakeSignalRecordRepo())
 
 
-def test_forward_signal_to_channels_sends_photo_and_records_message_id():
+@pytest.mark.asyncio
+async def test_forward_signal_to_channels_sends_photo_and_records_message_id():
     bot = FakeBot()
     record_repo = FakeSignalRecordRepo()
     service = make_service(signal_record_repo=record_repo)
 
-    result = asyncio.run(
-        service.forward_signal_to_channels(
-            bot,
-            make_signal(),
-            "signal text",
-            b"png",
-            "generated",
-            None,
-            signal_record_id=9,
-        )
+    result = await service.forward_signal_to_channels(
+        bot,
+        make_signal(),
+        "signal text",
+        b"png",
+        "generated",
+        None,
+        signal_record_id=9,
     )
 
     assert result["sent_count"] == 1
@@ -112,20 +112,19 @@ def test_forward_signal_to_channels_sends_photo_and_records_message_id():
     ]
 
 
-def test_forward_signal_to_channels_falls_back_to_text_when_photo_fails():
+@pytest.mark.asyncio
+async def test_forward_signal_to_channels_falls_back_to_text_when_photo_fails():
     bot = FakeBot()
     bot.fail_photo = True
     service = make_service()
 
-    result = asyncio.run(
-        service.forward_signal_to_channels(
-            bot,
-            make_signal(),
-            "signal text",
-            b"png",
-            "generated",
-            None,
-        )
+    result = await service.forward_signal_to_channels(
+        bot,
+        make_signal(),
+        "signal text",
+        b"png",
+        "generated",
+        None,
     )
 
     assert result["sent_count"] == 1
@@ -135,21 +134,20 @@ def test_forward_signal_to_channels_falls_back_to_text_when_photo_fails():
     assert bot.sent_messages[0]["parse_mode"] == "HTML"
 
 
-def test_forward_signal_to_channels_sends_short_caption_and_full_text_when_caption_is_too_long():
+@pytest.mark.asyncio
+async def test_forward_signal_to_channels_sends_short_caption_and_full_text_when_caption_is_too_long():
     bot = FakeBot()
     service = make_service()
     long_signal_text = "x" * (TELEGRAM_PHOTO_CAPTION_LIMIT + 10)
 
-    result = asyncio.run(
-        service.forward_signal_to_channels(
-            bot,
-            make_signal(),
-            long_signal_text,
-            b"png",
-            "generated",
-            None,
-            signal_record_id=9,
-        )
+    result = await service.forward_signal_to_channels(
+        bot,
+        make_signal(),
+        long_signal_text,
+        b"png",
+        "generated",
+        None,
+        signal_record_id=9,
     )
 
     assert result["sent_count"] == 1
@@ -159,23 +157,22 @@ def test_forward_signal_to_channels_sends_short_caption_and_full_text_when_capti
     assert bot.sent_messages[0]["parse_mode"] == "HTML"
 
 
-def test_forward_chart_update_replies_to_original_message():
+@pytest.mark.asyncio
+async def test_forward_chart_update_replies_to_original_message():
     bot = FakeBot()
     service = make_service()
 
-    result = asyncio.run(
-        service.forward_chart_update_to_original_targets(
-            bot,
-            b"png",
-            "update text",
-            [
-                {
-                    "chat_id": "-1001",
-                    "message_thread_id": 456,
-                    "telegram_message_id": 777,
-                }
-            ],
-        )
+    result = await service.forward_chart_update_to_original_targets(
+        bot,
+        b"png",
+        "update text",
+        [
+            {
+                "chat_id": "-1001",
+                "message_thread_id": 456,
+                "telegram_message_id": 777,
+            }
+        ],
     )
 
     assert result["sent_count"] == 1
@@ -185,24 +182,23 @@ def test_forward_chart_update_replies_to_original_message():
     assert bot.sent_photos[0]["parse_mode"] == "HTML"
 
 
-def test_forward_chart_update_falls_back_to_regular_topic_send_when_reply_fails():
+@pytest.mark.asyncio
+async def test_forward_chart_update_falls_back_to_regular_topic_send_when_reply_fails():
     bot = FakeBot()
     bot.fail_reply_photo = True
     service = make_service()
 
-    result = asyncio.run(
-        service.forward_chart_update_to_original_targets(
-            bot,
-            b"png",
-            "update text",
-            [
-                {
-                    "chat_id": "-1001",
-                    "message_thread_id": 456,
-                    "telegram_message_id": 777,
-                }
-            ],
-        )
+    result = await service.forward_chart_update_to_original_targets(
+        bot,
+        b"png",
+        "update text",
+        [
+            {
+                "chat_id": "-1001",
+                "message_thread_id": 456,
+                "telegram_message_id": 777,
+            }
+        ],
     )
 
     assert result["sent_count"] == 1

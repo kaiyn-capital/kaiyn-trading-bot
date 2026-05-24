@@ -1,8 +1,9 @@
-import asyncio
 import re
 from datetime import datetime
 from decimal import Decimal
 from types import SimpleNamespace
+
+import pytest
 
 import app.order_flow as order_flow_module
 from app.order_flow import build_client_order_id, execute_order
@@ -170,25 +171,24 @@ def test_build_client_order_id_fallback_is_legal_and_unique(monkeypatch):
     assert CLIENT_ORDER_ID_PATTERN.fullmatch(second)
 
 
-def test_market_execute_order_uses_same_client_order_id_for_trade_record_and_bitget():
+@pytest.mark.asyncio
+async def test_market_execute_order_uses_same_client_order_id_for_trade_record_and_bitget():
     trade_repo = RecordingTradeRepo()
     trade_manager = RecordingTradeManager()
     client_order_id = build_client_order_id("tok_market")
 
-    asyncio.run(
-        execute_order(
-            user_data=SimpleNamespace(id=7),
-            trade_repo=trade_repo,
-            trade_manager=trade_manager,
-            credentials=("api", "secret", "passphrase"),
-            telegram_id=123,
-            symbol="BTCUSDT",
-            direction="long",
-            quantity=0.01,
-            stop_loss=79000,
-            position_value=800,
-            client_order_id=client_order_id,
-        )
+    await execute_order(
+        user_data=SimpleNamespace(id=7),
+        trade_repo=trade_repo,
+        trade_manager=trade_manager,
+        credentials=("api", "secret", "passphrase"),
+        telegram_id=123,
+        symbol="BTCUSDT",
+        direction="long",
+        quantity=0.01,
+        stop_loss=79000,
+        position_value=800,
+        client_order_id=client_order_id,
     )
 
     assert trade_repo.created_trade["client_order_id"] == client_order_id
@@ -198,29 +198,28 @@ def test_market_execute_order_uses_same_client_order_id_for_trade_record_and_bit
     assert trade_manager.market_orders[-1]["args"][5] == client_order_id
 
 
-def test_limit_execute_order_uses_same_client_order_id_for_trade_record_and_bitget():
+@pytest.mark.asyncio
+async def test_limit_execute_order_uses_same_client_order_id_for_trade_record_and_bitget():
     trade_repo = RecordingTradeRepo()
     trade_manager = RecordingTradeManager()
     client_order_id = build_client_order_id("tok_limit")
 
-    asyncio.run(
-        execute_order(
-            user_data=SimpleNamespace(id=7),
-            trade_repo=trade_repo,
-            trade_manager=trade_manager,
-            credentials=("api", "secret", "passphrase"),
-            telegram_id=123,
-            symbol="BTCUSDT",
-            direction="short",
-            quantity=0.02,
-            stop_loss=81700,
-            position_value=1604,
-            order_mode="limit",
-            limit_price=80200,
-            quantity_text="0.02",
-            limit_price_text="80200",
-            client_order_id=client_order_id,
-        )
+    await execute_order(
+        user_data=SimpleNamespace(id=7),
+        trade_repo=trade_repo,
+        trade_manager=trade_manager,
+        credentials=("api", "secret", "passphrase"),
+        telegram_id=123,
+        symbol="BTCUSDT",
+        direction="short",
+        quantity=0.02,
+        stop_loss=81700,
+        position_value=1604,
+        order_mode="limit",
+        limit_price=80200,
+        quantity_text="0.02",
+        limit_price_text="80200",
+        client_order_id=client_order_id,
     )
 
     assert trade_repo.created_trade["client_order_id"] == client_order_id
@@ -231,24 +230,23 @@ def test_limit_execute_order_uses_same_client_order_id_for_trade_record_and_bitg
     assert trade_manager.limit_orders[-1]["args"][6] == client_order_id
 
 
-def test_execute_order_without_client_order_id_uses_legal_fallback(monkeypatch):
+@pytest.mark.asyncio
+async def test_execute_order_without_client_order_id_uses_legal_fallback(monkeypatch):
     monkeypatch.setattr(order_flow_module.secrets, "token_urlsafe", lambda size: "fallback_token")
     trade_repo = RecordingTradeRepo()
     trade_manager = RecordingTradeManager()
 
-    asyncio.run(
-        execute_order(
-            user_data=SimpleNamespace(id=7),
-            trade_repo=trade_repo,
-            trade_manager=trade_manager,
-            credentials=("api", "secret", "passphrase"),
-            telegram_id=123,
-            symbol="BTCUSDT",
-            direction="long",
-            quantity=0.01,
-            stop_loss=79000,
-            position_value=800,
-        )
+    await execute_order(
+        user_data=SimpleNamespace(id=7),
+        trade_repo=trade_repo,
+        trade_manager=trade_manager,
+        credentials=("api", "secret", "passphrase"),
+        telegram_id=123,
+        symbol="BTCUSDT",
+        direction="long",
+        quantity=0.01,
+        stop_loss=79000,
+        position_value=800,
     )
 
     client_order_id = trade_repo.created_trade["client_order_id"]
@@ -257,27 +255,26 @@ def test_execute_order_without_client_order_id_uses_legal_fallback(monkeypatch):
     assert CLIENT_ORDER_ID_PATTERN.fullmatch(client_order_id)
 
 
-def test_execute_order_uses_authoritative_daily_limit_create_path():
+@pytest.mark.asyncio
+async def test_execute_order_uses_authoritative_daily_limit_create_path():
     trade_repo = RecordingTradeRepo()
     trade_manager = RecordingTradeManager()
     day_start = datetime(2026, 5, 21, 16, 0, 0)
 
-    asyncio.run(
-        execute_order(
-            user_data=SimpleNamespace(id=7),
-            trade_repo=trade_repo,
-            trade_manager=trade_manager,
-            credentials=("api", "secret", "passphrase"),
-            telegram_id=123,
-            symbol="BTCUSDT",
-            direction="long",
-            quantity=0.01,
-            stop_loss=79000,
-            position_value=800,
-            client_order_id="KTB_daily_limit",
-            daily_trade_limit=3,
-            daily_limit_day_start_utc=day_start,
-        )
+    await execute_order(
+        user_data=SimpleNamespace(id=7),
+        trade_repo=trade_repo,
+        trade_manager=trade_manager,
+        credentials=("api", "secret", "passphrase"),
+        telegram_id=123,
+        symbol="BTCUSDT",
+        direction="long",
+        quantity=0.01,
+        stop_loss=79000,
+        position_value=800,
+        client_order_id="KTB_daily_limit",
+        daily_trade_limit=3,
+        daily_limit_day_start_utc=day_start,
     )
 
     assert trade_repo.created_trade_with_daily_limit["daily_trade_limit"] == 3
@@ -285,7 +282,8 @@ def test_execute_order_uses_authoritative_daily_limit_create_path():
     assert trade_repo.created_trade["client_order_id"] == "KTB_daily_limit"
 
 
-def test_order_flow_service_builds_client_order_id_from_pending_token():
+@pytest.mark.asyncio
+async def test_order_flow_service_builds_client_order_id_from_pending_token():
     trade_repo = RecordingTradeRepo()
     trade_manager = ServiceTradeManager()
     pending_order_repo = RecordingPendingOrderRepo()
@@ -300,20 +298,18 @@ def test_order_flow_service_builds_client_order_id_from_pending_token():
         failure_alert_handler=None,
     )
 
-    result = asyncio.run(
-        service.execute_order(
-            ConfirmedOrderRequest(
-                query=FakeQuery(),
-                user=SimpleNamespace(telegram_id=123),
-                symbol="BTCUSDT",
-                direction="long",
-                quantity=0.01,
-                stop_loss=79000,
-                position_value=800,
-                current_price=80000,
-                order_mode="market",
-                pending_order_token="tok_service",
-            )
+    result = await service.execute_order(
+        ConfirmedOrderRequest(
+            query=FakeQuery(),
+            user=SimpleNamespace(telegram_id=123),
+            symbol="BTCUSDT",
+            direction="long",
+            quantity=0.01,
+            stop_loss=79000,
+            position_value=800,
+            current_price=80000,
+            order_mode="market",
+            pending_order_token="tok_service",
         )
     )
 

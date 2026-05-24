@@ -1,6 +1,7 @@
-import asyncio
 from datetime import datetime, timedelta
 from types import SimpleNamespace
+
+import pytest
 
 import app.bot_order_handlers as bot_order_handlers
 from app.bot_order_handlers import OrderHandlersMixin
@@ -209,13 +210,14 @@ def make_context():
     )
 
 
-def test_send_signal_creates_text_preview_without_forwarding(monkeypatch):
+@pytest.mark.asyncio
+async def test_send_signal_creates_text_preview_without_forwarding(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
     handler = FakeOrderHandler()
     update = make_update()
     context = make_context()
 
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
 
     assert context.bot.sent_messages == []
     assert handler.application.bot.sent_messages == []
@@ -231,13 +233,14 @@ def test_send_signal_creates_text_preview_without_forwarding(monkeypatch):
     assert keyboard[1][0].callback_data == f"cancel_signal_{session['token']}"
 
 
-def test_send_signal_records_preview_audit(monkeypatch):
+@pytest.mark.asyncio
+async def test_send_signal_records_preview_audit(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
     handler = FakeOrderHandler()
     update = make_update()
     context = make_context()
 
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
 
     audit = handler.audit_events[-1]
     assert audit["action"] == "signal_preview_created"
@@ -248,14 +251,15 @@ def test_send_signal_records_preview_audit(monkeypatch):
     assert audit["details"]["chart_status"] == "disabled"
 
 
-def test_send_signal_sends_chart_photo_preview(monkeypatch):
+@pytest.mark.asyncio
+async def test_send_signal_sends_chart_photo_preview(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
     monkeypatch.setattr(Config, "SIGNAL_CHART_TIMEOUT_SECONDS", 1.0)
     handler = FakeOrderHandler()
     update = make_update()
     context = make_context()
 
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
 
     assert update.message.photos[0]["caption"].startswith("📋 <b>请确认是否转发以下交易信号</b>")
     assert update.message.photos[0]["parse_mode"] == "HTML"
@@ -263,14 +267,15 @@ def test_send_signal_sends_chart_photo_preview(monkeypatch):
     assert handler.audit_events[-1]["details"]["chart_status"] == "generated"
 
 
-def test_send_signal_falls_back_to_text_preview_when_chart_generation_fails(monkeypatch):
+@pytest.mark.asyncio
+async def test_send_signal_falls_back_to_text_preview_when_chart_generation_fails(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
     monkeypatch.setattr(Config, "SIGNAL_CHART_TIMEOUT_SECONDS", 1.0)
     handler = FailingChartOrderHandler()
     update = make_update()
     context = make_context()
 
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
 
     assert update.message.replies[0]["text"].startswith("📋 <b>请确认是否转发以下交易信号</b>")
     assert update.message.replies[0]["kwargs"]["parse_mode"] == "HTML"
@@ -280,17 +285,18 @@ def test_send_signal_falls_back_to_text_preview_when_chart_generation_fails(monk
     assert audit["details"]["chart_error"] == "RuntimeError"
 
 
-def test_confirm_signal_forwards_to_configured_topic(monkeypatch):
+@pytest.mark.asyncio
+async def test_confirm_signal_forwards_to_configured_topic(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
     monkeypatch.setattr(Config, "SIGNAL_CHART_TIMEOUT_SECONDS", 1.0)
     handler = FakeOrderHandler()
     update = make_update()
     context = make_context()
 
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
     token = handler.user_sessions[handler.user.telegram_id]["token"]
     query = FakeQuery()
-    asyncio.run(handler._handle_confirm_signal_callback(query, handler.user, f"confirm_signal_{token}"))
+    await handler._handle_confirm_signal_callback(query, handler.user, f"confirm_signal_{token}")
 
     first_photo = handler.application.bot.sent_photos[0]
     assert first_photo["chat_id"] == "-1001"
@@ -309,7 +315,8 @@ def test_confirm_signal_forwards_to_configured_topic(monkeypatch):
     assert handler.signal_record_repo.messages[0]["message_thread_id"] == 456
 
 
-def test_confirm_signal_falls_back_to_text_when_photo_send_fails(monkeypatch):
+@pytest.mark.asyncio
+async def test_confirm_signal_falls_back_to_text_when_photo_send_fails(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
     monkeypatch.setattr(Config, "SIGNAL_CHART_TIMEOUT_SECONDS", 1.0)
     handler = FakeOrderHandler()
@@ -317,9 +324,9 @@ def test_confirm_signal_falls_back_to_text_when_photo_send_fails(monkeypatch):
     update = make_update()
     context = make_context()
 
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
     token = handler.user_sessions[handler.user.telegram_id]["token"]
-    asyncio.run(handler._handle_confirm_signal_callback(FakeQuery(), handler.user, f"confirm_signal_{token}"))
+    await handler._handle_confirm_signal_callback(FakeQuery(), handler.user, f"confirm_signal_{token}")
 
     assert len(handler.application.bot.sent_messages) == 2
     assert handler.application.bot.sent_messages[0]["message_thread_id"] == 456
@@ -330,17 +337,18 @@ def test_confirm_signal_falls_back_to_text_when_photo_send_fails(monkeypatch):
     assert audit["details"]["chart_send_fallback_count"] == 2
 
 
-def test_cancel_signal_clears_session_without_forwarding(monkeypatch):
+@pytest.mark.asyncio
+async def test_cancel_signal_clears_session_without_forwarding(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
     handler = FakeOrderHandler()
     update = make_update()
     context = make_context()
 
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
     token = handler.user_sessions[handler.user.telegram_id]["token"]
     query = FakeQuery()
     query.fail_caption_edit = True
-    asyncio.run(handler._handle_cancel_signal_callback(query, handler.user, f"cancel_signal_{token}"))
+    await handler._handle_cancel_signal_callback(query, handler.user, f"cancel_signal_{token}")
 
     assert handler.user_sessions == {}
     assert handler.application.bot.sent_messages == []
@@ -349,18 +357,19 @@ def test_cancel_signal_clears_session_without_forwarding(monkeypatch):
     assert next(iter(handler.signal_record_repo.records.values()))["status"] == "cancelled"
 
 
-def test_expired_signal_preview_does_not_forward(monkeypatch):
+@pytest.mark.asyncio
+async def test_expired_signal_preview_does_not_forward(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
     handler = FakeOrderHandler()
     update = make_update()
     context = make_context()
 
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
     token = handler.user_sessions[handler.user.telegram_id]["token"]
     handler.user_sessions[handler.user.telegram_id]["expires_at"] = datetime.utcnow() - timedelta(seconds=1)
     query = FakeQuery()
     query.fail_caption_edit = True
-    asyncio.run(handler._handle_confirm_signal_callback(query, handler.user, f"confirm_signal_{token}"))
+    await handler._handle_confirm_signal_callback(query, handler.user, f"confirm_signal_{token}")
 
     assert handler.application.bot.sent_messages == []
     assert handler.user_sessions == {}
@@ -369,38 +378,40 @@ def test_expired_signal_preview_does_not_forward(monkeypatch):
     assert next(iter(handler.signal_record_repo.records.values()))["status"] == "expired"
 
 
-def test_new_signal_preview_replaces_old_token(monkeypatch):
+@pytest.mark.asyncio
+async def test_new_signal_preview_replaces_old_token(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
     handler = FakeOrderHandler()
     first_update = make_update()
     second_update = make_update()
     context = make_context()
 
-    asyncio.run(handler.send_signal_command(first_update, context))
+    await handler.send_signal_command(first_update, context)
     old_token = handler.user_sessions[handler.user.telegram_id]["token"]
-    asyncio.run(handler.send_signal_command(second_update, context))
+    await handler.send_signal_command(second_update, context)
     new_token = handler.user_sessions[handler.user.telegram_id]["token"]
     query = FakeQuery()
     query.fail_caption_edit = True
-    asyncio.run(handler._handle_confirm_signal_callback(query, handler.user, f"confirm_signal_{old_token}"))
+    await handler._handle_confirm_signal_callback(query, handler.user, f"confirm_signal_{old_token}")
 
     assert old_token != new_token
     assert handler.application.bot.sent_messages == []
     assert query.text_edits[0]["text"].startswith("⏳ 预览已过期")
 
 
-def test_update_chart_creates_private_photo_preview(monkeypatch):
+@pytest.mark.asyncio
+async def test_update_chart_creates_private_photo_preview(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
     handler = UpdateChartOrderHandler()
     update = make_update()
     context = make_context()
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
     token = handler.user_sessions[handler.user.telegram_id]["token"]
-    asyncio.run(handler._handle_confirm_signal_callback(FakeQuery(), handler.user, f"confirm_signal_{token}"))
+    await handler._handle_confirm_signal_callback(FakeQuery(), handler.user, f"confirm_signal_{token}")
     signal_id = next(iter(handler.signal_record_repo.records))
 
     chart_update = make_update()
-    asyncio.run(handler.update_chart_command(chart_update, SimpleNamespace(args=[signal_id, "TP1", "到达"])))
+    await handler.update_chart_command(chart_update, SimpleNamespace(args=[signal_id, "TP1", "到达"]))
 
     assert chart_update.message.photos[0]["caption"].startswith("📋 <b>请确认是否转发以下图表更新</b>")
     assert chart_update.message.photos[0]["parse_mode"] == "HTML"
@@ -411,23 +422,22 @@ def test_update_chart_creates_private_photo_preview(monkeypatch):
     assert keyboard[0][0].callback_data == f"confirm_chart_update_{session['token']}"
 
 
-def test_confirm_update_chart_replies_to_original_signal_messages(monkeypatch):
+@pytest.mark.asyncio
+async def test_confirm_update_chart_replies_to_original_signal_messages(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
     handler = UpdateChartOrderHandler()
     update = make_update()
     context = make_context()
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
     token = handler.user_sessions[handler.user.telegram_id]["token"]
-    asyncio.run(handler._handle_confirm_signal_callback(FakeQuery(), handler.user, f"confirm_signal_{token}"))
+    await handler._handle_confirm_signal_callback(FakeQuery(), handler.user, f"confirm_signal_{token}")
     signal_id = next(iter(handler.signal_record_repo.records))
 
     chart_update = make_update()
-    asyncio.run(handler.update_chart_command(chart_update, SimpleNamespace(args=[signal_id])))
+    await handler.update_chart_command(chart_update, SimpleNamespace(args=[signal_id]))
     update_token = handler.user_sessions[handler.user.telegram_id]["token"]
     query = FakeQuery()
-    asyncio.run(
-        handler._handle_confirm_chart_update_callback(query, handler.user, f"confirm_chart_update_{update_token}")
-    )
+    await handler._handle_confirm_chart_update_callback(query, handler.user, f"confirm_chart_update_{update_token}")
 
     first_update_photo = handler.application.bot.sent_photos[2]
     assert first_update_photo["chat_id"] == "-1001"
@@ -438,32 +448,34 @@ def test_confirm_update_chart_replies_to_original_signal_messages(monkeypatch):
     assert query.caption_edits[-1]["kwargs"]["parse_mode"] == "HTML"
 
 
-def test_update_chart_allows_admin_to_update_other_users_signal(monkeypatch):
+@pytest.mark.asyncio
+async def test_update_chart_allows_admin_to_update_other_users_signal(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
     monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "999")
     handler = UpdateChartOrderHandler()
     update = make_update()
     context = make_context()
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
     token = handler.user_sessions[handler.user.telegram_id]["token"]
-    asyncio.run(handler._handle_confirm_signal_callback(FakeQuery(), handler.user, f"confirm_signal_{token}"))
+    await handler._handle_confirm_signal_callback(FakeQuery(), handler.user, f"confirm_signal_{token}")
     signal_id = next(iter(handler.signal_record_repo.records))
     handler.user = SimpleNamespace(id=2, telegram_id=999)
 
     chart_update = make_update()
-    asyncio.run(handler.update_chart_command(chart_update, SimpleNamespace(args=[signal_id])))
+    await handler.update_chart_command(chart_update, SimpleNamespace(args=[signal_id]))
 
     assert chart_update.message.photos
 
 
-def test_signal_update_chart_uses_configured_candle_limit(monkeypatch):
+@pytest.mark.asyncio
+async def test_signal_update_chart_uses_configured_candle_limit(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_UPDATE_CANDLE_LIMIT", 200)
     monkeypatch.setattr(bot_order_handlers, "render_signal_update_chart", lambda *args: b"fake-update-png")
     handler = FakeOrderHandler()
     handler.trade_manager = RecordingCandleTradeManager()
     signal = SimpleNamespace(symbol="BTCUSDT")
 
-    image = asyncio.run(handler._create_signal_update_chart(signal, datetime(2026, 5, 22), "1H"))
+    image = await handler._create_signal_update_chart(signal, datetime(2026, 5, 22), "1H")
 
     assert image == b"fake-update-png"
     assert handler.trade_manager.calls[-1]["symbol"] == "BTCUSDT"
@@ -472,19 +484,20 @@ def test_signal_update_chart_uses_configured_candle_limit(monkeypatch):
     assert "end_time" in handler.trade_manager.calls[-1]["kwargs"]
 
 
-def test_update_chart_rejects_non_owner_non_admin(monkeypatch):
+@pytest.mark.asyncio
+async def test_update_chart_rejects_non_owner_non_admin(monkeypatch):
     monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
     handler = UpdateChartOrderHandler()
     update = make_update()
     context = make_context()
-    asyncio.run(handler.send_signal_command(update, context))
+    await handler.send_signal_command(update, context)
     token = handler.user_sessions[handler.user.telegram_id]["token"]
-    asyncio.run(handler._handle_confirm_signal_callback(FakeQuery(), handler.user, f"confirm_signal_{token}"))
+    await handler._handle_confirm_signal_callback(FakeQuery(), handler.user, f"confirm_signal_{token}")
     signal_id = next(iter(handler.signal_record_repo.records))
     handler.user = SimpleNamespace(id=2, telegram_id=456)
 
     chart_update = make_update()
-    asyncio.run(handler.update_chart_command(chart_update, SimpleNamespace(args=[signal_id])))
+    await handler.update_chart_command(chart_update, SimpleNamespace(args=[signal_id]))
 
     assert chart_update.message.replies[0]["text"] == "❌ 只有原发单者或管理员可以更新这笔交易信号"
     assert not chart_update.message.photos

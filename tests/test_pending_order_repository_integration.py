@@ -1,4 +1,3 @@
-import asyncio
 import os
 import subprocess
 import uuid
@@ -164,180 +163,168 @@ async def load_user(db, user_id):
 
 
 @pytest.mark.integration
-def test_user_position_cap_defaults_to_null_after_migrations():
-    async def scenario():
-        async with integration_database() as db:
-            user_id = await seed_user(db)
+@pytest.mark.asyncio
+async def test_user_position_cap_defaults_to_null_after_migrations():
+    async with integration_database() as db:
+        user_id = await seed_user(db)
 
-            user = await load_user(db, user_id)
+        user = await load_user(db, user_id)
 
-            assert user.max_position_size is None
-
-    asyncio.run(scenario())
+        assert user.max_position_size is None
 
 
 @pytest.mark.integration
-def test_create_and_claim_pending_order_lifecycle():
-    async def scenario():
-        async with integration_database() as db:
-            repo = PendingOrderRepository(db)
-            user_id = await seed_user(db)
+@pytest.mark.asyncio
+async def test_create_and_claim_pending_order_lifecycle():
+    async with integration_database() as db:
+        repo = PendingOrderRepository(db)
+        user_id = await seed_user(db)
 
-            pending = await create_pending(
-                repo,
-                user_id,
-                order_mode="limit",
-                limit_price=Decimal("81000.123456789123456789"),
-                entry_lower=Decimal("80200.123456789123456789"),
-                entry_upper=Decimal("81000.123456789123456789"),
-            )
+        pending = await create_pending(
+            repo,
+            user_id,
+            order_mode="limit",
+            limit_price=Decimal("81000.123456789123456789"),
+            entry_lower=Decimal("80200.123456789123456789"),
+            entry_upper=Decimal("81000.123456789123456789"),
+        )
 
-            assert pending.status == "pending"
-            assert pending.symbol == "BTCUSDT"
-            assert pending.order_mode == "limit"
-            assert pending.limit_price == Decimal("81000.123456789123456789")
+        assert pending.status == "pending"
+        assert pending.symbol == "BTCUSDT"
+        assert pending.order_mode == "limit"
+        assert pending.limit_price == Decimal("81000.123456789123456789")
 
-            claimed, status = await repo.claim_pending_order(pending.token, 123456)
-            assert status == "processing"
-            assert claimed.token == pending.token
+        claimed, status = await repo.claim_pending_order(pending.token, 123456)
+        assert status == "processing"
+        assert claimed.token == pending.token
 
-            saved = await load_pending(db, pending.token)
-            assert saved.status == "processing"
-            assert saved.limit_price == Decimal("81000.123456789123456789")
-            assert saved.entry_lower == Decimal("80200.123456789123456789")
-            assert saved.quantity == Decimal("0.010000000000000000")
-            assert isinstance(saved.quantity, Decimal)
+        saved = await load_pending(db, pending.token)
+        assert saved.status == "processing"
+        assert saved.limit_price == Decimal("81000.123456789123456789")
+        assert saved.entry_lower == Decimal("80200.123456789123456789")
+        assert saved.quantity == Decimal("0.010000000000000000")
+        assert isinstance(saved.quantity, Decimal)
 
-            claimed_again, status_again = await repo.claim_pending_order(pending.token, 123456)
-            assert claimed_again.token == pending.token
-            assert status_again == "processing"
-
-    asyncio.run(scenario())
+        claimed_again, status_again = await repo.claim_pending_order(pending.token, 123456)
+        assert claimed_again.token == pending.token
+        assert status_again == "processing"
 
 
 @pytest.mark.integration
-def test_claim_missing_and_expired_pending_order():
-    async def scenario():
-        async with integration_database() as db:
-            repo = PendingOrderRepository(db)
-            user_id = await seed_user(db)
+@pytest.mark.asyncio
+async def test_claim_missing_and_expired_pending_order():
+    async with integration_database() as db:
+        repo = PendingOrderRepository(db)
+        user_id = await seed_user(db)
 
-            missing, missing_status = await repo.claim_pending_order("missing", 123456)
-            assert missing is None
-            assert missing_status == "missing"
+        missing, missing_status = await repo.claim_pending_order("missing", 123456)
+        assert missing is None
+        assert missing_status == "missing"
 
-            expired = await create_pending(
-                repo,
-                user_id,
-                expires_at=datetime.utcnow() - timedelta(seconds=1),
-            )
-            claimed, status = await repo.claim_pending_order(expired.token, 123456)
-            assert claimed.token == expired.token
-            assert status == "expired"
+        expired = await create_pending(
+            repo,
+            user_id,
+            expires_at=datetime.utcnow() - timedelta(seconds=1),
+        )
+        claimed, status = await repo.claim_pending_order(expired.token, 123456)
+        assert claimed.token == expired.token
+        assert status == "expired"
 
-            saved = await load_pending(db, expired.token)
-            assert saved.status == "expired"
-
-    asyncio.run(scenario())
+        saved = await load_pending(db, expired.token)
+        assert saved.status == "expired"
 
 
 @pytest.mark.integration
-def test_cancel_pending_order_lifecycle():
-    async def scenario():
-        async with integration_database() as db:
-            repo = PendingOrderRepository(db)
-            user_id = await seed_user(db)
+@pytest.mark.asyncio
+async def test_cancel_pending_order_lifecycle():
+    async with integration_database() as db:
+        repo = PendingOrderRepository(db)
+        user_id = await seed_user(db)
 
-            assert await repo.cancel_pending_order("missing", 123456) == "missing"
+        assert await repo.cancel_pending_order("missing", 123456) == "missing"
 
-            cancellable = await create_pending(repo, user_id)
-            assert await repo.cancel_pending_order(cancellable.token, 123456) == "cancelled"
-            saved = await load_pending(db, cancellable.token)
-            assert saved.status == "cancelled"
+        cancellable = await create_pending(repo, user_id)
+        assert await repo.cancel_pending_order(cancellable.token, 123456) == "cancelled"
+        saved = await load_pending(db, cancellable.token)
+        assert saved.status == "cancelled"
 
-            processing = await create_pending(repo, user_id)
-            await repo.claim_pending_order(processing.token, 123456)
-            assert await repo.cancel_pending_order(processing.token, 123456) == "processing"
+        processing = await create_pending(repo, user_id)
+        await repo.claim_pending_order(processing.token, 123456)
+        assert await repo.cancel_pending_order(processing.token, 123456) == "processing"
 
-            executed = await create_pending(repo, user_id)
-            trade_id = await seed_trade(db, user_id)
-            assert await repo.mark_executed(executed.token, trade_id) is True
-            assert await repo.cancel_pending_order(executed.token, 123456) == "executed"
-
-    asyncio.run(scenario())
+        executed = await create_pending(repo, user_id)
+        trade_id = await seed_trade(db, user_id)
+        assert await repo.mark_executed(executed.token, trade_id) is True
+        assert await repo.cancel_pending_order(executed.token, 123456) == "executed"
 
 
 @pytest.mark.integration
-def test_mark_executed_and_failed_pending_order():
-    async def scenario():
-        async with integration_database() as db:
-            repo = PendingOrderRepository(db)
-            user_id = await seed_user(db)
+@pytest.mark.asyncio
+async def test_mark_executed_and_failed_pending_order():
+    async with integration_database() as db:
+        repo = PendingOrderRepository(db)
+        user_id = await seed_user(db)
 
-            executed = await create_pending(repo, user_id)
-            trade_id = await seed_trade(db, user_id)
-            assert await repo.mark_executed(executed.token, trade_id) is True
-            saved_executed = await load_pending(db, executed.token)
-            assert saved_executed.status == "executed"
-            assert saved_executed.trade_id == trade_id
+        executed = await create_pending(repo, user_id)
+        trade_id = await seed_trade(db, user_id)
+        assert await repo.mark_executed(executed.token, trade_id) is True
+        saved_executed = await load_pending(db, executed.token)
+        assert saved_executed.status == "executed"
+        assert saved_executed.trade_id == trade_id
 
-            failed = await create_pending(repo, user_id)
-            assert await repo.mark_failed(failed.token, "validation failed") is True
-            saved_failed = await load_pending(db, failed.token)
-            assert saved_failed.status == "failed"
-            assert saved_failed.error_message == "validation failed"
+        failed = await create_pending(repo, user_id)
+        assert await repo.mark_failed(failed.token, "validation failed") is True
+        saved_failed = await load_pending(db, failed.token)
+        assert saved_failed.status == "failed"
+        assert saved_failed.error_message == "validation failed"
 
-            assert await repo.mark_failed("missing", "no row") is False
-            assert await repo.mark_executed("missing", trade_id) is False
-
-    asyncio.run(scenario())
+        assert await repo.mark_failed("missing", "no row") is False
+        assert await repo.mark_executed("missing", trade_id) is False
 
 
 @pytest.mark.integration
-def test_trade_repository_daily_non_failed_count_and_limit_create():
-    async def scenario():
-        async with integration_database() as db:
-            repo = TradeRepository(db)
-            user_id = await seed_user(db)
-            day_start = datetime(2026, 5, 21, 16, 0, 0)
+@pytest.mark.asyncio
+async def test_trade_repository_daily_non_failed_count_and_limit_create():
+    async with integration_database() as db:
+        repo = TradeRepository(db)
+        user_id = await seed_user(db)
+        day_start = datetime(2026, 5, 21, 16, 0, 0)
 
-            await seed_trade_with_status(db, user_id, "filled", day_start + timedelta(hours=1))
-            await seed_trade_with_status(db, user_id, "pending", day_start + timedelta(hours=2))
-            await seed_trade_with_status(db, user_id, "failed", day_start + timedelta(hours=3))
-            await seed_trade_with_status(db, user_id, "filled", day_start - timedelta(seconds=1))
+        await seed_trade_with_status(db, user_id, "filled", day_start + timedelta(hours=1))
+        await seed_trade_with_status(db, user_id, "pending", day_start + timedelta(hours=2))
+        await seed_trade_with_status(db, user_id, "failed", day_start + timedelta(hours=3))
+        await seed_trade_with_status(db, user_id, "filled", day_start - timedelta(seconds=1))
 
-            assert await repo.count_daily_non_failed_trades(user_id, day_start) == 2
+        assert await repo.count_daily_non_failed_trades(user_id, day_start) == 2
 
-            trade = await repo.create_trade_with_daily_limit(
+        trade = await repo.create_trade_with_daily_limit(
+            user_id=user_id,
+            symbol="ETHUSDT",
+            side="buy",
+            order_type="market",
+            quantity=Decimal("0.1"),
+            price=None,
+            client_order_id=f"test_{uuid.uuid4().hex}",
+            daily_trade_limit=3,
+            day_start_utc=day_start,
+        )
+        assert trade.id
+        saved_trade = await load_trade(db, trade.id)
+        assert saved_trade.quantity == Decimal("0.100000000000000000")
+        assert isinstance(saved_trade.quantity, Decimal)
+        assert await repo.count_daily_non_failed_trades(user_id, day_start) == 3
+
+        with pytest.raises(RiskLimitExceeded) as error:
+            await repo.create_trade_with_daily_limit(
                 user_id=user_id,
-                symbol="ETHUSDT",
+                symbol="SOLUSDT",
                 side="buy",
                 order_type="market",
-                quantity=Decimal("0.1"),
+                quantity=Decimal("1"),
                 price=None,
                 client_order_id=f"test_{uuid.uuid4().hex}",
                 daily_trade_limit=3,
                 day_start_utc=day_start,
             )
-            assert trade.id
-            saved_trade = await load_trade(db, trade.id)
-            assert saved_trade.quantity == Decimal("0.100000000000000000")
-            assert isinstance(saved_trade.quantity, Decimal)
-            assert await repo.count_daily_non_failed_trades(user_id, day_start) == 3
 
-            with pytest.raises(RiskLimitExceeded) as error:
-                await repo.create_trade_with_daily_limit(
-                    user_id=user_id,
-                    symbol="SOLUSDT",
-                    side="buy",
-                    order_type="market",
-                    quantity=Decimal("1"),
-                    price=None,
-                    client_order_id=f"test_{uuid.uuid4().hex}",
-                    daily_trade_limit=3,
-                    day_start_utc=day_start,
-                )
-
-            assert "今日下单次数已达上限" in str(error.value)
-
-    asyncio.run(scenario())
+        assert "今日下单次数已达上限" in str(error.value)

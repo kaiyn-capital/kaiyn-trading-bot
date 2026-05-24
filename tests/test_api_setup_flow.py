@@ -1,6 +1,7 @@
-import asyncio
 from datetime import datetime, timedelta
 from types import SimpleNamespace
+
+import pytest
 
 from app.bot_account_handlers import AccountHandlersMixin
 from app.bot_sessions import SESSION_EXPIRED_MESSAGE
@@ -131,13 +132,14 @@ def make_context():
     return SimpleNamespace(bot=FakeBot())
 
 
-def test_callback_api_setup_advances_from_api_key_to_secret_key():
+@pytest.mark.asyncio
+async def test_callback_api_setup_advances_from_api_key_to_secret_key():
     handler = FakeAccountHandler()
     handler.set_user_session(123, {"step": "api_key"})
     update = make_update("valid-api-key-123")
     context = make_context()
 
-    result = asyncio.run(handler.set_api_key(update, context))
+    result = await handler.set_api_key(update, context)
 
     assert result == WAITING_SECRET_KEY
     assert update.message.deleted is True
@@ -147,7 +149,8 @@ def test_callback_api_setup_advances_from_api_key_to_secret_key():
     assert context.bot.messages[-1]["text"].startswith("✅ API Key 已保存")
 
 
-def test_callback_api_setup_advances_from_secret_key_to_passphrase():
+@pytest.mark.asyncio
+async def test_callback_api_setup_advances_from_secret_key_to_passphrase():
     handler = FakeAccountHandler()
     handler.set_user_session(
         123,
@@ -159,7 +162,7 @@ def test_callback_api_setup_advances_from_secret_key_to_passphrase():
     update = make_update("valid-secret-key-123")
     context = make_context()
 
-    result = asyncio.run(handler.set_secret_key(update, context))
+    result = await handler.set_secret_key(update, context)
 
     assert result == WAITING_PASSPHRASE
     assert update.message.deleted is True
@@ -168,7 +171,8 @@ def test_callback_api_setup_advances_from_secret_key_to_passphrase():
     assert context.bot.messages[-1]["text"].startswith("✅ Secret Key 已保存")
 
 
-def test_invalid_api_key_keeps_api_key_step():
+@pytest.mark.asyncio
+async def test_invalid_api_key_keeps_api_key_step():
     handler = FakeAccountHandler()
     handler.set_user_session(123, {"step": "api_key"})
     original_expiry = handler.user_sessions[123]["expires_at"]
@@ -176,7 +180,7 @@ def test_invalid_api_key_keeps_api_key_step():
     update = make_update("short")
     context = make_context()
 
-    result = asyncio.run(handler.set_api_key(update, context))
+    result = await handler.set_api_key(update, context)
 
     assert result == WAITING_API_KEY
     assert handler.user_sessions[123]["step"] == "api_key"
@@ -185,14 +189,15 @@ def test_invalid_api_key_keeps_api_key_step():
     assert context.bot.messages[-1]["text"] == "❌ API Key 格式不正确，请重新输入："
 
 
-def test_expired_api_key_session_does_not_store_input_and_ends_flow():
+@pytest.mark.asyncio
+async def test_expired_api_key_session_does_not_store_input_and_ends_flow():
     handler = FakeAccountHandler()
     handler.set_user_session(123, {"step": "api_key"})
     handler.now = handler.now + timedelta(seconds=301)
     update = make_update("valid-api-key-123")
     context = make_context()
 
-    result = asyncio.run(handler.set_api_key(update, context))
+    result = await handler.set_api_key(update, context)
 
     assert result == -1
     assert handler.user_sessions == {}
@@ -201,7 +206,8 @@ def test_expired_api_key_session_does_not_store_input_and_ends_flow():
     assert context.bot.messages == []
 
 
-def test_expired_secret_key_session_does_not_use_partial_api_key():
+@pytest.mark.asyncio
+async def test_expired_secret_key_session_does_not_use_partial_api_key():
     handler = FakeAccountHandler()
     handler.set_user_session(
         123,
@@ -214,7 +220,7 @@ def test_expired_secret_key_session_does_not_use_partial_api_key():
     update = make_update("valid-secret-key-123")
     context = make_context()
 
-    result = asyncio.run(handler.set_secret_key(update, context))
+    result = await handler.set_secret_key(update, context)
 
     assert result == -1
     assert handler.user_sessions == {}
@@ -223,7 +229,8 @@ def test_expired_secret_key_session_does_not_use_partial_api_key():
     assert context.bot.messages == []
 
 
-def test_expired_passphrase_session_does_not_use_partial_credentials():
+@pytest.mark.asyncio
+async def test_expired_passphrase_session_does_not_use_partial_credentials():
     handler = FakeAccountHandler()
     handler.set_user_session(
         123,
@@ -237,7 +244,7 @@ def test_expired_passphrase_session_does_not_use_partial_credentials():
     update = make_update("valid-passphrase")
     context = make_context()
 
-    result = asyncio.run(handler.set_passphrase(update, context))
+    result = await handler.set_passphrase(update, context)
 
     assert result == -1
     assert handler.user_sessions == {}
@@ -246,7 +253,8 @@ def test_expired_passphrase_session_does_not_use_partial_credentials():
     assert context.bot.messages == []
 
 
-def test_successful_api_setup_invalidates_cached_trade_client():
+@pytest.mark.asyncio
+async def test_successful_api_setup_invalidates_cached_trade_client():
     handler = FakeAccountHandler()
     handler.set_user_session(
         123,
@@ -259,7 +267,7 @@ def test_successful_api_setup_invalidates_cached_trade_client():
     update = make_update("valid-passphrase")
     context = make_context()
 
-    result = asyncio.run(handler.set_passphrase(update, context))
+    result = await handler.set_passphrase(update, context)
 
     assert result == -1
     assert update.message.deleted is True
@@ -286,7 +294,8 @@ def test_successful_api_setup_invalidates_cached_trade_client():
     assert context.bot.messages[0].edits[-1]["kwargs"]["parse_mode"] == "HTML"
 
 
-def test_failed_api_setup_does_not_invalidate_cached_trade_client():
+@pytest.mark.asyncio
+async def test_failed_api_setup_does_not_invalidate_cached_trade_client():
     handler = FakeAccountHandler()
     handler.trade_manager = FakeTradeManager(is_connected=False)
     handler.set_user_session(
@@ -300,7 +309,7 @@ def test_failed_api_setup_does_not_invalidate_cached_trade_client():
     update = make_update("valid-passphrase")
     context = make_context()
 
-    result = asyncio.run(handler.set_passphrase(update, context))
+    result = await handler.set_passphrase(update, context)
 
     assert result == -1
     assert update.message.deleted is True
@@ -312,19 +321,20 @@ def test_failed_api_setup_does_not_invalidate_cached_trade_client():
     assert context.bot.messages[0].edits[-1]["kwargs"]["parse_mode"] == "HTML"
 
 
-def test_expired_risk_amount_session_does_not_update_amount_and_only_prompts_once():
+@pytest.mark.asyncio
+async def test_expired_risk_amount_session_does_not_update_amount_and_only_prompts_once():
     handler = FakeAccountHandler()
     handler.set_user_session(123, {"step": "risk_amount"})
     handler.now = handler.now + timedelta(seconds=301)
     first_update = make_update("100")
 
-    asyncio.run(handler.handle_global_message(first_update, make_context()))
+    await handler.handle_global_message(first_update, make_context())
 
     assert handler.user_sessions == {}
     assert handler.user_repo.risk_updates == []
     assert first_update.message.replies == [{"text": SESSION_EXPIRED_MESSAGE, "kwargs": {}}]
 
     second_update = make_update("100")
-    asyncio.run(handler.handle_global_message(second_update, make_context()))
+    await handler.handle_global_message(second_update, make_context())
 
     assert second_update.message.replies == []

@@ -1,4 +1,3 @@
-import asyncio
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -282,11 +281,12 @@ def make_service(
     return service, bot, audit_owner
 
 
-def test_confirm_pending_order_missing_token():
+@pytest.mark.asyncio
+async def test_confirm_pending_order_missing_token():
     repo = FakeConfirmPendingOrderRepo(claim_result=(None, "missing"))
     service, bot, audit_owner = make_service(pending_order_repo=repo, service_class=RecordingOrderFlowService)
 
-    asyncio.run(service.handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_missing"))
+    await service.handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_missing")
 
     assert repo.claims == [{"token": "tok_missing", "telegram_id": 123456}]
     assert not service.executions
@@ -296,11 +296,12 @@ def test_confirm_pending_order_missing_token():
     assert audit_owner.audit_events[-1]["details"]["pending_order_token"] == "***sing"
 
 
-def test_confirm_pending_order_expired_token():
+@pytest.mark.asyncio
+async def test_confirm_pending_order_expired_token():
     repo = FakeConfirmPendingOrderRepo(claim_result=(make_pending_order(), "expired"))
     service, bot, audit_owner = make_service(pending_order_repo=repo, service_class=RecordingOrderFlowService)
 
-    asyncio.run(service.handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_expired"))
+    await service.handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_expired")
 
     assert not service.executions
     assert "已过期" in bot.messages[-1]["text"]
@@ -308,22 +309,24 @@ def test_confirm_pending_order_expired_token():
 
 
 @pytest.mark.parametrize("status", ["processing_by_other", "executed", "failed"])
-def test_confirm_pending_order_non_processing_status_does_not_execute(status):
+@pytest.mark.asyncio
+async def test_confirm_pending_order_non_processing_status_does_not_execute(status):
     repo = FakeConfirmPendingOrderRepo(claim_result=(make_pending_order(), status))
     service, bot, audit_owner = make_service(pending_order_repo=repo, service_class=RecordingOrderFlowService)
 
-    asyncio.run(service.handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_status"))
+    await service.handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_status")
 
     assert not service.executions
     assert f"状态为 {status}" in bot.messages[-1]["text"]
     assert audit_owner.audit_events[-1]["details"]["status"] == status
 
 
-def test_confirm_pending_order_processing_executes_with_full_pending_data():
+@pytest.mark.asyncio
+async def test_confirm_pending_order_processing_executes_with_full_pending_data():
     repo = FakeConfirmPendingOrderRepo(claim_result=(make_pending_order(), "processing"))
     service, _bot, audit_owner = make_service(pending_order_repo=repo, service_class=RecordingOrderFlowService)
 
-    asyncio.run(service.handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_ready"))
+    await service.handle_confirm_pending_order_callback(FakeQuery(), make_user(), "confirm_order_tok_ready")
 
     assert len(service.executions) == 1
     request = service.executions[0]
@@ -341,12 +344,13 @@ def test_confirm_pending_order_processing_executes_with_full_pending_data():
     assert audit_owner.audit_events[-1]["details"]["pending_order_token"] == "***eady"
 
 
-def test_cancel_pending_order_cancelled_status():
+@pytest.mark.asyncio
+async def test_cancel_pending_order_cancelled_status():
     repo = FakeConfirmPendingOrderRepo(cancel_status="cancelled")
     service, bot, audit_owner = make_service(pending_order_repo=repo)
     query = FakeQuery()
 
-    asyncio.run(service.handle_cancel_pending_order_callback(query, make_user(), "cancel_order_tok_cancel"))
+    await service.handle_cancel_pending_order_callback(query, make_user(), "cancel_order_tok_cancel")
 
     assert repo.cancellations == [{"token": "tok_cancel", "telegram_id": 123456}]
     assert query.answers == ["已取消下单"]
@@ -355,27 +359,30 @@ def test_cancel_pending_order_cancelled_status():
     assert audit_owner.audit_events[-1]["details"]["status"] == "cancelled"
 
 
-def test_cancel_pending_order_missing_status():
+@pytest.mark.asyncio
+async def test_cancel_pending_order_missing_status():
     repo = FakeConfirmPendingOrderRepo(cancel_status="missing")
     service, bot, audit_owner = make_service(pending_order_repo=repo)
 
-    asyncio.run(service.handle_cancel_pending_order_callback(FakeQuery(), make_user(), "cancel_order_tok_missing"))
+    await service.handle_cancel_pending_order_callback(FakeQuery(), make_user(), "cancel_order_tok_missing")
 
     assert "找不到这笔待确认订单" in bot.messages[-1]["text"]
     assert audit_owner.audit_events[-1]["details"]["status"] == "missing"
 
 
-def test_cancel_pending_order_non_pending_status():
+@pytest.mark.asyncio
+async def test_cancel_pending_order_non_pending_status():
     repo = FakeConfirmPendingOrderRepo(cancel_status="processing")
     service, bot, audit_owner = make_service(pending_order_repo=repo)
 
-    asyncio.run(service.handle_cancel_pending_order_callback(FakeQuery(), make_user(), "cancel_order_tok_processing"))
+    await service.handle_cancel_pending_order_callback(FakeQuery(), make_user(), "cancel_order_tok_processing")
 
     assert "状态为 processing，无法取消" in bot.messages[-1]["text"]
     assert audit_owner.audit_events[-1]["details"]["status"] == "processing"
 
 
-def test_place_order_blocks_when_daily_trade_limit_reached():
+@pytest.mark.asyncio
+async def test_place_order_blocks_when_daily_trade_limit_reached():
     trade_manager = NoBitgetTradeManager()
     system_log_repo = RecordingSystemLogRepo()
     failure_alert = RecordingFailureAlert()
@@ -398,12 +405,10 @@ def test_place_order_blocks_when_daily_trade_limit_reached():
         signal_record_repo=signal_repo,
     )
 
-    asyncio.run(
-        service.handle_place_order_callback(
-            FakeQuery(),
-            make_user(),
-            "place_order_market_tok_daily",
-        )
+    await service.handle_place_order_callback(
+        FakeQuery(),
+        make_user(),
+        "place_order_market_tok_daily",
     )
 
     assert "今日下单次数已达上限" in bot.messages[-1]["text"]
@@ -414,7 +419,8 @@ def test_place_order_blocks_when_daily_trade_limit_reached():
     assert system_log_repo.logs[-1]["extra_data"]["reason"] == "daily_trade_limit_exceeded"
 
 
-def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch):
+@pytest.mark.asyncio
+async def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch):
     monkeypatch.setattr(Config, "MAX_POSITION_SIZE", 1000.0)
     pending_order_repo = FakeConfirmPendingOrderRepo()
     system_log_repo = RecordingSystemLogRepo()
@@ -438,12 +444,10 @@ def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch):
         signal_record_repo=signal_repo,
     )
 
-    asyncio.run(
-        service.handle_place_order_callback(
-            FakeQuery(),
-            make_user(),
-            "place_order_market_tok_position",
-        )
+    await service.handle_place_order_callback(
+        FakeQuery(),
+        make_user(),
+        "place_order_market_tok_position",
     )
 
     assert "仓位超过风险上限" in bot.messages[-1]["text"]
@@ -454,19 +458,18 @@ def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch):
     assert system_log_repo.logs[-1]["extra_data"]["position_limit"] == "500"
 
 
-def test_place_order_blocks_when_signal_cancelled_expired_or_not_found():
+@pytest.mark.asyncio
+async def test_place_order_blocks_when_signal_cancelled_expired_or_not_found():
     # 1. Signal not found
     signal_repo = FakeSignalRecordRepo({})
     service, bot, audit_owner = make_service(
         user_repo=FakeUserRepo(),
         signal_record_repo=signal_repo,
     )
-    asyncio.run(
-        service.handle_place_order_callback(
-            FakeQuery(),
-            make_user(),
-            "place_order_market_tok_missing",
-        )
+    await service.handle_place_order_callback(
+        FakeQuery(),
+        make_user(),
+        "place_order_market_tok_missing",
     )
     assert "该交易信号不存在或已过期" in bot.messages[-1]["text"]
     assert audit_owner.audit_events[-1]["action"] == "order_place_blocked"
@@ -489,12 +492,10 @@ def test_place_order_blocks_when_signal_cancelled_expired_or_not_found():
         user_repo=FakeUserRepo(),
         signal_record_repo=signal_repo,
     )
-    asyncio.run(
-        service.handle_place_order_callback(
-            FakeQuery(),
-            make_user(),
-            "place_order_market_tok_cancelled",
-        )
+    await service.handle_place_order_callback(
+        FakeQuery(),
+        make_user(),
+        "place_order_market_tok_cancelled",
     )
     assert "该交易信号不存在或已过期" in bot.messages[-1]["text"]
     assert audit_owner.audit_events[-1]["action"] == "order_place_blocked"
@@ -517,12 +518,10 @@ def test_place_order_blocks_when_signal_cancelled_expired_or_not_found():
         user_repo=FakeUserRepo(),
         signal_record_repo=signal_repo,
     )
-    asyncio.run(
-        service.handle_place_order_callback(
-            FakeQuery(),
-            make_user(),
-            "place_order_market_tok_expired",
-        )
+    await service.handle_place_order_callback(
+        FakeQuery(),
+        make_user(),
+        "place_order_market_tok_expired",
     )
     assert "该交易信号不存在或已过期" in bot.messages[-1]["text"]
     assert audit_owner.audit_events[-1]["action"] == "order_place_blocked"
@@ -545,19 +544,18 @@ def test_place_order_blocks_when_signal_cancelled_expired_or_not_found():
         user_repo=FakeUserRepo(),
         signal_record_repo=signal_repo,
     )
-    asyncio.run(
-        service.handle_place_order_callback(
-            FakeQuery(),
-            make_user(),
-            "place_order_market_tok_preview",
-        )
+    await service.handle_place_order_callback(
+        FakeQuery(),
+        make_user(),
+        "place_order_market_tok_preview",
     )
     assert "该交易信号不存在或已过期" in bot.messages[-1]["text"]
     assert audit_owner.audit_events[-1]["action"] == "order_place_blocked"
     assert audit_owner.audit_events[-1]["details"]["reason"] == "signal_preview_pending"
 
 
-def test_execute_order_blocks_when_daily_trade_limit_reached_before_bitget():
+@pytest.mark.asyncio
+async def test_execute_order_blocks_when_daily_trade_limit_reached_before_bitget():
     pending_order_repo = FakeConfirmPendingOrderRepo()
     trade_manager = NoBitgetTradeManager()
     system_log_repo = RecordingSystemLogRepo()
@@ -571,21 +569,19 @@ def test_execute_order_blocks_when_daily_trade_limit_reached_before_bitget():
         failure_alert_handler=failure_alert,
     )
 
-    result = asyncio.run(
-        service.execute_order(
-            SimpleNamespace(
-                query=FakeQuery(),
-                user=make_user(),
-                symbol="BTCUSDT",
-                direction="long",
-                quantity=0.01,
-                stop_loss=79000,
-                position_value=800,
-                current_price=80000,
-                order_mode="market",
-                limit_price=None,
-                pending_order_token="tok_daily",
-            )
+    result = await service.execute_order(
+        SimpleNamespace(
+            query=FakeQuery(),
+            user=make_user(),
+            symbol="BTCUSDT",
+            direction="long",
+            quantity=0.01,
+            stop_loss=79000,
+            position_value=800,
+            current_price=80000,
+            order_mode="market",
+            limit_price=None,
+            pending_order_token="tok_daily",
         )
     )
 
@@ -598,7 +594,8 @@ def test_execute_order_blocks_when_daily_trade_limit_reached_before_bitget():
     assert audit_owner.audit_events[-1]["action"] == "order_risk_limit_failed"
 
 
-def test_execute_order_blocks_when_confirmed_position_exceeds_cap(monkeypatch):
+@pytest.mark.asyncio
+async def test_execute_order_blocks_when_confirmed_position_exceeds_cap(monkeypatch):
     monkeypatch.setattr(Config, "MAX_POSITION_SIZE", 1000.0)
     pending_order_repo = FakeConfirmPendingOrderRepo()
     trade_manager = PermissiveRulesTradeManager()
@@ -613,21 +610,19 @@ def test_execute_order_blocks_when_confirmed_position_exceeds_cap(monkeypatch):
         failure_alert_handler=failure_alert,
     )
 
-    result = asyncio.run(
-        service.execute_order(
-            SimpleNamespace(
-                query=FakeQuery(),
-                user=make_user(),
-                symbol="BTCUSDT",
-                direction="long",
-                quantity=0.01,
-                stop_loss=79000,
-                position_value=800,
-                current_price=80000,
-                order_mode="market",
-                limit_price=None,
-                pending_order_token="tok_position",
-            )
+    result = await service.execute_order(
+        SimpleNamespace(
+            query=FakeQuery(),
+            user=make_user(),
+            symbol="BTCUSDT",
+            direction="long",
+            quantity=0.01,
+            stop_loss=79000,
+            position_value=800,
+            current_price=80000,
+            order_mode="market",
+            limit_price=None,
+            pending_order_token="tok_position",
         )
     )
 
@@ -640,7 +635,8 @@ def test_execute_order_blocks_when_confirmed_position_exceeds_cap(monkeypatch):
     assert audit_owner.audit_events[-1]["details"]["reason"] == "position_size_limit_exceeded"
 
 
-def test_execute_order_marks_pending_failed_when_second_validation_fails():
+@pytest.mark.asyncio
+async def test_execute_order_marks_pending_failed_when_second_validation_fails():
     pending_order_repo = FakeConfirmPendingOrderRepo()
     service, bot, audit_owner = make_service(
         pending_order_repo=pending_order_repo,
@@ -651,21 +647,19 @@ def test_execute_order_marks_pending_failed_when_second_validation_fails():
     )
     query = FakeQuery()
 
-    result = asyncio.run(
-        service.execute_order(
-            SimpleNamespace(
-                query=query,
-                user=make_user(),
-                symbol="BTCUSDT",
-                direction="long",
-                quantity=0.01,
-                stop_loss=79000,
-                position_value=800,
-                current_price=80000,
-                order_mode="market",
-                limit_price=None,
-                pending_order_token="tok_validation",
-            )
+    result = await service.execute_order(
+        SimpleNamespace(
+            query=query,
+            user=make_user(),
+            symbol="BTCUSDT",
+            direction="long",
+            quantity=0.01,
+            stop_loss=79000,
+            position_value=800,
+            current_price=80000,
+            order_mode="market",
+            limit_price=None,
+            pending_order_token="tok_validation",
         )
     )
 

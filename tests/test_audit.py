@@ -1,6 +1,7 @@
-import asyncio
 from datetime import datetime
 from types import SimpleNamespace
+
+import pytest
 
 from app.audit import (
     AUDIT_MODULE,
@@ -30,17 +31,16 @@ def test_summarize_message_text_returns_length_and_preview():
     assert summary == {"length": 100, "preview": "xxxxxxxxxx..."}
 
 
-def test_record_audit_event_uses_audit_module_and_function():
+@pytest.mark.asyncio
+async def test_record_audit_event_uses_audit_module_and_function():
     repo = FakeSystemLogRepo()
     user = SimpleNamespace(id=7, telegram_id=123)
 
-    asyncio.run(
-        record_audit_event(
-            repo,
-            user,
-            "admin_add_trader",
-            {"status": "success", "target_telegram_id": 456},
-        )
+    await record_audit_event(
+        repo,
+        user,
+        "admin_add_trader",
+        {"status": "success", "target_telegram_id": 456},
     )
 
     assert repo.logs == [

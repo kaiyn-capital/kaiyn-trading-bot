@@ -1,4 +1,3 @@
-import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -58,23 +57,22 @@ class TimeoutTradeManager:
         raise BitgetAPIError("timeout", "Bitget request timeout")
 
 
-def test_execute_order_marks_trade_failed_with_classified_error():
+@pytest.mark.asyncio
+async def test_execute_order_marks_trade_failed_with_classified_error():
     trade_repo = FakeTradeRepo()
 
     with pytest.raises(FakeBitgetAPIError):
-        asyncio.run(
-            execute_order(
-                user_data=SimpleNamespace(id=7),
-                trade_repo=trade_repo,
-                trade_manager=RejectingTradeManager(),
-                credentials=("api", "secret", "passphrase"),
-                telegram_id=123,
-                symbol="BTCUSDT",
-                direction="long",
-                quantity=0.01,
-                stop_loss=79000,
-                position_value=800,
-            )
+        await execute_order(
+            user_data=SimpleNamespace(id=7),
+            trade_repo=trade_repo,
+            trade_manager=RejectingTradeManager(),
+            credentials=("api", "secret", "passphrase"),
+            telegram_id=123,
+            symbol="BTCUSDT",
+            direction="long",
+            quantity=0.01,
+            stop_loss=79000,
+            position_value=800,
         )
 
     failed_update = trade_repo.updated_results[-1]
@@ -85,24 +83,23 @@ def test_execute_order_marks_trade_failed_with_classified_error():
     assert "insufficient balance" in failed_update["error_message"]
 
 
-def test_execute_order_keeps_trade_pending_when_submission_result_unknown():
+@pytest.mark.asyncio
+async def test_execute_order_keeps_trade_pending_when_submission_result_unknown():
     trade_repo = FakeTradeRepo()
 
     with pytest.raises(OrderExecutionUnknownResult) as exc_info:
-        asyncio.run(
-            execute_order(
-                user_data=SimpleNamespace(id=7),
-                trade_repo=trade_repo,
-                trade_manager=TimeoutTradeManager(),
-                credentials=("api", "secret", "passphrase"),
-                telegram_id=123,
-                symbol="BTCUSDT",
-                direction="long",
-                quantity=0.01,
-                stop_loss=79000,
-                position_value=800,
-                client_order_id="KTB_tok_timeout",
-            )
+        await execute_order(
+            user_data=SimpleNamespace(id=7),
+            trade_repo=trade_repo,
+            trade_manager=TimeoutTradeManager(),
+            credentials=("api", "secret", "passphrase"),
+            telegram_id=123,
+            symbol="BTCUSDT",
+            direction="long",
+            quantity=0.01,
+            stop_loss=79000,
+            position_value=800,
+            client_order_id="KTB_tok_timeout",
         )
 
     assert exc_info.value.trade_id == 77
@@ -207,7 +204,8 @@ class RecordingFailureAlert:
         )
 
 
-def test_order_flow_service_marks_pending_failed_and_sends_user_message():
+@pytest.mark.asyncio
+async def test_order_flow_service_marks_pending_failed_and_sends_user_message():
     bot = FakeBot()
     pending_order_repo = FakePendingOrderRepo()
     system_log_repo = FakeSystemLogRepo()
@@ -225,20 +223,18 @@ def test_order_flow_service_marks_pending_failed_and_sends_user_message():
     query = FakeQuery()
     user = SimpleNamespace(telegram_id=123)
 
-    result = asyncio.run(
-        service.execute_order(
-            ConfirmedOrderRequest(
-                query=query,
-                user=user,
-                symbol="BTCUSDT",
-                direction="long",
-                quantity=0.01,
-                stop_loss=79000,
-                position_value=800,
-                current_price=80000,
-                order_mode="market",
-                pending_order_token="tok_123",
-            )
+    result = await service.execute_order(
+        ConfirmedOrderRequest(
+            query=query,
+            user=user,
+            symbol="BTCUSDT",
+            direction="long",
+            quantity=0.01,
+            stop_loss=79000,
+            position_value=800,
+            current_price=80000,
+            order_mode="market",
+            pending_order_token="tok_123",
         )
     )
 
@@ -254,7 +250,8 @@ def test_order_flow_service_marks_pending_failed_and_sends_user_message():
     assert audit_owner.audit_events[-1]["details"]["pending_order_token"] == "***_123"
 
 
-def test_order_flow_service_keeps_pending_processing_when_submission_result_unknown():
+@pytest.mark.asyncio
+async def test_order_flow_service_keeps_pending_processing_when_submission_result_unknown():
     bot = FakeBot()
     pending_order_repo = FakePendingOrderRepo()
     system_log_repo = FakeSystemLogRepo()
@@ -274,20 +271,18 @@ def test_order_flow_service_keeps_pending_processing_when_submission_result_unkn
     query = FakeQuery()
     user = SimpleNamespace(telegram_id=123)
 
-    result = asyncio.run(
-        service.execute_order(
-            ConfirmedOrderRequest(
-                query=query,
-                user=user,
-                symbol="BTCUSDT",
-                direction="long",
-                quantity=0.01,
-                stop_loss=79000,
-                position_value=800,
-                current_price=80000,
-                order_mode="market",
-                pending_order_token="tok_timeout",
-            )
+    result = await service.execute_order(
+        ConfirmedOrderRequest(
+            query=query,
+            user=user,
+            symbol="BTCUSDT",
+            direction="long",
+            quantity=0.01,
+            stop_loss=79000,
+            position_value=800,
+            current_price=80000,
+            order_mode="market",
+            pending_order_token="tok_timeout",
         )
     )
 
