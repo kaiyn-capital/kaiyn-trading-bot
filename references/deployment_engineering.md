@@ -86,7 +86,7 @@ docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
 docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
 docker compose run --rm test python -m pytest --run-db --cov --cov-report=xml:coverage.xml
-docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py scripts/*.py tests/*.py
 git diff --check
 docker compose down -v --remove-orphans
 ```

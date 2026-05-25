@@ -9,8 +9,10 @@
 - `backup_status.json` 保留 `/admin_health` 使用的最近備份狀態。
 - `backup_manifest.json` 保留最新成功備份的檔名、時間、sha256、大小與資料庫名稱。
 - `make restore-latest` 可將最新本機備份還原到 Compose PostgreSQL。
+- 設定 Cloudflare R2 後，備份會先用 client-side Fernet key 加密，再上傳到 R2。
+- `make disaster-restore` 可從 R2 下載最新加密備份、解密、驗 checksum，然後還原。
 
-下一階段會接 Cloudflare R2，讓最新備份離開 VPS。
+這不是 PITR。它是低成本「最新備份離開 VPS」方案，目標是 VPS 壞掉時能快速在新 VPS 還原。
 
 ## 1. 確認備份狀態
 
@@ -50,7 +52,53 @@ make backup-now
 
 備份使用 `pg_dump --no-owner --no-privileges`，降低在新 VPS、不同 DB owner 或臨時 DB 還原時的角色相容性問題。
 
-## 3. 本機一鍵還原最新備份
+若 `R2_BACKUP_ENABLED=true`，同一次備份成功後還會：
+
+- 將 `.sql.gz` 以 `BACKUP_ENCRYPTION_KEY` 加密。
+- 上傳 encrypted object 到 R2。
+- 上傳 remote manifest 到 `R2_BACKUP_PREFIX/latest.json`。
+- 寫入 `backups/r2_backup_status.json`。
+
+R2 上不存 plaintext SQL dump。
+
+## 3. Cloudflare R2 設定
+
+`.env` 需要：
+
+```env
+R2_BACKUP_ENABLED=true
+R2_ACCOUNT_ID=<cloudflare_account_id>
+R2_ENDPOINT=
+R2_BUCKET=kaiyn-trading-bot-backups
+R2_ACCESS_KEY_ID=<r2_access_key_id>
+R2_SECRET_ACCESS_KEY=<r2_secret_access_key>
+R2_BACKUP_PREFIX=kaiyn-trading-bot
+BACKUP_ENCRYPTION_KEY=<make_generate_backup_key_output>
+```
+
+說明：
+
+- `R2_ENDPOINT` 通常可留空，系統會用 `R2_ACCOUNT_ID` 組成 `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`。
+- 若 bucket 是 Cloudflare jurisdictional bucket，才需要手動填 `R2_ENDPOINT`。
+- R2 token 建議使用 Object Read & Write，並限制到備份 bucket。
+- `BACKUP_ENCRYPTION_KEY` 用 `make generate-backup-key` 產生；它不是 `ENCRYPTION_KEY`。
+- `ENCRYPTION_KEY` 用於 DB 內 API credential；`BACKUP_ENCRYPTION_KEY` 用於 SQL dump 上傳前加密。兩把 key 都要離線保存。
+
+手動測試 R2 備份：
+
+```bash
+make backup-now
+cat backups/r2_backup_status.json
+```
+
+只下載最新 R2 備份、不還原：
+
+```bash
+make r2-download-latest
+ls -lh backups/kaiyn_trading_bot_*.sql.gz
+```
+
+## 4. 本機一鍵還原最新備份
 
 危險：還原會改寫目標 PostgreSQL database。若 DB 已有資料，必須明確加 `CONFIRM_RESTORE=YES`。
 
@@ -84,9 +132,45 @@ BACKUP_FILE=backups/kaiyn_trading_bot_YYYYMMDD_HHMMSS.sql.gz CONFIRM_RESTORE=YES
 8. 執行 `alembic upgrade head`。
 9. 執行 `python -m app.main --check-db`。
 
-## 4. 新 VPS 災難恢復流程
+## 5. 從 R2 一鍵災難還原
 
-在尚未接 Cloudflare R2 前，新 VPS 仍需要你先把最新備份檔放進 `backups/`：
+在新 VPS 上，準備 repo 與 `.env` 後：
+
+```bash
+make disaster-restore
+docker compose up -d bot maintenance db-backup
+docker compose ps
+```
+
+如果目標 DB 已有資料且確定要覆蓋：
+
+```bash
+CONFIRM_RESTORE=YES make disaster-restore
+```
+
+`disaster-restore` 會自動：
+
+1. 用 R2 credentials 讀取 `R2_BACKUP_PREFIX/latest.json`。
+2. 下載 encrypted backup object。
+3. 用 `BACKUP_ENCRYPTION_KEY` 解密。
+4. 驗 encrypted 與 plaintext checksum。
+5. 把解密後的 `.sql.gz` 寫到 `backups/`。
+6. 呼叫 `restore-latest` 還原指定檔案。
+
+## 6. 新 VPS 災難恢復流程
+
+R2 流程：
+
+```bash
+cd /opt/kaiyn-trading-bot
+cp .env.template .env
+nano .env
+make disaster-restore
+docker compose up -d bot maintenance db-backup
+docker compose ps
+```
+
+如果不使用 R2，仍可手動把最新備份檔放進 `backups/`：
 
 ```bash
 scp kaiyn_trading_bot_YYYYMMDD_HHMMSS.sql.gz deploy@<new-vps>:/opt/kaiyn-trading-bot/backups/
@@ -107,10 +191,11 @@ docker compose ps
 注意：
 
 - `.env` 內的 `ENCRYPTION_KEY` 必須是原 production key，否則 DB 內 encrypted API credentials 無法解密。
+- `.env` 內的 `BACKUP_ENCRYPTION_KEY` 必須是上傳 R2 時使用的 key，否則 R2 備份無法解密。
 - `POSTGRES_PASSWORD` 必須和 `DATABASE_URL` 一致。
 - 還原完成後再啟動 `bot`，避免 bot 在空 DB 或半還原狀態下運行。
 
-## 5. 本機保留策略
+## 7. 本機保留策略
 
 預設：
 
@@ -126,19 +211,4 @@ RETENTION_DAYS=30
 
 此設計符合目前需求：主要使用最新備份，但保留少量 previous backup，避免最新檔剛好損壞。
 
-## 6. Cloudflare R2 下一階段
-
-下一個 PR 會接 Cloudflare R2：
-
-- 備份成功後上傳 encrypted latest backup。
-- 上傳 checksum 與 manifest。
-- 新增 `make disaster-restore`，從 R2 下載最新備份並還原。
-
-需要你手動準備：
-
-- Cloudflare 帳號。
-- R2 bucket。
-- R2 access key / secret key。
-- 備份 client-side encryption key。
-
-在 R2 尚未接上前，不要把 VPS 本機 `backups/` 當成唯一災備來源。至少在重要變更前後手動拉一份最新備份到本機或雲端。
+R2 端目前只維護 latest manifest，不做長期歷史保留策略；本機仍保留少量 previous backup，避免最新備份剛好損壞。

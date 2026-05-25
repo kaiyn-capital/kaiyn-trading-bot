@@ -15,6 +15,10 @@ ARG INSTALL_DEV=false
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml uv.lock readme.md ./
 COPY app ./app
 COPY alembic.ini ./alembic.ini

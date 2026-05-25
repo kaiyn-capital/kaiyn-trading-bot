@@ -186,6 +186,7 @@ Production configuration is injected via `.env`. See [.env.template](.env.templa
 | `SIGNAL_CHART_*` | Optional `/send_signal` chart generation toggle, granularity, candle limit, and timeout |
 | `RETENTION_DAYS` | Number of days to retain accumulated records and backups |
 | `BACKUP_LOCAL_KEEP_COUNT` | Number of latest local SQL backups to keep |
+| `R2_*` / `BACKUP_ENCRYPTION_KEY` | Optional Cloudflare R2 encrypted offsite backup settings |
 | `ADMIN_ALERT_*` / `BITGET_ALERT_*` | Admin alert and Bitget consecutive error thresholds |
 
 ## Testing & CI
@@ -208,7 +209,7 @@ docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
 docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
 docker compose run --rm test python -m pytest --run-db
-docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py scripts/*.py tests/*.py
 git diff --check
 ```
 
@@ -227,6 +228,7 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 - The `maintenance` service runs daily cleanup of records older than 30 days.
 - The `db-backup` service produces gzip SQL backups with checksum and manifest files.
 - Run `make backup-now` before risky operations and `make restore-latest` to restore the latest local backup.
+- When Cloudflare R2 is configured, `db-backup` uploads encrypted backups offsite and `make disaster-restore` downloads the latest R2 backup before restoring it.
 - Both Docker container logs and Bot file logs are configured with rotation.
 - `/admin_health` reports DB, backup, cleanup, Bitget API, and recent error status.
 - `/admin_audit [limit]` displays a summary of admin, signal sender, and order execution events.
