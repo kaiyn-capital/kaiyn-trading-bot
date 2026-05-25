@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-from .config import Config
+from .settings import Settings
 
 
 class SessionStore:
@@ -14,7 +14,7 @@ class SessionStore:
         now_func=None,
     ):
         self._sessions = sessions_dict
-        self._ttl_seconds = ttl_seconds if ttl_seconds is not None else Config.USER_SESSION_TTL_SECONDS
+        self._ttl_seconds = ttl_seconds if ttl_seconds is not None else Settings.from_env().user_session_ttl_seconds
         self._now_func = now_func or datetime.utcnow
 
     def _now(self) -> datetime:

@@ -6,9 +6,9 @@ from decimal import Decimal
 import httpx
 
 from .bitget_errors import BitgetAPIError
-from .config import Config
 from .decimal_utils import to_decimal
 from .market_types import MarketCandle
+from .settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +43,10 @@ def _datetime_to_millis(value: datetime) -> int:
 class BitgetPublicMarket:
     """Public Bitget market data and contract-rule cache."""
 
-    def __init__(self, contracts_cache_ttl_seconds: int = 600):
+    def __init__(self, contracts_cache_ttl_seconds: int = 600, *, base_url: str | None = None):
         self._contracts_cache = {}
         self._contracts_cache_ttl_seconds = contracts_cache_ttl_seconds
+        self.base_url = base_url or Settings.from_env().bitget_api_url
         self._client: httpx.AsyncClient | None = None
 
     @property
@@ -72,7 +73,7 @@ class BitgetPublicMarket:
         try:
             logger.info(f"Getting futures market price for {normalized_symbol}")
 
-            url = f"{Config.BITGET_API_URL}{endpoint}"
+            url = f"{self.base_url}{endpoint}"
 
             logger.info(f"Fetching from URL: {url}")
             response = await self.client.get(url, params=params)
@@ -195,7 +196,7 @@ class BitgetPublicMarket:
         endpoint = "/api/v2/mix/market/contracts"
         params = {"productType": product_type}
         try:
-            response = await self.client.get(f"{Config.BITGET_API_URL}{endpoint}", params=params)
+            response = await self.client.get(f"{self.base_url}{endpoint}", params=params)
             if response.status_code != 200:
                 error_msg = f"HTTP {response.status_code}: {response.text}"
                 logger.error(error_msg)
@@ -281,7 +282,7 @@ class BitgetPublicMarket:
             params["endTime"] = str(_datetime_to_millis(end_time))
 
         try:
-            response = await self.client.get(f"{Config.BITGET_API_URL}{endpoint}", params=params)
+            response = await self.client.get(f"{self.base_url}{endpoint}", params=params)
             if response.status_code != 200:
                 error_msg = f"HTTP {response.status_code}: {response.text}"
                 logger.error(error_msg)

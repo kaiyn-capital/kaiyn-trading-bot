@@ -8,8 +8,8 @@ import time
 import httpx
 
 from .bitget_errors import BitgetAPIError
-from .config import Config
 from .log_sanitizer import summarize_http_error, summarize_order_payload
+from .settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +17,18 @@ logger = logging.getLogger(__name__)
 class BitgetAPIClient:
     """Low-level authenticated Bitget API client."""
 
-    def __init__(self, api_key: str, secret_key: str, passphrase: str):
+    def __init__(
+        self,
+        api_key: str,
+        secret_key: str,
+        passphrase: str,
+        *,
+        base_url: str | None = None,
+    ):
         self.api_key = api_key
         self.secret_key = secret_key
         self.passphrase = passphrase
-        self.base_url = Config.BITGET_API_URL
+        self.base_url = base_url or Settings.from_env().bitget_api_url
         self.client = httpx.AsyncClient(
             timeout=30.0, limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
         )

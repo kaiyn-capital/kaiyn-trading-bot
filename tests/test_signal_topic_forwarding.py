@@ -2,12 +2,12 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from settings_factory import make_settings
 from telegram.error import TelegramError
 
 import app.bot_order_handlers as bot_order_handlers
 from app.bot_order_handlers import OrderHandlersMixin
 from app.bot_sessions import UserSessionMixin
-from app.config import Config
 from app.repository_types import ChannelRecord, SignalChannelMessageRecord, SignalRecordSnapshot
 
 
@@ -225,7 +225,8 @@ class FakeSignalRecordRepo:
 
 
 class FakeOrderHandler(OrderHandlersMixin, UserSessionMixin):
-    def __init__(self):
+    def __init__(self, settings=None):
+        self.settings = settings or make_settings()
         self.channel_repo = FakeChannelRepo()
         self.signal_record_repo = FakeSignalRecordRepo()
         self.user = SimpleNamespace(id=1, telegram_id=123)
@@ -271,9 +272,8 @@ def make_context():
 
 
 @pytest.mark.asyncio
-async def test_send_signal_creates_text_preview_without_forwarding(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
-    handler = FakeOrderHandler()
+async def test_send_signal_creates_text_preview_without_forwarding():
+    handler = FakeOrderHandler(settings=make_settings(signal_chart_enabled=False))
     update = make_update()
     context = make_context()
 
@@ -294,9 +294,8 @@ async def test_send_signal_creates_text_preview_without_forwarding(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_send_signal_records_preview_audit(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
-    handler = FakeOrderHandler()
+async def test_send_signal_records_preview_audit():
+    handler = FakeOrderHandler(settings=make_settings(signal_chart_enabled=False))
     update = make_update()
     context = make_context()
 
@@ -312,10 +311,8 @@ async def test_send_signal_records_preview_audit(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_send_signal_sends_chart_photo_preview(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
-    monkeypatch.setattr(Config, "SIGNAL_CHART_TIMEOUT_SECONDS", 1.0)
-    handler = FakeOrderHandler()
+async def test_send_signal_sends_chart_photo_preview():
+    handler = FakeOrderHandler(settings=make_settings(signal_chart_enabled=True, signal_chart_timeout_seconds=1.0))
     update = make_update()
     context = make_context()
 
@@ -328,10 +325,10 @@ async def test_send_signal_sends_chart_photo_preview(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_send_signal_falls_back_to_text_preview_when_chart_generation_fails(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
-    monkeypatch.setattr(Config, "SIGNAL_CHART_TIMEOUT_SECONDS", 1.0)
-    handler = FailingChartOrderHandler()
+async def test_send_signal_falls_back_to_text_preview_when_chart_generation_fails():
+    handler = FailingChartOrderHandler(
+        settings=make_settings(signal_chart_enabled=True, signal_chart_timeout_seconds=1.0)
+    )
     update = make_update()
     context = make_context()
 
@@ -346,10 +343,8 @@ async def test_send_signal_falls_back_to_text_preview_when_chart_generation_fail
 
 
 @pytest.mark.asyncio
-async def test_confirm_signal_forwards_to_configured_topic(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
-    monkeypatch.setattr(Config, "SIGNAL_CHART_TIMEOUT_SECONDS", 1.0)
-    handler = FakeOrderHandler()
+async def test_confirm_signal_forwards_to_configured_topic():
+    handler = FakeOrderHandler(settings=make_settings(signal_chart_enabled=True, signal_chart_timeout_seconds=1.0))
     update = make_update()
     context = make_context()
 
@@ -376,10 +371,8 @@ async def test_confirm_signal_forwards_to_configured_topic(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_confirm_signal_falls_back_to_text_when_photo_send_fails(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
-    monkeypatch.setattr(Config, "SIGNAL_CHART_TIMEOUT_SECONDS", 1.0)
-    handler = FakeOrderHandler()
+async def test_confirm_signal_falls_back_to_text_when_photo_send_fails():
+    handler = FakeOrderHandler(settings=make_settings(signal_chart_enabled=True, signal_chart_timeout_seconds=1.0))
     handler.application.bot.fail_photo = True
     update = make_update()
     context = make_context()
@@ -398,9 +391,8 @@ async def test_confirm_signal_falls_back_to_text_when_photo_send_fails(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_cancel_signal_clears_session_without_forwarding(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
-    handler = FakeOrderHandler()
+async def test_cancel_signal_clears_session_without_forwarding():
+    handler = FakeOrderHandler(settings=make_settings(signal_chart_enabled=False))
     update = make_update()
     context = make_context()
 
@@ -418,9 +410,8 @@ async def test_cancel_signal_clears_session_without_forwarding(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_expired_signal_preview_does_not_forward(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
-    handler = FakeOrderHandler()
+async def test_expired_signal_preview_does_not_forward():
+    handler = FakeOrderHandler(settings=make_settings(signal_chart_enabled=False))
     update = make_update()
     context = make_context()
 
@@ -439,9 +430,8 @@ async def test_expired_signal_preview_does_not_forward(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_new_signal_preview_replaces_old_token(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", False)
-    handler = FakeOrderHandler()
+async def test_new_signal_preview_replaces_old_token():
+    handler = FakeOrderHandler(settings=make_settings(signal_chart_enabled=False))
     first_update = make_update()
     second_update = make_update()
     context = make_context()
@@ -460,9 +450,8 @@ async def test_new_signal_preview_replaces_old_token(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_update_chart_creates_private_photo_preview(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
-    handler = UpdateChartOrderHandler()
+async def test_update_chart_creates_private_photo_preview():
+    handler = UpdateChartOrderHandler(settings=make_settings(signal_chart_enabled=True))
     update = make_update()
     context = make_context()
     await handler.send_signal_command(update, context)
@@ -483,9 +472,8 @@ async def test_update_chart_creates_private_photo_preview(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_confirm_update_chart_replies_to_original_signal_messages(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
-    handler = UpdateChartOrderHandler()
+async def test_confirm_update_chart_replies_to_original_signal_messages():
+    handler = UpdateChartOrderHandler(settings=make_settings(signal_chart_enabled=True))
     update = make_update()
     context = make_context()
     await handler.send_signal_command(update, context)
@@ -509,10 +497,8 @@ async def test_confirm_update_chart_replies_to_original_signal_messages(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_update_chart_allows_admin_to_update_other_users_signal(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "999")
-    handler = UpdateChartOrderHandler()
+async def test_update_chart_allows_admin_to_update_other_users_signal():
+    handler = UpdateChartOrderHandler(settings=make_settings(signal_chart_enabled=True, admin_ids=(999,)))
     update = make_update()
     context = make_context()
     await handler.send_signal_command(update, context)
@@ -529,9 +515,8 @@ async def test_update_chart_allows_admin_to_update_other_users_signal(monkeypatc
 
 @pytest.mark.asyncio
 async def test_signal_update_chart_uses_configured_candle_limit(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_UPDATE_CANDLE_LIMIT", 200)
     monkeypatch.setattr(bot_order_handlers, "render_signal_update_chart", lambda *args: b"fake-update-png")
-    handler = FakeOrderHandler()
+    handler = FakeOrderHandler(settings=make_settings(signal_update_candle_limit=200))
     handler.trade_manager = RecordingCandleTradeManager()
     signal = SimpleNamespace(symbol="BTCUSDT")
 
@@ -545,9 +530,8 @@ async def test_signal_update_chart_uses_configured_candle_limit(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_update_chart_rejects_non_owner_non_admin(monkeypatch):
-    monkeypatch.setattr(Config, "SIGNAL_CHART_ENABLED", True)
-    handler = UpdateChartOrderHandler()
+async def test_update_chart_rejects_non_owner_non_admin():
+    handler = UpdateChartOrderHandler(settings=make_settings(signal_chart_enabled=True))
     update = make_update()
     context = make_context()
     await handler.send_signal_command(update, context)

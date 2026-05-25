@@ -32,7 +32,6 @@ from .bot_callback_router import CallbackRoute, CallbackRouter
 from .bot_handler_context import BotHandlerContext
 from .bot_order_handlers import OrderHandlers, OrderHandlersMixin
 from .bot_states import WAITING_API_KEY, WAITING_PASSPHRASE, WAITING_SECRET_KEY
-from .config import Config
 from .database import (
     get_channel_repo,
     get_notification_repo,
@@ -41,6 +40,7 @@ from .database import (
     get_system_log_repo,
     get_trade_repo,
     get_user_repo,
+    init_database,
 )
 from .encryption import create_encryption_manager
 from .health import read_backup_health, read_maintenance_health
@@ -48,6 +48,7 @@ from .log_sanitizer import summarize_telegram_update
 from .order_reconciliation import PendingOrderReconciliationService
 from .repository_types import UserAccountRecord
 from .session_store import SessionStore
+from .settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +65,11 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         }
     )
 
-    def __init__(self):
-        self.token = Config.TELEGRAM_BOT_TOKEN
+    def __init__(self, settings: Settings | None = None):
+        self.settings = settings or Settings.from_env()
+        self.token = self.settings.telegram_bot_token
+
+        init_database(self.settings.database_url, debug=self.settings.debug)
 
         self.user_repo = get_user_repo()
         self.trade_repo = get_trade_repo()
@@ -75,14 +79,14 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         self.channel_repo = get_channel_repo()
         self.signal_record_repo = get_signal_record_repo()
 
-        self.encryption_manager = create_encryption_manager(Config.ENCRYPTION_KEY)
-        self.trade_manager = BitgetTradeManager(self.encryption_manager)
+        self.encryption_manager = create_encryption_manager(self.settings.encryption_key)
+        self.trade_manager = BitgetTradeManager(self.encryption_manager, settings=self.settings)
         self.started_at: datetime | None = None
         self.health_monitor_task: asyncio.Task | None = None
         self.user_sessions: dict[int, dict] = {}
         self.session_store = SessionStore(
             sessions_dict=self.user_sessions,
-            ttl_seconds=Config.USER_SESSION_TTL_SECONDS,
+            ttl_seconds=self.settings.user_session_ttl_seconds,
             now_func=self._session_now,
         )
         self.handler_context = BotHandlerContext(self)
@@ -91,7 +95,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         self.admin_handlers = AdminHandlers(self.handler_context)
 
         self.application = Application.builder().token(self.token).build()
-        self.alert_manager = AdminAlertManager(self.application.bot, self.system_log_repo)
+        self.alert_manager = AdminAlertManager(self.application.bot, self.system_log_repo, settings=self.settings)
         self.pending_order_reconciler = PendingOrderReconciliationService(
             bot=self.application.bot,
             user_repo=self.user_repo,
@@ -206,7 +210,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
     async def _is_trader_or_admin(self, telegram_id: int) -> bool:
         """Check whether a user can send trading signals."""
-        if Config.is_admin(telegram_id):
+        if self.settings.is_admin(telegram_id):
             return True
 
         try:
@@ -400,7 +404,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
     async def start(self):
         """Start the Telegram bot."""
         try:
-            Config.validate()
+            self.settings.validate()
             logger.info("Starting Telegram bot...")
 
             await self.application.initialize()
@@ -444,7 +448,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
     async def _health_monitor_loop(self):
         """Run lightweight periodic health checks."""
         while True:
-            await asyncio.sleep(Config.HEALTHCHECK_INTERVAL_SECONDS)
+            await asyncio.sleep(self.settings.healthcheck_interval_seconds)
             await self._run_health_monitor_once()
 
     async def _run_health_monitor_once(self):
@@ -455,31 +459,34 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 await self.alert_manager.alert_db_failure("health_monitor")
                 return
 
-            backup_health = read_backup_health()
+            backup_health = read_backup_health(stale_hours=self.settings.backup_stale_hours)
             if backup_health.is_problem:
                 await self.alert_manager.alert_backup_problem(backup_health.message)
 
-            maintenance_health = await read_maintenance_health(self.system_log_repo)
+            maintenance_health = await read_maintenance_health(
+                self.system_log_repo,
+                stale_hours=self.settings.maintenance_stale_hours,
+            )
             if maintenance_health.is_problem:
                 await self.alert_manager.alert_maintenance_problem(maintenance_health.message)
 
             await self.pending_order_reconciler.reconcile_stale_processing_orders(
-                stale_after_seconds=Config.PENDING_ORDER_RECONCILE_AFTER_SECONDS,
-                limit=Config.PENDING_ORDER_RECONCILE_LIMIT,
+                stale_after_seconds=self.settings.pending_order_reconcile_after_seconds,
+                limit=self.settings.pending_order_reconcile_limit,
             )
         except (OSError, RuntimeError, SQLAlchemyError, TelegramError, ValueError) as exc:
             logger.error(f"Health monitor failed: {exc}")
             await self.alert_manager.alert_db_failure("health_monitor", exc)
 
 
-def create_bot() -> TelegramBot:
+def create_bot(settings: Settings | None = None) -> TelegramBot:
     """Create a bot instance."""
-    return TelegramBot()
+    return TelegramBot(settings=settings)
 
 
-async def run_bot():
+async def run_bot(settings: Settings | None = None):
     """Run the bot until SIGTERM or SIGINT."""
-    bot = create_bot()
+    bot = create_bot(settings)
     try:
         await bot.start()
         import signal

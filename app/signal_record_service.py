@@ -2,10 +2,10 @@ import secrets
 import string
 
 from .bot_messages import signal_message
-from .config import Config
 from .decimal_utils import to_decimal
 from .order_types import SignalDraft
 from .repository_types import SignalRecordSnapshot
+from .settings import Settings
 
 SIGNAL_PUBLIC_ID_ALPHABET = string.ascii_lowercase + string.digits
 SIGNAL_PUBLIC_ID_LENGTH = 7
@@ -20,10 +20,18 @@ class SignalRecordService:
         *,
         is_admin_checker=None,
         public_id_generator=None,
+        signal_chart_granularity: str | None = None,
     ):
         self.signal_record_repo = signal_record_repo
-        self.is_admin_checker = is_admin_checker or Config.is_admin
+        settings = Settings.from_env() if is_admin_checker is None or signal_chart_granularity is None else None
+        if is_admin_checker is None:
+            is_admin_checker = settings.is_admin
+        if signal_chart_granularity is None:
+            signal_chart_granularity = settings.signal_chart_granularity
+
+        self.is_admin_checker = is_admin_checker
         self.public_id_generator = public_id_generator or self._generate_signal_public_id
+        self.signal_chart_granularity = signal_chart_granularity
 
     def _generate_signal_public_id(self) -> str:
         return "".join(secrets.choice(SIGNAL_PUBLIC_ID_ALPHABET) for _ in range(SIGNAL_PUBLIC_ID_LENGTH))
@@ -51,7 +59,7 @@ class SignalRecordService:
                 sender_username=sender_username,
                 signal=signal,
                 signal_text=signal_text,
-                granularity=Config.SIGNAL_CHART_GRANULARITY,
+                granularity=self.signal_chart_granularity,
                 chart_status=chart_status,
                 chart_error=chart_error,
             )

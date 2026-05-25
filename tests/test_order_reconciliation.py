@@ -3,6 +3,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from settings_factory import make_settings
 
 from app.bitget_client import BitgetAPIClient
 from app.bitget_errors import BitgetAPIError
@@ -457,14 +458,29 @@ async def test_health_monitor_triggers_pending_order_reconciler(monkeypatch):
         async def reconcile_stale_processing_orders(self, **kwargs):
             self.calls.append(kwargs)
 
-    monkeypatch.setattr("app.bot.read_backup_health", lambda: FakeBackup())
+    backup_calls = []
 
-    async def fake_read_maintenance_health(system_log_repo):
+    def fake_read_backup_health(**kwargs):
+        backup_calls.append(kwargs)
+        return FakeBackup()
+
+    monkeypatch.setattr("app.bot.read_backup_health", fake_read_backup_health)
+
+    maintenance_calls = []
+
+    async def fake_read_maintenance_health(system_log_repo, **kwargs):
+        maintenance_calls.append({"system_log_repo": system_log_repo, **kwargs})
         return FakeMaintenance()
 
     monkeypatch.setattr("app.bot.read_maintenance_health", fake_read_maintenance_health)
     reconciler = FakeReconciler()
     bot = SimpleNamespace(
+        settings=make_settings(
+            backup_stale_hours=48,
+            maintenance_stale_hours=48,
+            pending_order_reconcile_after_seconds=1234,
+            pending_order_reconcile_limit=3,
+        ),
         user_repo=SimpleNamespace(db=FakeDb()),
         system_log_repo=SimpleNamespace(),
         alert_manager=FakeAlertManager(),
@@ -473,4 +489,6 @@ async def test_health_monitor_triggers_pending_order_reconciler(monkeypatch):
 
     await TelegramBot._run_health_monitor_once(bot)
 
-    assert reconciler.calls == [{"stale_after_seconds": 900, "limit": 10}]
+    assert backup_calls == [{"stale_hours": 48}]
+    assert maintenance_calls == [{"system_log_repo": bot.system_log_repo, "stale_hours": 48}]
+    assert reconciler.calls == [{"stale_after_seconds": 1234, "limit": 3}]

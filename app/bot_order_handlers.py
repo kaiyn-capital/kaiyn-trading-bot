@@ -16,7 +16,6 @@ from .bot_messages import (
     chart_update_message,
     signal_usage_message,
 )
-from .config import Config
 from .order_flow import parse_signal_args
 from .order_interaction_service import ConfirmedOrderRequest, TelegramOrderFlowService
 from .order_types import SignalDraft
@@ -52,10 +51,15 @@ class OrderHandlers:
             audit_owner=self.bot,
             failure_alert_handler=self.bot._record_bitget_failure_alert,
             signal_record_repo=self.bot.signal_record_repo,
+            settings=self.bot.settings,
         )
 
     def _signal_record_service(self) -> SignalRecordService:
-        return SignalRecordService(self.bot.signal_record_repo)
+        return SignalRecordService(
+            self.bot.signal_record_repo,
+            is_admin_checker=self.bot.settings.is_admin,
+            signal_chart_granularity=self.bot.settings.signal_chart_granularity,
+        )
 
     def _signal_delivery_service(self) -> SignalDeliveryService:
         return SignalDeliveryService(self.bot.channel_repo, self.bot.signal_record_repo)
@@ -190,7 +194,7 @@ class OrderHandlers:
                 await update.message.reply_text("❌ 找不到这笔交易信号的原始转发消息")
                 return
 
-            if not Config.SIGNAL_CHART_ENABLED:
+            if not self.bot.settings.signal_chart_enabled:
                 await update.message.reply_text("❌ 图表功能目前已停用")
                 return
 
@@ -198,7 +202,7 @@ class OrderHandlers:
             try:
                 chart_bytes = await asyncio.wait_for(
                     self.bot._create_signal_update_chart(signal, record.created_at, record.granularity),
-                    timeout=Config.SIGNAL_CHART_TIMEOUT_SECONDS,
+                    timeout=self.bot.settings.signal_chart_timeout_seconds,
                 )
             except ValueError:
                 await update.message.reply_text("❌ K 线资料不足，无法生成这笔交易的更新图表")
@@ -250,7 +254,7 @@ class OrderHandlers:
         candles = await self.bot.trade_manager.get_candles(
             signal.symbol,
             granularity,
-            Config.SIGNAL_UPDATE_CANDLE_LIMIT,
+            self.bot.settings.signal_update_candle_limit,
             end_time=datetime.now(UTC),
         )
         return await asyncio.to_thread(render_signal_update_chart, signal, candles, granularity, signal_time)
@@ -271,19 +275,19 @@ class OrderHandlers:
     async def _create_signal_chart(self, signal: SignalDraft) -> bytes:
         candles = await self.bot.trade_manager.get_candles(
             signal.symbol,
-            Config.SIGNAL_CHART_GRANULARITY,
-            Config.SIGNAL_CHART_CANDLE_LIMIT,
+            self.bot.settings.signal_chart_granularity,
+            self.bot.settings.signal_chart_candle_limit,
         )
-        return await asyncio.to_thread(render_signal_chart, signal, candles, Config.SIGNAL_CHART_GRANULARITY)
+        return await asyncio.to_thread(render_signal_chart, signal, candles, self.bot.settings.signal_chart_granularity)
 
     async def _try_create_signal_chart(self, signal: SignalDraft) -> tuple[bytes | None, str, str | None]:
-        if not Config.SIGNAL_CHART_ENABLED:
+        if not self.bot.settings.signal_chart_enabled:
             return None, "disabled", None
 
         try:
             chart_bytes = await asyncio.wait_for(
                 self.bot._create_signal_chart(signal),
-                timeout=Config.SIGNAL_CHART_TIMEOUT_SECONDS,
+                timeout=self.bot.settings.signal_chart_timeout_seconds,
             )
             return chart_bytes, "generated", None
         except (TimeoutError, BitgetAPIError, RuntimeError, ValueError) as e:

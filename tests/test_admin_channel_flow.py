@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from settings_factory import make_settings
 
 from app.bot_admin_handlers import AdminHandlersMixin
 from app.bot_handler_context import BotHandlerContext
@@ -136,8 +137,9 @@ class FakeBot:
 
 
 class FakeAdminHandler(AdminHandlersMixin):
-    def __init__(self, channel_repo, system_log_repo=None, user_repo=None):
+    def __init__(self, channel_repo, system_log_repo=None, user_repo=None, settings=None):
         self.channel_repo = channel_repo
+        self.settings = settings or make_settings(admin_ids=(123,))
         self.user_sessions = {}
         self.now = datetime(2026, 5, 18, 12, 0, 0)
         self.set_user_session(
@@ -198,8 +200,7 @@ async def test_handler_context_delegates_active_channel_lookup():
 
 
 @pytest.mark.asyncio
-async def test_delete_channel_success_reply_uses_html(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_delete_channel_success_reply_uses_html():
     channel_repo = FakeChannelRepo()
     handler = FakeAdminHandler(channel_repo)
     update = make_update("1")
@@ -214,8 +215,7 @@ async def test_delete_channel_success_reply_uses_html(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_expired_delete_channel_session_does_not_delete(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_expired_delete_channel_session_does_not_delete():
     channel_repo = FakeChannelRepo()
     handler = FakeAdminHandler(channel_repo)
     handler.now = handler.now + timedelta(seconds=301)
@@ -229,8 +229,7 @@ async def test_expired_delete_channel_session_does_not_delete(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_expired_channel_data_does_not_enter_delete_number_flow(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_expired_channel_data_does_not_enter_delete_number_flow():
     handler = FakeAdminHandler(FakeChannelRepo())
     handler.now = handler.now + timedelta(seconds=301)
     query = FakeQuery()
@@ -242,8 +241,7 @@ async def test_expired_channel_data_does_not_enter_delete_number_flow(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_admin_channels_command_returns_html_and_keyboard(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_admin_channels_command_returns_html_and_keyboard():
     handler = FakeAdminHandler(FakeChannelRepo())
     update = make_update("")
 
@@ -259,8 +257,7 @@ async def test_admin_channels_command_returns_html_and_keyboard(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_manage_channels_callback_sets_session_and_returns_keyboard(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_manage_channels_callback_sets_session_and_returns_keyboard():
     handler = FakeAdminHandler(FakeChannelRepo())
     query = FakeQuery()
 
@@ -283,8 +280,7 @@ async def test_manage_channels_callback_sets_session_and_returns_keyboard(monkey
 
 
 @pytest.mark.asyncio
-async def test_add_channel_reactivates_inactive_existing_channel(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_add_channel_reactivates_inactive_existing_channel():
     existing = SimpleNamespace(is_active=False)
     channel_repo = FakeChannelRepo(existing=existing)
     handler = FakeAdminHandler(channel_repo)
@@ -319,8 +315,7 @@ def test_channel_record_from_model_includes_topic_fields():
 
 
 @pytest.mark.asyncio
-async def test_set_channel_topic_by_display_number(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_set_channel_topic_by_display_number():
     channel_repo = FakeChannelRepo()
     handler = FakeAdminHandler(channel_repo)
     update = make_update("")
@@ -338,8 +333,7 @@ async def test_set_channel_topic_by_display_number(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_set_channel_topic_rejects_invalid_topic_id(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_set_channel_topic_rejects_invalid_topic_id():
     channel_repo = FakeChannelRepo()
     handler = FakeAdminHandler(channel_repo)
     update = make_update("")
@@ -353,8 +347,7 @@ async def test_set_channel_topic_rejects_invalid_topic_id(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_clear_channel_topic_by_display_number(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_clear_channel_topic_by_display_number():
     channel_repo = FakeChannelRepo()
     handler = FakeAdminHandler(channel_repo)
     update = make_update("")
@@ -368,8 +361,7 @@ async def test_clear_channel_topic_by_display_number(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_add_trader_success_is_audited(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_add_trader_success_is_audited():
     user_repo = FakeUserRepo(set_trader_result=True)
     handler = FakeAdminHandler(FakeChannelRepo(), user_repo=user_repo)
     update = make_update("")
@@ -385,8 +377,7 @@ async def test_add_trader_success_is_audited(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_admin_broadcast_records_summary_audit(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_admin_broadcast_records_summary_audit():
     handler = FakeAdminHandler(FakeChannelRepo())
     update = make_update("")
     context = make_context_with_args(["<b>系统维护</b>", "请稍候"])
@@ -404,8 +395,7 @@ async def test_admin_broadcast_records_summary_audit(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_admin_broadcast_uses_configured_channel_topic(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_admin_broadcast_uses_configured_channel_topic():
     channel_repo = FakeChannelRepo()
     channel_repo.active_channels = [make_channel_record(message_thread_id=456)]
     handler = FakeAdminHandler(channel_repo)
@@ -418,8 +408,7 @@ async def test_admin_broadcast_uses_configured_channel_topic(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_admin_broadcast_sends_to_message_thread_id(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_admin_broadcast_sends_to_message_thread_id():
     repo = FakeChannelRepo()
     repo.active_channels = [make_channel_record(message_thread_id=42, thread_title="Alerts")]
     handler = FakeAdminHandler(repo)
@@ -436,8 +425,7 @@ async def test_admin_broadcast_sends_to_message_thread_id(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_send_to_channel_treats_free_text_as_plain_text(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_send_to_channel_treats_free_text_as_plain_text():
     handler = FakeAdminHandler(FakeChannelRepo())
     update = make_update("")
     context = make_context_with_args(["@test_kaiyn", "<b>公告</b>", "&", "maintenance"])
@@ -451,9 +439,8 @@ async def test_send_to_channel_treats_free_text_as_plain_text(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_admin_audit_rejects_non_admin(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "999")
-    handler = FakeAdminHandler(FakeChannelRepo())
+async def test_admin_audit_rejects_non_admin():
+    handler = FakeAdminHandler(FakeChannelRepo(), settings=make_settings(admin_ids=(999,)))
     update = make_update("")
 
     await handler.admin_audit_command(update, make_context_with_args([]))
@@ -462,8 +449,7 @@ async def test_admin_audit_rejects_non_admin(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_admin_audit_shows_recent_audit_logs(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
+async def test_admin_audit_shows_recent_audit_logs():
     system_log_repo = FakeSystemLogRepo(
         logs=[
             SimpleNamespace(
@@ -491,9 +477,8 @@ async def test_admin_audit_shows_recent_audit_logs(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_admin_health_rejects_non_admin(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "999")
-    handler = FakeAdminHandler(FakeChannelRepo())
+async def test_admin_health_rejects_non_admin():
+    handler = FakeAdminHandler(FakeChannelRepo(), settings=make_settings(admin_ids=(999,)))
     update = make_update("")
 
     await handler.admin_health_command(update, make_context())
@@ -503,8 +488,6 @@ async def test_admin_health_rejects_non_admin(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_admin_health_replies_report(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "123")
-
     async def fake_build_admin_health_report(**kwargs):
         return "🩺 <b>系统健康检查</b>\n\nDB：✅ 正常", {"db_ok": True}
 

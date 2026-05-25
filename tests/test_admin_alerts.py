@@ -1,8 +1,8 @@
 import pytest
+from settings_factory import make_settings
 
 from app.admin_alerts import AdminAlertManager, AlertStateStore
 from app.bitget_errors import BitgetErrorCategory, ClassifiedBitgetError
-from app.config import Config
 
 
 class FakeBot:
@@ -29,18 +29,19 @@ def test_alert_state_store_enforces_cooldown(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_bitget_failure_alerts_after_threshold(monkeypatch, tmp_path):
-    monkeypatch.setattr(Config, "get_admin_ids", classmethod(lambda cls: [111]))
-    monkeypatch.setattr(Config, "BITGET_ALERT_FAILURE_THRESHOLD", 3)
-    monkeypatch.setattr(Config, "BITGET_ALERT_WINDOW_SECONDS", 600)
-    monkeypatch.setattr(Config, "ADMIN_ALERT_COOLDOWN_SECONDS", 1800)
-
+async def test_bitget_failure_alerts_after_threshold(tmp_path):
     bot = FakeBot()
     system_log_repo = FakeSystemLogRepo()
     manager = AdminAlertManager(
         bot,
         system_log_repo,
         AlertStateStore(tmp_path / "alert_state.json"),
+        settings=make_settings(
+            admin_ids=(111,),
+            bitget_alert_failure_threshold=3,
+            bitget_alert_window_seconds=600,
+            admin_alert_cooldown_seconds=1800,
+        ),
     )
     classified = ClassifiedBitgetError(
         category=BitgetErrorCategory.NETWORK,
@@ -65,13 +66,13 @@ async def test_bitget_failure_alerts_after_threshold(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_user_config_error_does_not_alert_admin(monkeypatch, tmp_path):
-    monkeypatch.setattr(Config, "get_admin_ids", classmethod(lambda cls: [111]))
+async def test_user_config_error_does_not_alert_admin(tmp_path):
     bot = FakeBot()
     manager = AdminAlertManager(
         bot,
         FakeSystemLogRepo(),
         AlertStateStore(tmp_path / "alert_state.json"),
+        settings=make_settings(admin_ids=(111,)),
     )
     classified = ClassifiedBitgetError(
         category=BitgetErrorCategory.USER_CONFIG,

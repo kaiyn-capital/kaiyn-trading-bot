@@ -59,6 +59,7 @@ class AdminMonitoring:
                 system_log_repo=self.bot.system_log_repo,
                 started_at=getattr(self.bot, "started_at", None),
                 pending_order_repo=getattr(self.bot, "pending_order_repo", None),
+                settings=self.bot.settings,
             )
             await update.message.reply_text(report, parse_mode=HTML_PARSE_MODE)
         except (SQLAlchemyError, TelegramError, TypeError, ValueError) as e:

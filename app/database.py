@@ -7,7 +7,6 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from .config import Config
 from .models import NotificationLog, PendingOrder, SystemLog, Trade
 from .repositories import (
     ChannelRepository,
@@ -18,6 +17,7 @@ from .repositories import (
     TradeRepository,
     UserRepository,
 )
+from .settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -47,16 +47,17 @@ __all__ = [
 class DatabaseManager:
     """PostgreSQL async database manager."""
 
-    def __init__(self, database_url: str):
+    def __init__(self, database_url: str, *, debug: bool = False):
         if not database_url:
             raise ValueError("Missing DATABASE_URL")
         if not database_url.startswith("postgresql+asyncpg://"):
             raise ValueError("DATABASE_URL must use postgresql+asyncpg://")
 
         self.database_url = database_url
+        self.debug = debug
         self.engine = create_async_engine(
             database_url,
-            echo=Config.DEBUG,
+            echo=debug,
             pool_pre_ping=True,
             pool_recycle=3600,
         )
@@ -143,18 +144,20 @@ channel_repo = None
 signal_record_repo = None
 
 
-def init_database(database_url: str = None):
+def init_database(database_url: str | None = None, *, debug: bool = False):
     """初始化資料庫連線物件，不建立資料表。"""
     global db_manager, user_repo, trade_repo, pending_order_repo
     global notification_repo, system_log_repo, channel_repo, signal_record_repo
 
     if database_url is None:
-        database_url = Config.DATABASE_URL
+        settings = Settings.from_env()
+        database_url = settings.database_url
+        debug = settings.debug
 
-    if db_manager is not None and db_manager.database_url == database_url:
+    if db_manager is not None and db_manager.database_url == database_url and db_manager.debug == debug:
         return
 
-    db_manager = DatabaseManager(database_url)
+    db_manager = DatabaseManager(database_url, debug=debug)
     user_repo = UserRepository(db_manager)
     trade_repo = TradeRepository(db_manager)
     pending_order_repo = PendingOrderRepository(db_manager)

@@ -1,108 +1,73 @@
-import os
+from typing import Any, ClassVar
 
-from dotenv import load_dotenv
+from .settings import Settings
 
-load_dotenv()
+_CONFIG_ATTRIBUTE_MAP = {
+    "TELEGRAM_BOT_TOKEN": "telegram_bot_token",
+    "DATABASE_URL": "database_url",
+    "ENCRYPTION_KEY": "encryption_key",
+    "BITGET_API_URL": "bitget_api_url",
+    "DEBUG": "debug",
+    "LOG_LEVEL": "log_level",
+    "RETENTION_DAYS": "retention_days",
+    "MAINTENANCE_INTERVAL_SECONDS": "maintenance_interval_seconds",
+    "BACKUP_INTERVAL_SECONDS": "backup_interval_seconds",
+    "ADMIN_NOTIFY_STARTUP_SUCCESS": "admin_notify_startup_success",
+    "HEALTHCHECK_INTERVAL_SECONDS": "healthcheck_interval_seconds",
+    "PENDING_ORDER_RECONCILE_AFTER_SECONDS": "pending_order_reconcile_after_seconds",
+    "PENDING_ORDER_RECONCILE_LIMIT": "pending_order_reconcile_limit",
+    "USER_SESSION_TTL_SECONDS": "user_session_ttl_seconds",
+    "ADMIN_ALERT_COOLDOWN_SECONDS": "admin_alert_cooldown_seconds",
+    "BITGET_ALERT_FAILURE_THRESHOLD": "bitget_alert_failure_threshold",
+    "BITGET_ALERT_WINDOW_SECONDS": "bitget_alert_window_seconds",
+    "BACKUP_STALE_HOURS": "backup_stale_hours",
+    "MAINTENANCE_STALE_HOURS": "maintenance_stale_hours",
+    "SIGNAL_CHART_ENABLED": "signal_chart_enabled",
+    "SIGNAL_CHART_GRANULARITY": "signal_chart_granularity",
+    "SIGNAL_CHART_CANDLE_LIMIT": "signal_chart_candle_limit",
+    "SIGNAL_UPDATE_CANDLE_LIMIT": "signal_update_candle_limit",
+    "SIGNAL_CHART_TIMEOUT_SECONDS": "signal_chart_timeout_seconds",
+    "MAX_DAILY_TRADES": "max_daily_trades",
+    "MAX_POSITION_SIZE": "max_position_size",
+}
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+class _ConfigMeta(type):
+    def __getattr__(cls, name: str) -> Any:
+        settings_attribute = _CONFIG_ATTRIBUTE_MAP.get(name)
+        if settings_attribute is None:
+            raise AttributeError(name)
+        return getattr(cls.settings(), settings_attribute)
 
 
-def _env_float(name: str, default: float) -> float:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return float(value)
+class Config(metaclass=_ConfigMeta):
+    """Compatibility shim. New runtime code should accept Settings explicitly."""
 
+    _settings: ClassVar[Settings | None] = None
 
-class Config:
-    # Telegram Bot
-    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    @classmethod
+    def settings(cls) -> Settings:
+        if cls._settings is None:
+            cls._settings = Settings.from_env()
+        return cls._settings
 
-    # 多管理員支援
+    @classmethod
+    def reload(cls, settings: Settings | None = None) -> Settings:
+        cls._settings = settings or Settings.from_env()
+        return cls._settings
+
     @classmethod
     def get_admin_ids(cls) -> list[int]:
-        """獲取所有管理員ID列表"""
-        admin_ids_str = os.getenv("TELEGRAM_ADMIN_IDS")
-        if admin_ids_str:
-            return [int(id.strip()) for id in admin_ids_str.split(",") if id.strip()]
-        return []
+        return list(cls.settings().admin_ids)
 
     @classmethod
     def is_admin(cls, user_id: int) -> bool:
-        """檢查用戶是否為管理員"""
-        return user_id in cls.get_admin_ids()
-
-    # Database
-    DATABASE_URL = os.getenv("DATABASE_URL")
-
-    # Encryption
-    ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-
-    # Bitget API
-    BITGET_API_URL = os.getenv("BITGET_API_URL", "https://api.bitget.com")
-
-    # Application
-    DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-    LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-    RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "30"))
-    MAINTENANCE_INTERVAL_SECONDS = int(os.getenv("MAINTENANCE_INTERVAL_SECONDS", "86400"))
-    BACKUP_INTERVAL_SECONDS = int(os.getenv("BACKUP_INTERVAL_SECONDS", "86400"))
-    ADMIN_NOTIFY_STARTUP_SUCCESS = _env_bool("ADMIN_NOTIFY_STARTUP_SUCCESS", True)
-    HEALTHCHECK_INTERVAL_SECONDS = int(os.getenv("HEALTHCHECK_INTERVAL_SECONDS", "300"))
-    PENDING_ORDER_RECONCILE_AFTER_SECONDS = int(os.getenv("PENDING_ORDER_RECONCILE_AFTER_SECONDS", "900"))
-    PENDING_ORDER_RECONCILE_LIMIT = int(os.getenv("PENDING_ORDER_RECONCILE_LIMIT", "10"))
-    USER_SESSION_TTL_SECONDS = int(os.getenv("USER_SESSION_TTL_SECONDS", "300"))
-    ADMIN_ALERT_COOLDOWN_SECONDS = int(os.getenv("ADMIN_ALERT_COOLDOWN_SECONDS", "1800"))
-    BITGET_ALERT_FAILURE_THRESHOLD = int(os.getenv("BITGET_ALERT_FAILURE_THRESHOLD", "3"))
-    BITGET_ALERT_WINDOW_SECONDS = int(os.getenv("BITGET_ALERT_WINDOW_SECONDS", "600"))
-    BACKUP_STALE_HOURS = int(os.getenv("BACKUP_STALE_HOURS", "36"))
-    MAINTENANCE_STALE_HOURS = int(os.getenv("MAINTENANCE_STALE_HOURS", "36"))
-    SIGNAL_CHART_ENABLED = _env_bool("SIGNAL_CHART_ENABLED", True)
-    SIGNAL_CHART_GRANULARITY = os.getenv("SIGNAL_CHART_GRANULARITY", "1H")
-    SIGNAL_CHART_CANDLE_LIMIT = int(os.getenv("SIGNAL_CHART_CANDLE_LIMIT", "120"))
-    SIGNAL_UPDATE_CANDLE_LIMIT = int(os.getenv("SIGNAL_UPDATE_CANDLE_LIMIT", "200"))
-    SIGNAL_CHART_TIMEOUT_SECONDS = _env_float("SIGNAL_CHART_TIMEOUT_SECONDS", 8.0)
-
-    # Trading Limits
-    MAX_DAILY_TRADES = int(os.getenv("MAX_DAILY_TRADES", "10"))
-    MAX_POSITION_SIZE = float(os.getenv("MAX_POSITION_SIZE", "1000"))
+        return cls.settings().is_admin(user_id)
 
     @classmethod
     def validate(cls) -> bool:
-        """驗證必要的配置項"""
-        # 檢查必要的環境變數
-        if not os.getenv("TELEGRAM_BOT_TOKEN"):
-            raise ValueError("Missing TELEGRAM_BOT_TOKEN")
-
-        if not os.getenv("ENCRYPTION_KEY"):
-            raise ValueError("Missing ENCRYPTION_KEY")
-
-        if not os.getenv("TELEGRAM_ADMIN_IDS"):
-            raise ValueError("Missing TELEGRAM_ADMIN_IDS")
-
-        cls.validate_database_url()
-
-        # 驗證管理員ID格式
-        admin_ids = cls.get_admin_ids()
-        if not admin_ids:
-            raise ValueError("TELEGRAM_ADMIN_IDS contains no valid IDs")
-
-        return True
+        return cls.settings().validate()
 
     @classmethod
     def validate_database_url(cls) -> bool:
-        """驗證資料庫連線設定"""
-        database_url = os.getenv("DATABASE_URL")
-        if not database_url:
-            raise ValueError("Missing DATABASE_URL")
-
-        if not database_url.startswith("postgresql+asyncpg://"):
-            raise ValueError("DATABASE_URL must use postgresql+asyncpg://")
-
-        cls.DATABASE_URL = database_url
-        return True
+        return cls.settings().validate_database_url()
