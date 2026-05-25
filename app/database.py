@@ -7,7 +7,7 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from .models import NotificationLog, PendingOrder, SystemLog, Trade
+from .models import NotificationLog, PendingOrder, SystemLog, Trade, UserSession
 from .repositories import (
     ChannelRepository,
     NotificationRepository,
@@ -16,6 +16,7 @@ from .repositories import (
     SystemLogRepository,
     TradeRepository,
     UserRepository,
+    UserSessionRepository,
 )
 from .settings import Settings
 
@@ -29,6 +30,7 @@ __all__ = [
     "SignalRecordRepository",
     "SystemLogRepository",
     "TradeRepository",
+    "UserSessionRepository",
     "UserRepository",
     "cleanup_retention_records",
     "get_channel_repo",
@@ -38,6 +40,7 @@ __all__ = [
     "get_signal_record_repo",
     "get_system_log_repo",
     "get_trade_repo",
+    "get_user_session_repo",
     "get_user_repo",
     "health_check",
     "init_database",
@@ -110,6 +113,7 @@ async def cleanup_retention_records(retention_days: int, dry_run: bool = False) 
         ("trades", Trade),
         ("notification_logs", NotificationLog),
         ("system_logs", SystemLog),
+        ("user_sessions", UserSession),
     ]
 
     result = {
@@ -142,12 +146,13 @@ notification_repo = None
 system_log_repo = None
 channel_repo = None
 signal_record_repo = None
+user_session_repo = None
 
 
 def init_database(database_url: str | None = None, *, debug: bool = False):
     """初始化資料庫連線物件，不建立資料表。"""
     global db_manager, user_repo, trade_repo, pending_order_repo
-    global notification_repo, system_log_repo, channel_repo, signal_record_repo
+    global notification_repo, system_log_repo, channel_repo, signal_record_repo, user_session_repo
 
     if database_url is None:
         settings = Settings.from_env()
@@ -165,6 +170,7 @@ def init_database(database_url: str | None = None, *, debug: bool = False):
     system_log_repo = SystemLogRepository(db_manager)
     channel_repo = ChannelRepository(db_manager)
     signal_record_repo = SignalRecordRepository(db_manager)
+    user_session_repo = UserSessionRepository(db_manager)
 
     logger.info("Database manager initialized successfully")
 
@@ -223,6 +229,13 @@ def get_signal_record_repo() -> SignalRecordRepository:
     if signal_record_repo is None:
         init_database()
     return signal_record_repo
+
+
+def get_user_session_repo() -> UserSessionRepository:
+    """獲取使用者 session 倉庫"""
+    if user_session_repo is None:
+        init_database()
+    return user_session_repo
 
 
 async def health_check() -> bool:

@@ -54,6 +54,11 @@ class SignalRecordRepository:
             record = result.scalar_one_or_none()
             return signal_record_snapshot_from_model(record) if record else None
 
+    async def get_by_id(self, record_id: int) -> SignalRecordSnapshot | None:
+        async with self.db.get_session() as session:
+            record = await session.get(SignalRecord, record_id)
+            return signal_record_snapshot_from_model(record) if record else None
+
     async def update_status(self, record_id: int, status: str) -> bool:
         async with self.db.get_session() as session:
             record = await session.get(SignalRecord, record_id)

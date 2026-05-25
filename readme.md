@@ -126,14 +126,14 @@ sequenceDiagram
 - Telegram-based Bitget USDT-FUTURES signal execution.
 - Encrypted user API credential storage and API connectivity checks.
 - Fixed 1R risk sizing with market and GTC limit order modes.
-- Persistent pending order confirmation flow backed by PostgreSQL.
+- Persistent pending order and Telegram preview/session flows backed by PostgreSQL.
 - Managed channel/group forwarding with Telegram forum topic support.
 - Admin health checks, alerts, audit events, retention cleanup, and backups.
 - Docker Compose local/deployment parity with CI-backed verification.
 
 ## Engineering Notes
 
-- Trading state is persisted in PostgreSQL, so pending confirmations survive Bot restarts and duplicate clicks are guarded by row locking.
+- Trading state and Telegram conversation sessions are persisted in PostgreSQL, so pending confirmations and active previews survive Bot restarts within their TTL.
 - Exchange execution is validated against Bitget contract rules before confirmation and again before order submission.
 - Operations are part of the product surface: health checks, audit events, retention cleanup, backups, and restore documentation are included.
 - CI mirrors the Docker Compose runtime path, including lockfile, migration/model, type, and PostgreSQL integration checks instead of relying on host-local services.

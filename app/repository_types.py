@@ -46,6 +46,20 @@ class UserSummaryRecord:
 
 
 @dataclass(frozen=True)
+class UserSessionRecord:
+    id: int
+    telegram_id: int
+    user_id: int | None
+    session_type: str
+    token: str | None
+    payload_encrypted: str
+    payload_version: int
+    expires_at: datetime
+    created_at: datetime | None
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True)
 class ChannelRecord:
     id: int
     chat_id: str

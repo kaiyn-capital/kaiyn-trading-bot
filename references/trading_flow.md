@@ -7,7 +7,8 @@
 1. 管理員或發單員使用 `/send_signal` 建立交易信號。
 2. Bot 產生永久 `交易id`，建立 `signal_records(status="preview_pending")`，並把 `交易id` 放入預覽文字。
 3. Bot 會嘗試從 Bitget 取得 K 線並產生黑底風險報酬圖，然後在私人聊天回傳轉發預覽與「确认转发 / 取消」按鈕；附圖失敗時會退回純文字預覽。
-4. 發單者需在 session TTL 內確認預覽；取消或被新的預覽覆蓋時，不會轉發到群組，紀錄會標記為 `cancelled` 或 `replaced`。
+4. 發單者需在 session TTL 內確認預覽；預覽 session 會加密保存於 PostgreSQL，Bot 重啟後仍可在 TTL 內確認。
+   取消、過期或被新的預覽覆蓋時，不會轉發到群組，紀錄會標記為 `cancelled`、`expired` 或 `replaced`。
 5. 發單者確認後，Bot 將信號轉發到已啟用的頻道或群組，並附上「市价下单」與「挂单」按鈕。
 6. 每個成功轉發的群組/topic 會保存 Telegram `message_id` 到 `signal_channel_messages`，供 `/update_chart` 回覆原始發單信息。
 7. 使用者點擊任一下單方式後，Bot 檢查 API 設定與固定風險金額 1R。
@@ -126,6 +127,7 @@ Schema 由 Alembic migration 管理。
 | Table | Purpose |
 | ----- | ------- |
 | `users` | Telegram 使用者、加密 API 憑證、交易設定、發單員權限 |
+| `user_sessions` | 加密保存的 Telegram 對話 session、預覽 token、session type 與 TTL |
 | `trades` | 交易紀錄、Bitget 訂單 ID、狀態與錯誤訊息 |
 | `pending_orders` | 待確認訂單、callback token、order mode、掛單價、entry 區間、計算結果、狀態與過期時間 |
 | `signal_records` | 永久交易信號 ID、原發單者、信號參數、原始文字與 lifecycle 狀態 |

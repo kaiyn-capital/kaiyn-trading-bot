@@ -129,7 +129,33 @@ def test_admin_health_report_includes_core_sections():
     assert "<b>系统健康检查</b>" in report
     assert "DB：✅ 正常" in report
     assert "Backup：✅ 备份正常" in report
+    assert "Sessions：未知" in report
     assert "Bitget API：✅" in report
+
+
+def test_admin_health_report_includes_session_counts():
+    report = format_admin_health_report(
+        db_ok=True,
+        backup_health=SimpleNamespace(
+            is_problem=False,
+            message="备份正常",
+            timestamp=datetime(2026, 5, 13, 12, 0, 0),
+            filename="backup.sql.gz",
+        ),
+        maintenance_health=SimpleNamespace(
+            is_problem=False,
+            message="cleanup 正常",
+            timestamp=datetime(2026, 5, 13, 12, 0, 0),
+        ),
+        recent_errors=[],
+        bitget_counts={},
+        started_at=datetime(2026, 5, 13, 11, 30, 0),
+        active_session_count=2,
+        expired_session_count=1,
+        now=datetime(2026, 5, 13, 12, 0, 0),
+    )
+
+    assert "Sessions：2 active / 1 expired" in report
 
 
 def test_admin_health_report_escapes_html():

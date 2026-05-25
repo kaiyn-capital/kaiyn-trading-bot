@@ -40,6 +40,7 @@ from .database import (
     get_system_log_repo,
     get_trade_repo,
     get_user_repo,
+    get_user_session_repo,
     init_database,
 )
 from .encryption import create_encryption_manager
@@ -47,7 +48,7 @@ from .health import read_backup_health, read_maintenance_health
 from .log_sanitizer import summarize_telegram_update
 from .order_reconciliation import PendingOrderReconciliationService
 from .repository_types import UserAccountRecord
-from .session_store import SessionStore
+from .session_store import DatabaseSessionStore
 from .settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -78,14 +79,15 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         self.system_log_repo = get_system_log_repo()
         self.channel_repo = get_channel_repo()
         self.signal_record_repo = get_signal_record_repo()
+        self.user_session_repo = get_user_session_repo()
 
         self.encryption_manager = create_encryption_manager(self.settings.encryption_key)
         self.trade_manager = BitgetTradeManager(self.encryption_manager, settings=self.settings)
         self.started_at: datetime | None = None
         self.health_monitor_task: asyncio.Task | None = None
-        self.user_sessions: dict[int, dict] = {}
-        self.session_store = SessionStore(
-            sessions_dict=self.user_sessions,
+        self.session_store = DatabaseSessionStore(
+            session_repo=self.user_session_repo,
+            encryption_manager=self.encryption_manager,
             ttl_seconds=self.settings.user_session_ttl_seconds,
             now_func=self._session_now,
         )
@@ -325,7 +327,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
 
     async def _handle_cancel_change_risk_callback(self, query, user):
         await query.answer("已取消")
-        self.delete_user_session(user.telegram_id)
+        await self.delete_user_session(user.telegram_id)
         await query.edit_message_text("✅ 已取消更改风险设置")
 
     async def _handle_cancel_order_callback(self, query, user):
@@ -474,6 +476,8 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
                 stale_after_seconds=self.settings.pending_order_reconcile_after_seconds,
                 limit=self.settings.pending_order_reconcile_limit,
             )
+            if hasattr(self, "delete_expired_user_sessions"):
+                await self.delete_expired_user_sessions()
         except (OSError, RuntimeError, SQLAlchemyError, TelegramError, ValueError) as exc:
             logger.error(f"Health monitor failed: {exc}")
             await self.alert_manager.alert_db_failure("health_monitor", exc)

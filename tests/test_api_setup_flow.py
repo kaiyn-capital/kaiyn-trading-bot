@@ -6,6 +6,7 @@ import pytest
 from app.bot_account_handlers import AccountHandlersMixin
 from app.bot_sessions import SESSION_EXPIRED_MESSAGE
 from app.bot_states import WAITING_API_KEY, WAITING_PASSPHRASE, WAITING_SECRET_KEY
+from app.session_types import ApiSetupSession, RiskAmountSession
 
 
 class FakeMessage:
@@ -135,7 +136,7 @@ def make_context():
 @pytest.mark.asyncio
 async def test_callback_api_setup_advances_from_api_key_to_secret_key():
     handler = FakeAccountHandler()
-    handler.set_user_session(123, {"step": "api_key"})
+    await handler.set_user_session(123, ApiSetupSession(step="api_key"))
     update = make_update("valid-api-key-123")
     context = make_context()
 
@@ -152,12 +153,9 @@ async def test_callback_api_setup_advances_from_api_key_to_secret_key():
 @pytest.mark.asyncio
 async def test_callback_api_setup_advances_from_secret_key_to_passphrase():
     handler = FakeAccountHandler()
-    handler.set_user_session(
+    await handler.set_user_session(
         123,
-        {
-            "step": "secret_key",
-            "api_key": "valid-api-key-123",
-        },
+        ApiSetupSession(step="secret_key", api_key="valid-api-key-123"),
     )
     update = make_update("valid-secret-key-123")
     context = make_context()
@@ -174,7 +172,7 @@ async def test_callback_api_setup_advances_from_secret_key_to_passphrase():
 @pytest.mark.asyncio
 async def test_invalid_api_key_keeps_api_key_step():
     handler = FakeAccountHandler()
-    handler.set_user_session(123, {"step": "api_key"})
+    await handler.set_user_session(123, ApiSetupSession(step="api_key"))
     original_expiry = handler.user_sessions[123]["expires_at"]
     handler.now = handler.now + timedelta(seconds=30)
     update = make_update("short")
@@ -192,7 +190,7 @@ async def test_invalid_api_key_keeps_api_key_step():
 @pytest.mark.asyncio
 async def test_expired_api_key_session_does_not_store_input_and_ends_flow():
     handler = FakeAccountHandler()
-    handler.set_user_session(123, {"step": "api_key"})
+    await handler.set_user_session(123, ApiSetupSession(step="api_key"))
     handler.now = handler.now + timedelta(seconds=301)
     update = make_update("valid-api-key-123")
     context = make_context()
@@ -209,12 +207,9 @@ async def test_expired_api_key_session_does_not_store_input_and_ends_flow():
 @pytest.mark.asyncio
 async def test_expired_secret_key_session_does_not_use_partial_api_key():
     handler = FakeAccountHandler()
-    handler.set_user_session(
+    await handler.set_user_session(
         123,
-        {
-            "step": "secret_key",
-            "api_key": "valid-api-key-123",
-        },
+        ApiSetupSession(step="secret_key", api_key="valid-api-key-123"),
     )
     handler.now = handler.now + timedelta(seconds=301)
     update = make_update("valid-secret-key-123")
@@ -232,13 +227,13 @@ async def test_expired_secret_key_session_does_not_use_partial_api_key():
 @pytest.mark.asyncio
 async def test_expired_passphrase_session_does_not_use_partial_credentials():
     handler = FakeAccountHandler()
-    handler.set_user_session(
+    await handler.set_user_session(
         123,
-        {
-            "step": "passphrase",
-            "api_key": "valid-api-key-123",
-            "secret_key": "valid-secret-key-123",
-        },
+        ApiSetupSession(
+            step="passphrase",
+            api_key="valid-api-key-123",
+            secret_key="valid-secret-key-123",
+        ),
     )
     handler.now = handler.now + timedelta(seconds=301)
     update = make_update("valid-passphrase")
@@ -256,13 +251,13 @@ async def test_expired_passphrase_session_does_not_use_partial_credentials():
 @pytest.mark.asyncio
 async def test_successful_api_setup_invalidates_cached_trade_client():
     handler = FakeAccountHandler()
-    handler.set_user_session(
+    await handler.set_user_session(
         123,
-        {
-            "step": "passphrase",
-            "api_key": "valid-api-key-123",
-            "secret_key": "valid-secret-key-123",
-        },
+        ApiSetupSession(
+            step="passphrase",
+            api_key="valid-api-key-123",
+            secret_key="valid-secret-key-123",
+        ),
     )
     update = make_update("valid-passphrase")
     context = make_context()
@@ -298,13 +293,13 @@ async def test_successful_api_setup_invalidates_cached_trade_client():
 async def test_failed_api_setup_does_not_invalidate_cached_trade_client():
     handler = FakeAccountHandler()
     handler.trade_manager = FakeTradeManager(is_connected=False)
-    handler.set_user_session(
+    await handler.set_user_session(
         123,
-        {
-            "step": "passphrase",
-            "api_key": "valid-api-key-123",
-            "secret_key": "valid-secret-key-123",
-        },
+        ApiSetupSession(
+            step="passphrase",
+            api_key="valid-api-key-123",
+            secret_key="valid-secret-key-123",
+        ),
     )
     update = make_update("valid-passphrase")
     context = make_context()
@@ -324,7 +319,7 @@ async def test_failed_api_setup_does_not_invalidate_cached_trade_client():
 @pytest.mark.asyncio
 async def test_expired_risk_amount_session_does_not_update_amount_and_only_prompts_once():
     handler = FakeAccountHandler()
-    handler.set_user_session(123, {"step": "risk_amount"})
+    await handler.set_user_session(123, RiskAmountSession())
     handler.now = handler.now + timedelta(seconds=301)
     first_update = make_update("100")
 

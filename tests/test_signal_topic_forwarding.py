@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -151,6 +152,12 @@ class FakeSignalRecordRepo:
         record = self.records.get(public_id)
         return signal_record_snapshot_from_data(record) if record else None
 
+    async def get_by_id(self, record_id):
+        for record in self.records.values():
+            if record["id"] == record_id:
+                return signal_record_snapshot_from_data(record)
+        return None
+
     async def create_signal_record(
         self,
         *,
@@ -286,7 +293,8 @@ async def test_send_signal_creates_text_preview_without_forwarding():
     session = handler.user_sessions[handler.user.telegram_id]
     assert session["step"] == "signal_preview"
     assert session["signal_public_id"]
-    assert session["signal"].symbol == "BTCUSDT"
+    record = handler.signal_record_repo.records[session["signal_public_id"]]
+    assert record["symbol"] == "BTCUSDT"
     assert "交易id:" in update.message.replies[0]["text"]
     keyboard = update.message.replies[0]["kwargs"]["reply_markup"].inline_keyboard
     assert keyboard[0][0].callback_data == f"confirm_signal_{session['token']}"
@@ -417,7 +425,10 @@ async def test_expired_signal_preview_does_not_forward():
 
     await handler.send_signal_command(update, context)
     token = handler.user_sessions[handler.user.telegram_id]["token"]
-    handler.user_sessions[handler.user.telegram_id]["expires_at"] = datetime.utcnow() - timedelta(seconds=1)
+    handler.user_sessions[handler.user.telegram_id] = replace(
+        handler.user_sessions[handler.user.telegram_id],
+        expires_at=datetime.utcnow() - timedelta(seconds=1),
+    )
     query = FakeQuery()
     query.fail_caption_edit = True
     await handler._handle_confirm_signal_callback(query, handler.user, f"confirm_signal_{token}")

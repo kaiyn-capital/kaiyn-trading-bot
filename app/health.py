@@ -159,6 +159,7 @@ async def build_admin_health_report(
     system_log_repo,
     started_at: datetime | None,
     pending_order_repo=None,
+    user_session_repo=None,
     backups_dir: Path = BACKUPS_DIR,
     settings: Settings | None = None,
 ) -> tuple[str, dict]:
@@ -180,6 +181,8 @@ async def build_admin_health_report(
         now,
         settings.pending_order_reconcile_after_seconds,
     )
+    active_session_count = await _count_active_user_sessions(user_session_repo, now)
+    expired_session_count = await _count_expired_user_sessions(user_session_repo, now)
     recent_errors = await system_log_repo.get_recent_logs(
         levels=["ERROR", "CRITICAL"],
         since=now - timedelta(hours=24),
@@ -199,6 +202,8 @@ async def build_admin_health_report(
         bitget_counts=bitget_counts,
         started_at=started_at,
         stale_processing_count=stale_processing_count,
+        active_session_count=active_session_count,
+        expired_session_count=expired_session_count,
         processing_threshold_seconds=settings.pending_order_reconcile_after_seconds,
         now=now,
     )
@@ -208,6 +213,8 @@ async def build_admin_health_report(
         "maintenance_problem": maintenance_health.is_problem,
         "bitget_counts": bitget_counts,
         "stale_processing_count": stale_processing_count,
+        "active_session_count": active_session_count,
+        "expired_session_count": expired_session_count,
         "recent_error_count": len(recent_errors),
     }
     return report, status
@@ -221,6 +228,8 @@ def format_admin_health_report(
     bitget_counts: dict[str, int],
     started_at: datetime | None,
     stale_processing_count: int | None = None,
+    active_session_count: int | None = None,
+    expired_session_count: int | None = None,
     processing_threshold_seconds: int = 900,
     now: datetime | None = None,
 ) -> str:
@@ -231,6 +240,7 @@ def format_admin_health_report(
     maintenance_icon = "✅" if not maintenance_health.is_problem else "❌"
     bitget_text = _format_bitget_counts(bitget_counts)
     processing_text = _format_stale_processing_count(stale_processing_count, processing_threshold_seconds)
+    session_text = _format_session_count(active_session_count, expired_session_count)
     error_text = _format_recent_errors(recent_errors)
 
     backup_msg_escaped = html_escape(backup_health.message)
@@ -248,6 +258,7 @@ def format_admin_health_report(
         f"Maintenance：{maintenance_icon} {maint_msg_escaped}\n"
         f"Maintenance 时间：{format_utc8(maintenance_health.timestamp)}\n"
         f"Processing 卡单：{processing_text}\n"
+        f"Sessions：{session_text}\n"
         f"Bitget API：{bitget_text}\n\n"
         f"最近错误：\n{error_text}"
     )
@@ -290,6 +301,26 @@ async def _count_stale_processing_orders(
         return None
 
 
+async def _count_active_user_sessions(user_session_repo, now: datetime) -> int | None:
+    if not user_session_repo:
+        return None
+    try:
+        result = await user_session_repo.count_active_sessions(now)
+        return int(result) if result is not None else None
+    except SQLAlchemyError:
+        return None
+
+
+async def _count_expired_user_sessions(user_session_repo, now: datetime) -> int | None:
+    if not user_session_repo:
+        return None
+    try:
+        result = await user_session_repo.count_expired_sessions(now)
+        return int(result) if result is not None else None
+    except SQLAlchemyError:
+        return None
+
+
 def _format_bitget_counts(counts: dict[str, int]) -> str:
     if not counts:
         return "✅ 近 24 小时无系统级 API 异常"
@@ -303,6 +334,14 @@ def _format_stale_processing_count(count: int | None, threshold_seconds: int = 9
         return "✅ 0 笔"
     threshold_minutes = max(int(threshold_seconds / 60), 1)
     return f"⚠️ {count} 笔超过 {threshold_minutes} 分钟"
+
+
+def _format_session_count(active_count: int | None, expired_count: int | None) -> str:
+    if active_count is None:
+        return "未知"
+    if expired_count is None:
+        return f"{active_count} active"
+    return f"{active_count} active / {expired_count} expired"
 
 
 def _format_recent_errors(errors: list) -> str:
