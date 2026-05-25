@@ -1,7 +1,5 @@
 from telegram import Update
 
-from .config import Config
-
 ADMIN_PERMISSION_DENIED_MESSAGE = "❌ 您没有管理员权限"
 
 
@@ -21,7 +19,7 @@ class AdminPermission:
         return None
 
     def _is_admin_user(self, user) -> bool:
-        return Config.is_admin(user.telegram_id)
+        return self.bot.settings.is_admin(user.telegram_id)
 
 
 class AdminPermissionMixin:

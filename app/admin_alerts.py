@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from telegram.error import TelegramError
 
 from .bitget_errors import BitgetErrorCategory, ClassifiedBitgetError
-from .config import Config
+from .settings import Settings
 from .telegram_formatting import HTML_PARSE_MODE, html_escape
 
 logger = logging.getLogger(__name__)
@@ -35,9 +35,9 @@ def _parse_iso_datetime(value: str | None) -> datetime | None:
         return None
 
 
-def _safe_admin_ids() -> list[int]:
+def _safe_admin_ids(settings: Settings) -> list[int]:
     try:
-        return Config.get_admin_ids()
+        return list(settings.admin_ids)
     except ValueError as exc:
         logger.error(f"Invalid TELEGRAM_ADMIN_IDS for admin alert: {exc}")
         return []
@@ -89,16 +89,18 @@ async def send_direct_admin_alert(
     alert_key: str | None = None,
     cooldown_seconds: int | None = None,
     state_store: AlertStateStore | None = None,
+    settings: Settings | None = None,
 ) -> bool:
-    token = Config.TELEGRAM_BOT_TOKEN
-    admin_ids = _safe_admin_ids()
+    settings = settings or Settings.from_env()
+    token = settings.telegram_bot_token
+    admin_ids = _safe_admin_ids(settings)
     if not token or not admin_ids:
         logger.warning("Skipping direct admin alert because Telegram config is missing")
         return False
 
     state_store = state_store or AlertStateStore()
     if alert_key:
-        cooldown = cooldown_seconds or Config.ADMIN_ALERT_COOLDOWN_SECONDS
+        cooldown = cooldown_seconds or settings.admin_alert_cooldown_seconds
         if not state_store.should_send(alert_key, cooldown):
             return False
 
@@ -125,10 +127,12 @@ class AdminAlertManager:
         bot,
         system_log_repo=None,
         state_store: AlertStateStore | None = None,
+        settings: Settings | None = None,
     ):
         self.bot = bot
         self.system_log_repo = system_log_repo
         self.state_store = state_store or AlertStateStore()
+        self.settings = settings or Settings.from_env()
         self.bitget_failures: dict[str, list[datetime]] = {}
 
     async def send_alert(
@@ -137,13 +141,13 @@ class AdminAlertManager:
         alert_key: str | None = None,
         cooldown_seconds: int | None = None,
     ) -> bool:
-        admin_ids = _safe_admin_ids()
+        admin_ids = _safe_admin_ids(self.settings)
         if not admin_ids:
             logger.warning("Skipping admin alert because TELEGRAM_ADMIN_IDS is empty")
             return False
 
         if alert_key:
-            cooldown = cooldown_seconds or Config.ADMIN_ALERT_COOLDOWN_SECONDS
+            cooldown = cooldown_seconds or self.settings.admin_alert_cooldown_seconds
             if not self.state_store.should_send(alert_key, cooldown):
                 return False
 
@@ -158,7 +162,7 @@ class AdminAlertManager:
         return sent_any
 
     async def alert_startup_success(self):
-        if not Config.ADMIN_NOTIFY_STARTUP_SUCCESS:
+        if not self.settings.admin_notify_startup_success:
             return False
         return await self.send_alert(
             "✅ Kaiyn Trading Bot 已启动成功。",
@@ -169,6 +173,7 @@ class AdminAlertManager:
         return await send_direct_admin_alert(
             f"❌ Kaiyn Trading Bot 启动失败。\n\n错误：{html_escape(error)}",
             alert_key="startup_failure",
+            settings=self.settings,
         )
 
     async def alert_db_failure(self, source: str, error: Exception | None = None):
@@ -203,18 +208,18 @@ class AdminAlertManager:
 
         category = classified_error.category.value
         now = _utcnow()
-        window_start = now - timedelta(seconds=Config.BITGET_ALERT_WINDOW_SECONDS)
+        window_start = now - timedelta(seconds=self.settings.bitget_alert_window_seconds)
         failures = [timestamp for timestamp in self.bitget_failures.get(category, []) if timestamp >= window_start]
         failures.append(now)
         self.bitget_failures[category] = failures
 
-        if len(failures) < Config.BITGET_ALERT_FAILURE_THRESHOLD:
+        if len(failures) < self.settings.bitget_alert_failure_threshold:
             return False
 
         return await self.send_alert(
             "⚠️ Kaiyn Trading Bot Bitget API 连续异常。\n\n"
             f"分类：{html_escape(category)}\n"
-            f"次数：{len(failures)} / {Config.BITGET_ALERT_WINDOW_SECONDS} 秒\n"
+            f"次数：{len(failures)} / {self.settings.bitget_alert_window_seconds} 秒\n"
             f"来源：{html_escape(source)}\n"
             f"最近错误：{html_escape(classified_error.storage_message())}",
             alert_key=f"bitget_failure:{category}",

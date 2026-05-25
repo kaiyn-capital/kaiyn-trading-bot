@@ -3,8 +3,8 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from settings_factory import make_settings
 
-from app.config import Config
 from app.order_interaction_service import TelegramOrderFlowService
 from app.repository_types import SignalRecordSnapshot
 
@@ -304,6 +304,7 @@ def make_service(
     system_log_repo=None,
     failure_alert_handler=None,
     signal_record_repo=None,
+    settings=None,
 ):
     bot = FakeBot()
     audit_owner = FakeAuditOwner()
@@ -317,6 +318,7 @@ def make_service(
         audit_owner=audit_owner,
         failure_alert_handler=failure_alert_handler,
         signal_record_repo=signal_record_repo,
+        settings=settings or make_settings(),
     )
     return service, bot, audit_owner
 
@@ -460,8 +462,7 @@ async def test_place_order_blocks_when_daily_trade_limit_reached():
 
 
 @pytest.mark.asyncio
-async def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch):
-    monkeypatch.setattr(Config, "MAX_POSITION_SIZE", 1000.0)
+async def test_place_order_blocks_when_preview_position_exceeds_cap():
     pending_order_repo = FakeConfirmPendingOrderRepo()
     system_log_repo = RecordingSystemLogRepo()
     failure_alert = RecordingFailureAlert()
@@ -482,6 +483,7 @@ async def test_place_order_blocks_when_preview_position_exceeds_cap(monkeypatch)
         system_log_repo=system_log_repo,
         failure_alert_handler=failure_alert,
         signal_record_repo=signal_repo,
+        settings=make_settings(max_position_size=Decimal("1000")),
     )
 
     await service.handle_place_order_callback(
@@ -671,8 +673,7 @@ async def test_execute_order_blocks_when_daily_trade_limit_reached_before_bitget
 
 
 @pytest.mark.asyncio
-async def test_execute_order_blocks_when_confirmed_position_exceeds_cap(monkeypatch):
-    monkeypatch.setattr(Config, "MAX_POSITION_SIZE", 1000.0)
+async def test_execute_order_blocks_when_confirmed_position_exceeds_cap():
     pending_order_repo = FakeConfirmPendingOrderRepo()
     trade_manager = PermissiveRulesTradeManager()
     system_log_repo = RecordingSystemLogRepo()
@@ -684,6 +685,7 @@ async def test_execute_order_blocks_when_confirmed_position_exceeds_cap(monkeypa
         trade_manager=trade_manager,
         system_log_repo=system_log_repo,
         failure_alert_handler=failure_alert,
+        settings=make_settings(max_position_size=Decimal("1000")),
     )
 
     result = await service.execute_order(

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from .config import Config
+from .settings import Settings
 from .telegram_formatting import html_escape
 
 BACKUPS_DIR = Path("backups")
@@ -67,10 +67,11 @@ def format_duration(seconds: float) -> str:
 
 def read_backup_health(
     backups_dir: Path = BACKUPS_DIR,
-    stale_hours: int = Config.BACKUP_STALE_HOURS,
+    stale_hours: int | None = None,
     now: datetime | None = None,
 ) -> BackupHealth:
     now = now or datetime.utcnow()
+    stale_hours = stale_hours if stale_hours is not None else Settings.from_env().backup_stale_hours
     status_path = backups_dir / BACKUP_STATUS_FILE
 
     if status_path.exists():
@@ -129,10 +130,11 @@ def read_backup_health(
 
 async def read_maintenance_health(
     system_log_repo,
-    stale_hours: int = Config.MAINTENANCE_STALE_HOURS,
+    stale_hours: int | None = None,
     now: datetime | None = None,
 ) -> MaintenanceHealth:
     now = now or datetime.utcnow()
+    stale_hours = stale_hours if stale_hours is not None else Settings.from_env().maintenance_stale_hours
     latest = await system_log_repo.get_latest_log(
         module="maintenance",
         function="run_cleanup_retention",
@@ -158,12 +160,26 @@ async def build_admin_health_report(
     started_at: datetime | None,
     pending_order_repo=None,
     backups_dir: Path = BACKUPS_DIR,
+    settings: Settings | None = None,
 ) -> tuple[str, dict]:
     now = datetime.utcnow()
+    settings = settings or Settings.from_env()
     db_ok = await db_manager.health_check()
-    backup_health = read_backup_health(backups_dir=backups_dir, now=now)
-    maintenance_health = await read_maintenance_health(system_log_repo, now=now)
-    stale_processing_count = await _count_stale_processing_orders(pending_order_repo, now)
+    backup_health = read_backup_health(
+        backups_dir=backups_dir,
+        stale_hours=settings.backup_stale_hours,
+        now=now,
+    )
+    maintenance_health = await read_maintenance_health(
+        system_log_repo,
+        stale_hours=settings.maintenance_stale_hours,
+        now=now,
+    )
+    stale_processing_count = await _count_stale_processing_orders(
+        pending_order_repo,
+        now,
+        settings.pending_order_reconcile_after_seconds,
+    )
     recent_errors = await system_log_repo.get_recent_logs(
         levels=["ERROR", "CRITICAL"],
         since=now - timedelta(hours=24),
@@ -183,6 +199,7 @@ async def build_admin_health_report(
         bitget_counts=bitget_counts,
         started_at=started_at,
         stale_processing_count=stale_processing_count,
+        processing_threshold_seconds=settings.pending_order_reconcile_after_seconds,
         now=now,
     )
     status = {
@@ -204,6 +221,7 @@ def format_admin_health_report(
     bitget_counts: dict[str, int],
     started_at: datetime | None,
     stale_processing_count: int | None = None,
+    processing_threshold_seconds: int = 900,
     now: datetime | None = None,
 ) -> str:
     now = now or datetime.utcnow()
@@ -212,7 +230,7 @@ def format_admin_health_report(
     backup_icon = "✅" if not backup_health.is_problem else "❌"
     maintenance_icon = "✅" if not maintenance_health.is_problem else "❌"
     bitget_text = _format_bitget_counts(bitget_counts)
-    processing_text = _format_stale_processing_count(stale_processing_count)
+    processing_text = _format_stale_processing_count(stale_processing_count, processing_threshold_seconds)
     error_text = _format_recent_errors(recent_errors)
 
     backup_msg_escaped = html_escape(backup_health.message)
@@ -257,10 +275,14 @@ def _count_bitget_categories(logs: list) -> dict[str, int]:
     return counts
 
 
-async def _count_stale_processing_orders(pending_order_repo, now: datetime) -> int | None:
+async def _count_stale_processing_orders(
+    pending_order_repo,
+    now: datetime,
+    threshold_seconds: int,
+) -> int | None:
     if not pending_order_repo:
         return None
-    cutoff = now - timedelta(seconds=Config.PENDING_ORDER_RECONCILE_AFTER_SECONDS)
+    cutoff = now - timedelta(seconds=threshold_seconds)
     try:
         result = await pending_order_repo.count_stale_processing_orders(cutoff)
         return int(result) if result is not None else None
@@ -274,12 +296,12 @@ def _format_bitget_counts(counts: dict[str, int]) -> str:
     return "⚠️ " + " / ".join(f"{html_escape(category)}: {count}" for category, count in sorted(counts.items()))
 
 
-def _format_stale_processing_count(count: int | None) -> str:
+def _format_stale_processing_count(count: int | None, threshold_seconds: int = 900) -> str:
     if count is None:
         return "未知"
     if count == 0:
         return "✅ 0 笔"
-    threshold_minutes = max(int(Config.PENDING_ORDER_RECONCILE_AFTER_SECONDS / 60), 1)
+    threshold_minutes = max(int(threshold_seconds / 60), 1)
     return f"⚠️ {count} 笔超过 {threshold_minutes} 分钟"
 
 

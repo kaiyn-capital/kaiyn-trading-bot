@@ -44,6 +44,10 @@ class BotHandlerContext:
     def started_at(self):
         return getattr(self._owner, "started_at", None)
 
+    @property
+    def settings(self):
+        return self._owner.settings
+
     def set_user_session(self, telegram_id: int, data: dict):
         return self._owner.set_user_session(telegram_id, data)
 

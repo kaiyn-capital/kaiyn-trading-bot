@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from settings_factory import make_settings
 
 from app.bot import TelegramBot
 from app.bot_admin_handlers import AdminHandlersMixin
@@ -30,8 +31,9 @@ class FakeMessage:
 
 
 class FakeAdminHandler(AdminHandlersMixin):
-    def __init__(self, user):
+    def __init__(self, user, settings=None):
         self.user = user
+        self.settings = settings or make_settings(admin_ids=(123,))
 
     async def _get_or_create_user(self, update):
         return self.user
@@ -49,8 +51,9 @@ def make_user(telegram_id=123):
     return SimpleNamespace(id=1, telegram_id=telegram_id)
 
 
-def make_bot(user):
+def make_bot(user, settings=None):
     bot = TelegramBot.__new__(TelegramBot)
+    bot.settings = settings or make_settings(admin_ids=(123,))
     bot.user_sessions = {}
 
     async def get_user(update):
@@ -244,10 +247,9 @@ async def test_unknown_callback_keeps_unknown_operation_message():
 
 
 @pytest.mark.asyncio
-async def test_admin_callback_rejects_non_admin_without_editing_or_session(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "999")
+async def test_admin_callback_rejects_non_admin_without_editing_or_session():
     user = make_user(telegram_id=123)
-    bot = make_bot(user)
+    bot = make_bot(user, settings=make_settings(admin_ids=(999,)))
     bot.user_sessions = {}
     update = make_update("manage_channels", telegram_id=user.telegram_id)
 
@@ -259,9 +261,8 @@ async def test_admin_callback_rejects_non_admin_without_editing_or_session(monke
 
 
 @pytest.mark.asyncio
-async def test_require_admin_rejects_non_admin(monkeypatch):
-    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "999")
-    handler = FakeAdminHandler(make_user(telegram_id=123))
+async def test_require_admin_rejects_non_admin():
+    handler = FakeAdminHandler(make_user(telegram_id=123), settings=make_settings(admin_ids=(999,)))
     update = SimpleNamespace(message=FakeMessage())
 
     result = await handler._require_admin(update)

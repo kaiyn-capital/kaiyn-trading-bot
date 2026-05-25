@@ -1,8 +1,8 @@
 from datetime import datetime
 from typing import Any
 
-from .config import Config
 from .session_store import SessionStore
+from .settings import Settings
 
 SESSION_EXPIRED_MESSAGE = "⏳ 此設定流程已超过 5 分钟，请重新开始。"
 
@@ -18,9 +18,15 @@ class UserSessionMixin:
         if not hasattr(self, "_session_store_delegate"):
             if not hasattr(self, "user_sessions"):
                 self.user_sessions: dict[int, object] = {}
+            settings = getattr(self, "settings", None)
+            ttl_seconds = (
+                settings.user_session_ttl_seconds
+                if isinstance(settings, Settings)
+                else Settings.from_env().user_session_ttl_seconds
+            )
             self._session_store_delegate = SessionStore(
                 sessions_dict=self.user_sessions,
-                ttl_seconds=Config.USER_SESSION_TTL_SECONDS,
+                ttl_seconds=ttl_seconds,
                 now_func=self._session_now,
             )
         return self._session_store_delegate

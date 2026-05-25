@@ -11,6 +11,7 @@ from .decimal_utils import decimal_text, to_decimal
 from .encryption import EncryptionManager
 from .log_sanitizer import summarize_order_response
 from .market_types import MarketCandle
+from .settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -18,15 +19,21 @@ logger = logging.getLogger(__name__)
 class BitgetTradeManager:
     """Higher-level Bitget trading operations for bot users."""
 
-    def __init__(self, encryption_manager: EncryptionManager):
+    def __init__(self, encryption_manager: EncryptionManager, *, settings: Settings | None = None):
         self.encryption_manager = encryption_manager
+        self.settings = settings or Settings.from_env()
         self._clients = {}
-        self.public_market = BitgetPublicMarket()
+        self.public_market = BitgetPublicMarket(base_url=self.settings.bitget_api_url)
 
     def _get_client(self, user_id: int, encrypted_credentials: tuple[str, str, str]) -> BitgetAPIClient:
         if user_id not in self._clients:
             api_key, secret_key, passphrase = self.encryption_manager.decrypt_api_credentials(*encrypted_credentials)
-            self._clients[user_id] = BitgetAPIClient(api_key, secret_key, passphrase)
+            self._clients[user_id] = BitgetAPIClient(
+                api_key,
+                secret_key,
+                passphrase,
+                base_url=self.settings.bitget_api_url,
+            )
 
         return self._clients[user_id]
 
@@ -47,7 +54,7 @@ class BitgetTradeManager:
         client = None
         try:
             api_key, secret_key, passphrase = self.encryption_manager.decrypt_api_credentials(*encrypted_credentials)
-            client = BitgetAPIClient(api_key, secret_key, passphrase)
+            client = BitgetAPIClient(api_key, secret_key, passphrase, base_url=self.settings.bitget_api_url)
 
             result = await client.get_account_assets()
 
@@ -76,7 +83,7 @@ class BitgetTradeManager:
         client = None
         try:
             api_key, secret_key, passphrase = self.encryption_manager.decrypt_api_credentials(*encrypted_credentials)
-            client = BitgetAPIClient(api_key, secret_key, passphrase)
+            client = BitgetAPIClient(api_key, secret_key, passphrase, base_url=self.settings.bitget_api_url)
 
             result = await client.get_account_uid()
 

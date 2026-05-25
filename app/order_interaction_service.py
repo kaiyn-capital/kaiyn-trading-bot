@@ -35,6 +35,7 @@ from .risk_limits import (
     get_effective_daily_trade_limit,
     get_effective_position_limit,
 )
+from .settings import Settings
 from .telegram_formatting import HTML_PARSE_MODE, html_code, html_escape
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,7 @@ class TelegramOrderFlowService:
         audit_owner,
         failure_alert_handler=None,
         signal_record_repo=None,
+        settings: Settings | None = None,
     ):
         self.bot = bot
         self.user_repo = user_repo
@@ -95,6 +97,7 @@ class TelegramOrderFlowService:
         self.audit_owner = audit_owner
         self.failure_alert_handler = failure_alert_handler
         self.signal_record_repo = signal_record_repo
+        self.settings = settings or Settings.from_env()
 
     async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
         if self.failure_alert_handler:
@@ -104,7 +107,7 @@ class TelegramOrderFlowService:
         return await self.trade_repo.count_daily_non_failed_trades(user_data.id, day_start_utc)
 
     async def _ensure_daily_trade_limit_available(self, user_data, day_start_utc: datetime) -> int:
-        daily_trade_limit = get_effective_daily_trade_limit(user_data)
+        daily_trade_limit = get_effective_daily_trade_limit(user_data, self.settings.max_daily_trades)
         current_count = await self._get_daily_trade_count(user_data, day_start_utc)
         ensure_daily_trade_limit_not_reached(
             current_count=current_count,
@@ -157,8 +160,10 @@ class TelegramOrderFlowService:
             "direction": direction,
             "order_mode": order_mode,
             "position_value": decimal_json(position_value),
-            "effective_position_limit": decimal_json(get_effective_position_limit(user_data)),
-            "effective_daily_trade_limit": get_effective_daily_trade_limit(user_data),
+            "effective_position_limit": decimal_json(
+                get_effective_position_limit(user_data, self.settings.max_position_size)
+            ),
+            "effective_daily_trade_limit": get_effective_daily_trade_limit(user_data, self.settings.max_daily_trades),
             "pending_order_token": summarize_identifier(pending_order_token),
             **risk_error.details,
         }
@@ -354,7 +359,7 @@ class TelegramOrderFlowService:
                 return
 
             preview = apply_order_validation(preview, validation)
-            ensure_position_within_limit(preview.position_value, user_data)
+            ensure_position_within_limit(preview.position_value, user_data, self.settings.max_position_size)
 
             pending_order = await self.pending_order_repo.create_pending_order(
                 user_id=user_data.id,
@@ -694,7 +699,7 @@ class TelegramOrderFlowService:
             position_value = validation.position_value or position_value
             if order_mode == "limit":
                 limit_price = validation.limit_price
-            ensure_position_within_limit(position_value, user_data)
+            ensure_position_within_limit(position_value, user_data, self.settings.max_position_size)
 
             logger.info(
                 f"Executing {order_mode} order for {symbol}, direction: {direction}, "

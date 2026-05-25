@@ -3,7 +3,6 @@ from datetime import UTC, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from .config import Config
 from .decimal_utils import decimal_json, to_decimal_or_none
 
 UTC_PLUS_8 = timezone(timedelta(hours=8))
@@ -36,16 +35,16 @@ def _positive_int_or_none(value: Any) -> int | None:
     return parsed if parsed > 0 else None
 
 
-def get_effective_position_limit(user_data: object) -> Decimal:
+def get_effective_position_limit(user_data: object, global_max_position_size: Any = Decimal("1000.0")) -> Decimal:
     """Return the stricter positive position cap between global and user settings."""
-    global_limit = _positive_decimal_or_none(Config.MAX_POSITION_SIZE) or Decimal("1000.0")
+    global_limit = _positive_decimal_or_none(global_max_position_size) or Decimal("1000.0")
     user_limit = _positive_decimal_or_none(getattr(user_data, "max_position_size", None))
     return min(global_limit, user_limit) if user_limit else global_limit
 
 
-def get_effective_daily_trade_limit(user_data: object) -> int:
+def get_effective_daily_trade_limit(user_data: object, global_daily_trade_limit: Any = 10) -> int:
     """Return the stricter positive daily trade cap between global and user settings."""
-    global_limit = _positive_int_or_none(Config.MAX_DAILY_TRADES) or 10
+    global_limit = _positive_int_or_none(global_daily_trade_limit) or 10
     user_limit = _positive_int_or_none(getattr(user_data, "daily_trade_limit", None))
     return min(global_limit, user_limit) if user_limit else global_limit
 
@@ -101,9 +100,13 @@ def build_daily_trade_limit_error(
     )
 
 
-def ensure_position_within_limit(position_value: Decimal | float, user_data: object) -> None:
+def ensure_position_within_limit(
+    position_value: Decimal | float,
+    user_data: object,
+    global_max_position_size: Any = Decimal("1000.0"),
+) -> None:
     position_value = _positive_decimal_or_none(position_value) or Decimal("0")
-    position_limit = get_effective_position_limit(user_data)
+    position_limit = get_effective_position_limit(user_data, global_max_position_size)
     if position_value > position_limit:
         raise build_position_limit_error(position_value, position_limit)
 

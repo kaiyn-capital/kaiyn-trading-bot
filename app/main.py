@@ -18,27 +18,27 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from app.admin_alerts import send_direct_admin_alert
-from app.config import Config
 from app.database import (
     cleanup_retention_records,
     get_system_log_repo,
     health_check,
     init_database,
 )
+from app.settings import Settings
 from app.telegram_formatting import html_escape
 
 
 # 設置日誌
-def setup_logging():
+def setup_logging(settings: Settings):
     """配置日誌系統"""
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    log_level = getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO)
+    log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
     Path("logs").mkdir(exist_ok=True)
     file_handler = TimedRotatingFileHandler(
         "logs/app.log",
         when="midnight",
         interval=1,
-        backupCount=Config.RETENTION_DAYS,
+        backupCount=settings.retention_days,
         encoding="utf-8",
     )
 
@@ -59,12 +59,12 @@ def setup_logging():
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 
-async def check_requirements():
+async def check_requirements(settings: Settings):
     """檢查必要的依賴和配置"""
     try:
         # 檢查配置
-        Config.validate()
-        init_database()
+        settings.validate()
+        init_database(settings.database_url, debug=settings.debug)
 
         # 檢查必要目錄
         log_dir = Path("logs")
@@ -76,6 +76,7 @@ async def check_requirements():
             await send_direct_admin_alert(
                 "❌ Kaiyn Trading Bot 启动前 DB 健康检查失败。",
                 alert_key="startup_db_failure",
+                settings=settings,
             )
             return False
 
@@ -86,6 +87,7 @@ async def check_requirements():
         await send_direct_admin_alert(
             f"❌ Kaiyn Trading Bot 启动前系统检查失败。\n\n错误：{html_escape(e)}",
             alert_key="startup_requirements_failure",
+            settings=settings,
         )
         return False
 
@@ -93,14 +95,15 @@ async def check_requirements():
 async def main():
     """主函數"""
     print("🚀 啟動 Bitget Telegram 交易機器人...")
+    settings = Settings.from_env()
 
     # 設置日誌
-    setup_logging()
+    setup_logging(settings)
     logger = logging.getLogger(__name__)
 
     try:
         # 檢查運行要求
-        if not await check_requirements():
+        if not await check_requirements(settings):
             logger.error("❌ 系統檢查失敗，無法啟動")
             return 1
 
@@ -110,7 +113,7 @@ async def main():
         logger.info("啟動 Telegram 機器人...")
         from app.bot import run_bot
 
-        await run_bot()
+        await run_bot(settings)
 
         return 0
 
@@ -123,29 +126,32 @@ async def main():
         await send_direct_admin_alert(
             f"❌ Kaiyn Trading Bot 启动失败。\n\n错误：{html_escape(e)}",
             alert_key="startup_failure",
+            settings=settings,
         )
         return 1
 
 
 async def run_cleanup_retention(dry_run: bool = False) -> int:
     """Run retention cleanup without requiring Telegram credentials."""
-    setup_logging()
+    settings = Settings.from_env()
+    setup_logging(settings)
     logger = logging.getLogger(__name__)
 
     try:
-        Config.validate_database_url()
-        init_database()
+        settings.validate_database_url()
+        init_database(settings.database_url, debug=settings.debug)
 
         if not await health_check():
             print("❌ 資料庫連接失敗")
             await send_direct_admin_alert(
                 "❌ Kaiyn Trading Bot maintenance cleanup 无法连接 DB。",
                 alert_key="maintenance_db_failure",
+                settings=settings,
             )
             return 1
 
         result = await cleanup_retention_records(
-            retention_days=Config.RETENTION_DAYS,
+            retention_days=settings.retention_days,
             dry_run=dry_run,
         )
         action = "將清理" if dry_run else "已清理"
@@ -182,6 +188,7 @@ async def run_cleanup_retention(dry_run: bool = False) -> int:
         await send_direct_admin_alert(
             f"❌ Kaiyn Trading Bot maintenance cleanup 失败。\n\n错误：{html_escape(e)}",
             alert_key="maintenance_cleanup_failed",
+            settings=settings,
         )
         return 1
 
@@ -322,10 +329,11 @@ if __name__ == "__main__":
     elif args.generate_key:
         generate_encryption_key()
     elif args.check_db:
-        setup_logging()
+        settings = Settings.from_env()
+        setup_logging(settings)
         try:
-            Config.validate_database_url()
-            init_database()
+            settings.validate_database_url()
+            init_database(settings.database_url, debug=settings.debug)
             if asyncio.run(health_check()):
                 print("✅ 資料庫連接正常")
             else:
