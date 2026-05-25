@@ -20,6 +20,7 @@ from .bot_admin_channel_formatters import (
     manage_channels_keyboard,
 )
 from .bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
+from .session_types import ChannelManagementSession
 from .telegram_formatting import HTML_PARSE_MODE, html_escape
 
 logger = logging.getLogger(__name__)
@@ -41,16 +42,20 @@ class AdminChannels:
             return
 
         try:
-            session_data = self.bot.get_active_user_session(user.telegram_id)
-            if not session_data:
+            session_data = await self.bot.get_active_user_session(user.telegram_id)
+            if not isinstance(session_data, ChannelManagementSession):
                 await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
                 return
 
             channel_number = int(update.message.text.strip())
-            channels_data = session_data.get("channels_data", [])
+            channels_data = session_data.channels_data
 
             if not channels_data or channel_number < 1 or channel_number > len(channels_data):
-                self.bot.update_user_session(user.telegram_id, {"step": "delete_channel"})
+                await self.bot.update_user_session(
+                    user.telegram_id,
+                    ChannelManagementSession(step="delete_channel", channels_data=channels_data),
+                    user_id=getattr(user, "id", None),
+                )
                 await emit_audit_event(
                     self.bot,
                     user,
@@ -97,10 +102,16 @@ class AdminChannels:
                 )
                 await update.message.reply_text("❌ 找不到指定的频道")
 
-            self.bot.delete_user_session(user.telegram_id)
+            await self.bot.delete_user_session(user.telegram_id)
 
         except ValueError:
-            self.bot.update_user_session(user.telegram_id, {"step": "delete_channel"})
+            current_session = await self.bot.get_active_user_session(user.telegram_id)
+            if isinstance(current_session, ChannelManagementSession):
+                await self.bot.update_user_session(
+                    user.telegram_id,
+                    ChannelManagementSession(step="delete_channel", channels_data=current_session.channels_data),
+                    user_id=getattr(user, "id", None),
+                )
             await emit_audit_event(
                 self.bot,
                 user,
@@ -313,7 +324,11 @@ class AdminChannels:
 
             channels_data = build_manage_channels_data(channels)
 
-            self.bot.set_user_session(user.telegram_id, {"channels_data": channels_data})
+            await self.bot.set_user_session(
+                user.telegram_id,
+                ChannelManagementSession(channels_data=channels_data),
+                user_id=getattr(user, "id", None),
+            )
 
             await query.edit_message_text(
                 format_manage_channels_html(channels_data),
@@ -329,9 +344,9 @@ class AdminChannels:
             )
 
     async def _handle_delete_channel_start_callback(self, query, user):
-        session_data = self.bot.get_active_user_session(user.telegram_id)
-        if not session_data or not session_data.get("channels_data"):
-            self.bot.delete_user_session(user.telegram_id)
+        session_data = await self.bot.get_active_user_session(user.telegram_id)
+        if not isinstance(session_data, ChannelManagementSession) or not session_data.channels_data:
+            await self.bot.delete_user_session(user.telegram_id)
             await query.edit_message_text(SESSION_EXPIRED_MESSAGE)
             return
 
@@ -339,7 +354,11 @@ class AdminChannels:
             DELETE_CHANNEL_PROMPT_MESSAGE,
             parse_mode=HTML_PARSE_MODE,
         )
-        self.bot.update_user_session(user.telegram_id, {"step": "delete_channel"})
+        await self.bot.update_user_session(
+            user.telegram_id,
+            ChannelManagementSession(step="delete_channel", channels_data=session_data.channels_data),
+            user_id=getattr(user, "id", None),
+        )
 
     async def _handle_return_admin_channels_callback(self, query, user):
         try:

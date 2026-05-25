@@ -126,14 +126,14 @@ sequenceDiagram
 - 基於 Telegram 的 Bitget USDT-FUTURES 交易信號執行。
 - 加密使用者 API 憑證儲存與 API 連線檢查。
 - 固定 1R 風險計算，支援市價單與 GTC 限價單模式。
-- 以 PostgreSQL 為後端的待確認訂單確認流程。
+- 以 PostgreSQL 為後端的待確認訂單與 Telegram 預覽／session 流程。
 - 管理頻道／群組轉發，支援 Telegram 論壇主題。
 - 管理員健康檢查、告警、審計事件、資料清理與備份。
 - Docker Compose 本地／部署一致性，搭配 CI 驗證。
 
 ## 工程備註
 
-- 交易狀態儲存於 PostgreSQL，待確認訂單在 Bot 重啟後仍然有效，重複點擊由 row locking 防護。
+- 交易狀態與 Telegram 對話 session 儲存於 PostgreSQL，待確認訂單與有效 TTL 內的預覽在 Bot 重啟後仍然有效。
 - 交易所執行在確認前與送單前各驗證一次 Bitget 合約規則。
 - 運維是產品功能的一部分：健康檢查、審計事件、資料清理、備份與還原文件均已內建。
 - CI 使用與正式環境相同的 Docker Compose 流程，包含 lockfile、migration/model、型別與 PostgreSQL 整合測試，不依賴本機服務。

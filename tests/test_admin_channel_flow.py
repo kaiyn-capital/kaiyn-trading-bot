@@ -10,6 +10,7 @@ from app.bot_sessions import SESSION_EXPIRED_MESSAGE
 from app.models import ChannelGroup
 from app.repositories.channels import channel_record_from_model
 from app.repository_types import ChannelRecord
+from app.session_types import ChannelManagementSession
 
 
 def make_channel_record(**overrides):
@@ -142,13 +143,6 @@ class FakeAdminHandler(AdminHandlersMixin):
         self.settings = settings or make_settings(admin_ids=(123,))
         self.user_sessions = {}
         self.now = datetime(2026, 5, 18, 12, 0, 0)
-        self.set_user_session(
-            123,
-            {
-                "step": "delete_channel",
-                "channels_data": [{"chat_id": "-1001", "title": "test_kaiyn"}],
-            },
-        )
         self.user = SimpleNamespace(telegram_id=123)
         self.user_repo = user_repo or FakeUserRepo()
         self.system_log_repo = system_log_repo or FakeSystemLogRepo()
@@ -185,6 +179,7 @@ async def test_handler_context_delegates_active_channel_lookup():
     class Owner:
         def __init__(self):
             self.calls = []
+            self.user_session_repo = object()
 
         async def _get_active_channel_by_number(self, channel_number):
             self.calls.append(channel_number)
@@ -197,12 +192,20 @@ async def test_handler_context_delegates_active_channel_lookup():
 
     assert owner.calls == [2]
     assert channel.id == 2
+    assert context.user_session_repo is owner.user_session_repo
 
 
 @pytest.mark.asyncio
 async def test_delete_channel_success_reply_uses_html():
     channel_repo = FakeChannelRepo()
     handler = FakeAdminHandler(channel_repo)
+    await handler.set_user_session(
+        123,
+        ChannelManagementSession(
+            step="delete_channel",
+            channels_data=[{"chat_id": "-1001", "title": "test_kaiyn"}],
+        ),
+    )
     update = make_update("1")
 
     await handler.delete_channel_by_number(update, make_context())
@@ -218,6 +221,13 @@ async def test_delete_channel_success_reply_uses_html():
 async def test_expired_delete_channel_session_does_not_delete():
     channel_repo = FakeChannelRepo()
     handler = FakeAdminHandler(channel_repo)
+    await handler.set_user_session(
+        123,
+        ChannelManagementSession(
+            step="delete_channel",
+            channels_data=[{"chat_id": "-1001", "title": "test_kaiyn"}],
+        ),
+    )
     handler.now = handler.now + timedelta(seconds=301)
     update = make_update("1")
 
@@ -231,6 +241,10 @@ async def test_expired_delete_channel_session_does_not_delete():
 @pytest.mark.asyncio
 async def test_expired_channel_data_does_not_enter_delete_number_flow():
     handler = FakeAdminHandler(FakeChannelRepo())
+    await handler.set_user_session(
+        123,
+        ChannelManagementSession(channels_data=[{"chat_id": "-1001", "title": "test_kaiyn"}]),
+    )
     handler.now = handler.now + timedelta(seconds=301)
     query = FakeQuery()
 
@@ -263,7 +277,7 @@ async def test_manage_channels_callback_sets_session_and_returns_keyboard():
 
     await handler._handle_manage_channels_callback(query, handler.user)
 
-    session = handler.get_active_user_session(handler.user.telegram_id)
+    session = await handler.get_active_user_session(handler.user.telegram_id)
     assert session["channels_data"] == [
         {
             "id": 1,

@@ -9,6 +9,7 @@ from telegram.ext import ConversationHandler
 from .bitget_errors import UNKNOWN_MESSAGE, BitgetAPIError, classify_bitget_exception
 from .bot_sessions import SESSION_EXPIRED_MESSAGE
 from .bot_states import WAITING_API_KEY, WAITING_PASSPHRASE, WAITING_SECRET_KEY
+from .session_types import ApiSetupSession
 from .telegram_formatting import HTML_PARSE_MODE, html_code, html_escape
 
 logger = logging.getLogger(__name__)
@@ -54,8 +55,8 @@ class TelegramApiSetupService:
         if await self.session_owner._reply_if_session_expired(update, user.telegram_id):
             return ConversationHandler.END
 
-        session = self.session_owner.get_active_user_session(user.telegram_id)
-        if not session:
+        session = await self.session_owner.get_active_user_session(user.telegram_id)
+        if not isinstance(session, ApiSetupSession):
             await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
             return ConversationHandler.END
 
@@ -71,10 +72,18 @@ class TelegramApiSetupService:
                 chat_id=update.effective_chat.id,
                 text="❌ API Key 格式不正确，请重新输入：",
             )
-            self.session_owner.update_user_session(user.telegram_id, {"step": "api_key"})
+            await self.session_owner.update_user_session(
+                user.telegram_id,
+                ApiSetupSession(step="api_key", api_key=session.api_key, secret_key=session.secret_key),
+                user_id=getattr(user, "id", None),
+            )
             return WAITING_API_KEY
 
-        self.session_owner.update_user_session(user.telegram_id, {"api_key": api_key, "step": "secret_key"})
+        await self.session_owner.update_user_session(
+            user.telegram_id,
+            ApiSetupSession(step="secret_key", api_key=api_key),
+            user_id=getattr(user, "id", None),
+        )
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -90,8 +99,8 @@ class TelegramApiSetupService:
         if await self.session_owner._reply_if_session_expired(update, user.telegram_id):
             return ConversationHandler.END
 
-        session = self.session_owner.get_active_user_session(user.telegram_id)
-        if not session:
+        session = await self.session_owner.get_active_user_session(user.telegram_id)
+        if not isinstance(session, ApiSetupSession):
             await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
             return ConversationHandler.END
 
@@ -107,10 +116,18 @@ class TelegramApiSetupService:
                 chat_id=update.effective_chat.id,
                 text="❌ Secret Key 格式不正确，请重新输入：",
             )
-            self.session_owner.update_user_session(user.telegram_id, {"step": "secret_key"})
+            await self.session_owner.update_user_session(
+                user.telegram_id,
+                ApiSetupSession(step="secret_key", api_key=session.api_key, secret_key=session.secret_key),
+                user_id=getattr(user, "id", None),
+            )
             return WAITING_SECRET_KEY
 
-        self.session_owner.update_user_session(user.telegram_id, {"secret_key": secret_key, "step": "passphrase"})
+        await self.session_owner.update_user_session(
+            user.telegram_id,
+            ApiSetupSession(step="passphrase", api_key=session.api_key, secret_key=secret_key),
+            user_id=getattr(user, "id", None),
+        )
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -126,8 +143,8 @@ class TelegramApiSetupService:
         if await self.session_owner._reply_if_session_expired(update, user.telegram_id):
             return ConversationHandler.END
 
-        session = self.session_owner.get_active_user_session(user.telegram_id)
-        if not session:
+        session = await self.session_owner.get_active_user_session(user.telegram_id)
+        if not isinstance(session, ApiSetupSession):
             await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
             return ConversationHandler.END
 
@@ -143,14 +160,18 @@ class TelegramApiSetupService:
                 chat_id=update.effective_chat.id,
                 text="❌ Passphrase 不能为空，请重新输入：",
             )
-            self.session_owner.update_user_session(user.telegram_id, {"step": "passphrase"})
+            await self.session_owner.update_user_session(
+                user.telegram_id,
+                ApiSetupSession(step="passphrase", api_key=session.api_key, secret_key=session.secret_key),
+                user_id=getattr(user, "id", None),
+            )
             return WAITING_PASSPHRASE
 
-        api_key = session.get("api_key")
-        secret_key = session.get("secret_key")
+        api_key = session.api_key
+        secret_key = session.secret_key
 
         if not all([api_key, secret_key]):
-            self.session_owner.delete_user_session(user.telegram_id)
+            await self.session_owner.delete_user_session(user.telegram_id)
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text="❌ 设置过程中出现错误，请重新开始。",
@@ -201,6 +222,6 @@ class TelegramApiSetupService:
             logger.warning(f"Failed to update API setup message: {e}")
 
         finally:
-            self.session_owner.delete_user_session(user.telegram_id)
+            await self.session_owner.delete_user_session(user.telegram_id)
 
         return ConversationHandler.END

@@ -33,6 +33,10 @@ class BotHandlerContext:
         return self._owner.signal_record_repo
 
     @property
+    def user_session_repo(self):
+        return self._owner.user_session_repo
+
+    @property
     def encryption_manager(self):
         return self._owner.encryption_manager
 
@@ -48,23 +52,23 @@ class BotHandlerContext:
     def settings(self):
         return self._owner.settings
 
-    def set_user_session(self, telegram_id: int, data: dict):
-        return self._owner.set_user_session(telegram_id, data)
+    async def set_user_session(self, telegram_id: int, payload, user_id: int | None = None):
+        return await self._owner.set_user_session(telegram_id, payload, user_id=user_id)
 
-    def update_user_session(self, telegram_id: int, updates: dict):
-        return self._owner.update_user_session(telegram_id, updates)
+    async def update_user_session(self, telegram_id: int, payload, user_id: int | None = None):
+        return await self._owner.update_user_session(telegram_id, payload, user_id=user_id)
 
-    def get_active_user_session(self, telegram_id: int):
-        return self._owner.get_active_user_session(telegram_id)
+    async def get_active_user_session(self, telegram_id: int):
+        return await self._owner.get_active_user_session(telegram_id)
 
-    def peek_user_session(self, telegram_id: int):
-        return self._owner.peek_user_session(telegram_id)
+    async def peek_user_session(self, telegram_id: int):
+        return await self._owner.peek_user_session(telegram_id)
 
-    def pop_expired_user_session(self, telegram_id: int):
-        return self._owner.pop_expired_user_session(telegram_id)
+    async def pop_expired_user_session(self, telegram_id: int):
+        return await self._owner.pop_expired_user_session(telegram_id)
 
-    def delete_user_session(self, telegram_id: int) -> None:
-        self._owner.delete_user_session(telegram_id)
+    async def delete_user_session(self, telegram_id: int) -> None:
+        await self._owner.delete_user_session(telegram_id)
 
     async def _reply_if_session_expired(self, update, telegram_id: int) -> bool:
         return await self._owner._reply_if_session_expired(update, telegram_id)

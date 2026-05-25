@@ -17,6 +17,7 @@ from .bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
 from .bot_states import WAITING_API_KEY
 from .decimal_utils import decimal_text, to_decimal
 from .log_sanitizer import summarize_balance_response
+from .session_types import ApiSetupSession, RiskAmountSession
 from .telegram_formatting import HTML_PARSE_MODE, html_code, html_escape
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,9 @@ class AccountHandlers:
             )
             return ConversationHandler.END
 
-        self.bot.set_user_session(user.telegram_id, {"step": "api_key"})
+        await self.bot.set_user_session(
+            user.telegram_id, ApiSetupSession(step="api_key"), user_id=getattr(user, "id", None)
+        )
 
         await update.message.reply_text(
             "🔐 <b>设置 Bitget API</b>\n\n"
@@ -211,7 +214,7 @@ class AccountHandlers:
         current_risk = getattr(user, "fixed_risk_amount", None)
 
         if current_risk is None:
-            self.bot.set_user_session(user.telegram_id, {"step": "risk_amount"})
+            await self.bot.set_user_session(user.telegram_id, RiskAmountSession(), user_id=getattr(user, "id", None))
 
             await query.edit_message_text(
                 "💰 <b>设置每单固定止损金额，以进行定 R 开仓。</b>\n\n请输入定 R 金额 u（数字）：",
@@ -237,7 +240,8 @@ class AccountHandlers:
         if await self.bot._reply_if_session_expired(update, user.telegram_id):
             return
 
-        if not self.bot.get_active_user_session(user.telegram_id):
+        session = await self.bot.get_active_user_session(user.telegram_id)
+        if not isinstance(session, RiskAmountSession):
             await update.message.reply_text(SESSION_EXPIRED_MESSAGE)
             return
 
@@ -258,12 +262,12 @@ class AccountHandlers:
             else:
                 await update.message.reply_text("❌ 设置失败，请重试")
 
-            self.bot.delete_user_session(user.telegram_id)
+            await self.bot.delete_user_session(user.telegram_id)
             return
 
         except ValueError:
             await update.message.reply_text("❌ 输入格式不正确，请输入有效数字：\n\n例如：50 或 100.5")
-            self.bot.update_user_session(user.telegram_id, {"step": "risk_amount"})
+            await self.bot.update_user_session(user.telegram_id, RiskAmountSession(), user_id=getattr(user, "id", None))
             return
 
     async def handle_global_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -278,9 +282,9 @@ class AccountHandlers:
         if await self.bot._reply_if_session_expired(update, user.telegram_id):
             return
 
-        session = self.bot.get_active_user_session(user.telegram_id)
+        session = await self.bot.get_active_user_session(user.telegram_id)
         if session:
-            step = session.get("step")
+            step = session.step
 
             if step == "api_key":
                 await self.set_api_key(update, context)
@@ -314,7 +318,9 @@ class AccountHandlers:
             )
             return
 
-        self.bot.set_user_session(user.telegram_id, {"step": "api_key"})
+        await self.bot.set_user_session(
+            user.telegram_id, ApiSetupSession(step="api_key"), user_id=getattr(user, "id", None)
+        )
 
         await query.edit_message_text(
             "🔐 <b>设置 Bitget API</b>\n\n"
@@ -422,7 +428,9 @@ class AccountHandlers:
 
     async def _handle_confirm_modify_api(self, query, user):
         """Handle API modification confirmation."""
-        self.bot.set_user_session(user.telegram_id, {"step": "api_key"})
+        await self.bot.set_user_session(
+            user.telegram_id, ApiSetupSession(step="api_key"), user_id=getattr(user, "id", None)
+        )
 
         await query.edit_message_text(
             "🔐 <b>修改 Bitget API</b>\n\n"
@@ -435,7 +443,7 @@ class AccountHandlers:
 
     async def _handle_confirm_change_risk(self, query, user):
         """Handle fixed risk amount change confirmation."""
-        self.bot.set_user_session(user.telegram_id, {"step": "risk_amount"})
+        await self.bot.set_user_session(user.telegram_id, RiskAmountSession(), user_id=getattr(user, "id", None))
 
         await query.edit_message_text(
             "💰 <b>设置每单固定止损金额，以进行定 R 开仓。</b>\n\n请输入定 R 金额 u（数字）：",

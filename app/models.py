@@ -62,6 +62,25 @@ class User(Base):
     notifications = relationship("NotificationLog", back_populates="user")
     pending_orders = relationship("PendingOrder", back_populates="user")
     signal_records = relationship("SignalRecord", back_populates="user")
+    sessions = relationship("UserSession", back_populates="user")
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+    __table_args__ = (UniqueConstraint("telegram_id", name="user_sessions_telegram_id_key"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(BigInteger, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    session_type = Column(String(64), nullable=False, index=True)
+    token = Column(String(128), nullable=True, index=True)
+    payload_encrypted = Column(Text, nullable=False)
+    payload_version = Column(Integer, nullable=False, default=1)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="sessions")
 
 
 class Trade(Base):

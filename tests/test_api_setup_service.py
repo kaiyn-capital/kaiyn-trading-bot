@@ -6,6 +6,7 @@ import pytest
 from app.bot_api_setup_service import TelegramApiSetupService
 from app.bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
 from app.bot_states import WAITING_PASSPHRASE, WAITING_SECRET_KEY
+from app.session_types import ApiSetupSession
 
 
 class FakeMessage:
@@ -136,7 +137,7 @@ def make_context():
 @pytest.mark.asyncio
 async def test_api_setup_service_advances_key_and_secret_steps_with_refreshed_ttl():
     harness = ApiSetupHarness()
-    harness.session_owner.set_user_session(123, {"step": "api_key"})
+    await harness.session_owner.set_user_session(123, ApiSetupSession(step="api_key"))
     harness.session_owner.now += timedelta(seconds=30)
 
     key_update = make_update("valid-api-key-123")
@@ -160,13 +161,13 @@ async def test_api_setup_service_advances_key_and_secret_steps_with_refreshed_tt
 @pytest.mark.asyncio
 async def test_api_setup_service_expired_passphrase_does_not_use_partial_credentials():
     harness = ApiSetupHarness()
-    harness.session_owner.set_user_session(
+    await harness.session_owner.set_user_session(
         123,
-        {
-            "step": "passphrase",
-            "api_key": "valid-api-key-123",
-            "secret_key": "valid-secret-key-123",
-        },
+        ApiSetupSession(
+            step="passphrase",
+            api_key="valid-api-key-123",
+            secret_key="valid-secret-key-123",
+        ),
     )
     harness.session_owner.now += timedelta(seconds=301)
     update = make_update("valid-passphrase")
@@ -184,13 +185,13 @@ async def test_api_setup_service_expired_passphrase_does_not_use_partial_credent
 @pytest.mark.asyncio
 async def test_api_setup_service_successful_passphrase_saves_credentials_and_invalidates_client():
     harness = ApiSetupHarness()
-    harness.session_owner.set_user_session(
+    await harness.session_owner.set_user_session(
         123,
-        {
-            "step": "passphrase",
-            "api_key": "valid-api-key-123",
-            "secret_key": "valid-secret-key-123",
-        },
+        ApiSetupSession(
+            step="passphrase",
+            api_key="valid-api-key-123",
+            secret_key="valid-secret-key-123",
+        ),
     )
     update = make_update("valid-passphrase")
     context = make_context()
