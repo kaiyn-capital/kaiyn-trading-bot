@@ -186,6 +186,7 @@ docker compose up -d bot maintenance db-backup
 | `SIGNAL_CHART_*` | `/send_signal` 附圖功能開關、K 線週期、K 線數量與 timeout |
 | `RETENTION_DAYS` | 累積紀錄與備份保留天數 |
 | `BACKUP_LOCAL_KEEP_COUNT` | 本機保留最近幾份 SQL 備份 |
+| `R2_*` / `BACKUP_ENCRYPTION_KEY` | 可選 Cloudflare R2 加密異地備份設定 |
 | `ADMIN_ALERT_*` / `BITGET_ALERT_*` | 管理員告警與 Bitget 連續錯誤門檻 |
 
 ## 測試與 CI
@@ -208,7 +209,7 @@ docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
 docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
 docker compose run --rm test python -m pytest --run-db
-docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py scripts/*.py tests/*.py
 git diff --check
 ```
 
@@ -227,6 +228,7 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 - `maintenance` 服務每日清理超過 30 天的累積紀錄。
 - `db-backup` 服務產生 gzip SQL 備份，並附 checksum 與 manifest。
 - 高風險操作前可執行 `make backup-now`，需要還原時使用 `make restore-latest` 還原最新本機備份。
+- 設定 Cloudflare R2 後，`db-backup` 會把加密備份上傳到異地，`make disaster-restore` 會先下載最新 R2 備份再還原。
 - Docker container logs 與 Bot file logs 都配置 rotation。
 - `/admin_health` 提供 DB、backup、cleanup、Bitget API 與近期錯誤狀態。
 - `/admin_audit [limit]` 查詢管理員、發單員與下單關鍵操作摘要。

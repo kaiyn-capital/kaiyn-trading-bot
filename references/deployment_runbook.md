@@ -198,6 +198,15 @@ LOG_LEVEL=INFO
 RETENTION_DAYS=30
 MAINTENANCE_INTERVAL_SECONDS=86400
 BACKUP_INTERVAL_SECONDS=86400
+BACKUP_LOCAL_KEEP_COUNT=3
+R2_BACKUP_ENABLED=true
+R2_ACCOUNT_ID=<cloudflare_account_id>
+R2_ENDPOINT=
+R2_BUCKET=kaiyn-trading-bot-backups
+R2_ACCESS_KEY_ID=<r2_access_key_id>
+R2_SECRET_ACCESS_KEY=<r2_secret_access_key>
+R2_BACKUP_PREFIX=kaiyn-trading-bot
+BACKUP_ENCRYPTION_KEY=<backup_fernet_key>
 ADMIN_NOTIFY_STARTUP_SUCCESS=True
 HEALTHCHECK_INTERVAL_SECONDS=300
 ADMIN_ALERT_COOLDOWN_SECONDS=1800
@@ -221,11 +230,20 @@ docker compose run --rm bot python -m app.main --generate-key
 
 把輸出的 key 填入 `.env`。`ENCRYPTION_KEY` 遺失後，DB 內已加密的 API credential 無法解密，所以它必須跟 PostgreSQL 備份分開保存。
 
+產生 `BACKUP_ENCRYPTION_KEY`：
+
+```bash
+make generate-backup-key
+```
+
+把輸出的 key 填入 `.env`。`BACKUP_ENCRYPTION_KEY` 用於 R2 備份上傳前加密，遺失後 R2 上的 SQL dump 不能解密。它可以和 `ENCRYPTION_KEY` 不同，且應同樣離線保存。
+
 注意：
 
 - `POSTGRES_PASSWORD` 必須同步出現在 `DATABASE_URL`。
 - `POSTGRES_PORT=127.0.0.1:5432` 只讓 host 本機連到 PostgreSQL，不對公網介面監聽。
-- Telegram token、admin IDs、DB password、encryption key 都不要提交到 git。
+- R2 token 建議使用 Object Read & Write，並限制到備份 bucket。
+- Telegram token、admin IDs、DB password、R2 secret、encryption key 都不要提交到 git。
 
 ## 7. 首次部署
 
@@ -298,7 +316,7 @@ docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
 docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
 docker compose run --rm test python -m pytest --run-db
-docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py scripts/*.py tests/*.py
 git diff --check
 ```
 
@@ -505,7 +523,19 @@ docker compose logs --tail 80 db-backup
 make backup-now
 ```
 
-每週或重大變更後，手動拉一份最新備份與 checksum 到本機或雲端：
+若 R2 已啟用，確認遠端上傳狀態：
+
+```bash
+cat backups/r2_backup_status.json
+```
+
+新 VPS 從 R2 還原最新備份：
+
+```bash
+make disaster-restore
+```
+
+每週或重大變更後，也可以手動拉一份最新本機備份與 checksum 到本機：
 
 ```bash
 scp deploy@<droplet-ip>:/opt/kaiyn-trading-bot/backups/kaiyn_trading_bot_*.sql.gz ./kaiyn-backups/
@@ -524,7 +554,7 @@ make restore-latest
 CONFIRM_RESTORE=YES make restore-latest
 ```
 
-完整流程請以 [backup_restore_runbook.md](backup_restore_runbook.md) 為準。下一階段會接 Cloudflare R2，讓最新備份離開 VPS。
+完整流程請以 [backup_restore_runbook.md](backup_restore_runbook.md) 為準。
 
 ## 14. 常用操作
 

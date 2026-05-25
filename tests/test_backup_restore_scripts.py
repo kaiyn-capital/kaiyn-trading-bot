@@ -12,6 +12,7 @@ def test_backup_restore_scripts_are_valid_sh():
     for script in [
         "scripts/backup_database.sh",
         "scripts/backup_loop.sh",
+        "scripts/disaster_restore_from_r2.sh",
         "scripts/restore_latest_backup.sh",
     ]:
         subprocess.run(["sh", "-n", str(ROOT / script)], check=True)  # noqa: S603, S607
@@ -19,10 +20,17 @@ def test_backup_restore_scripts_are_valid_sh():
 
 def test_db_backup_service_uses_shared_backup_script():
     compose = read_repo_file("compose.yml")
+    coolify_compose = read_repo_file("compose.coolify.yml")
 
+    assert "db-backup:" in compose
+    assert "image: *bot-image" in compose
+    assert "R2_BACKUP_ENABLED" in compose
+    assert "BACKUP_ENCRYPTION_KEY" in compose
     assert "./scripts:/scripts:ro" in compose
     assert "BACKUP_LOCAL_KEEP_COUNT" in compose
     assert "/scripts/backup_loop.sh" in compose
+    assert "image: ${BOT_IMAGE:?Set BOT_IMAGE in Coolify}" in coolify_compose
+    assert "/app/scripts/backup_loop.sh" in coolify_compose
 
 
 def test_backup_script_writes_manifest_and_ownerless_dump():
@@ -34,6 +42,9 @@ def test_backup_script_writes_manifest_and_ownerless_dump():
     assert "backup_status.json" in script
     assert ".sha256" in script
     assert "BACKUP_LOCAL_KEEP_COUNT" in script
+    assert "R2_BACKUP_ENABLED" in script
+    assert "r2_backup.py" in script
+    assert " upload" in script
 
 
 def test_restore_script_has_checksum_and_non_empty_database_guard():
@@ -51,6 +62,16 @@ def test_makefile_exposes_manual_backup_and_restore_targets():
     makefile = read_repo_file("Makefile")
 
     assert "backup-now:" in makefile
+    assert "r2-download-latest:" in makefile
     assert "restore-latest:" in makefile
+    assert "disaster-restore:" in makefile
+    assert "generate-backup-key:" in makefile
     assert "sh /scripts/backup_database.sh" in makefile
+    assert "r2_backup.py download-latest" in makefile
     assert "sh scripts/restore_latest_backup.sh" in makefile
+
+
+def test_backup_image_installs_postgres_client():
+    dockerfile = read_repo_file("Dockerfile")
+
+    assert "postgresql-client" in dockerfile

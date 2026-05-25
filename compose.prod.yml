@@ -6,3 +6,7 @@ services:
   maintenance:
     image: ${BOT_IMAGE:?Set BOT_IMAGE to a GHCR image tag or digest}
     build: !reset null
+
+  db-backup:
+    image: ${BOT_IMAGE:?Set BOT_IMAGE to a GHCR image tag or digest}
+    build: !reset null

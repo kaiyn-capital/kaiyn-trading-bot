@@ -100,11 +100,14 @@ Bitget/API 錯誤會統一分類並轉成簡短使用者訊息。
 - 每份備份產生 `.sha256` checksum。
 - `backup_status.json` 記錄最近一次備份結果。
 - `backup_manifest.json` 記錄最新成功備份的檔名、時間、sha256、大小與資料庫名稱。
+- 若 `R2_BACKUP_ENABLED=true`，備份會以 `BACKUP_ENCRYPTION_KEY` 加密後上傳 Cloudflare R2。
+- `r2_backup_status.json` 記錄最近一次 R2 上傳結果。
 
 還原流程：
 
 - 還原流程記錄於 [backup_restore_runbook.md](backup_restore_runbook.md)。
 - `make restore-latest` 會驗 checksum、檢查目標 DB 是否非空、還原 dump、執行 migration 與 DB health check。
+- `make disaster-restore` 會從 R2 下載最新 encrypted backup、解密、驗 checksum，再呼叫本機還原流程。
 - 目標 DB 非空時必須明確設定 `CONFIRM_RESTORE=YES`。
 
 ## Core Flow Tests
@@ -167,7 +170,7 @@ docker compose run --rm test ruff check .
 docker compose run --rm test ruff format --check .
 docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
 docker compose run --rm test python -m pytest --run-db
-docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py scripts/*.py tests/*.py
 git diff --check
 ```
 
