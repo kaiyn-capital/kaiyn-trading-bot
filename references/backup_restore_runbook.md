@@ -1,11 +1,16 @@
-# PostgreSQL 備份還原 Runbook
+# PostgreSQL 備份與一鍵還原 Runbook
 
-本文件用於驗證 `db-backup` 服務產生的 PostgreSQL gzip SQL 備份可以實際還原。還原驗證一律使用獨立臨時 PostgreSQL container，不連到正式 `postgres_data`，避免影響正式資料。
+本文件整理目前低成本備份方案。主目標不是 PITR，而是讓 VPS 壞掉時，可以在新 VPS 上用最新 PostgreSQL dump 快速還原。
 
-驗證頻率：
+目前階段：
 
-- 正式部署前至少驗證一次。
-- 之後每月驗證一次，或在重大改版後驗證一次。
+- `db-backup` 服務定期產生 gzip SQL dump。
+- 每份備份都有 `.sha256` checksum。
+- `backup_status.json` 保留 `/admin_health` 使用的最近備份狀態。
+- `backup_manifest.json` 保留最新成功備份的檔名、時間、sha256、大小與資料庫名稱。
+- `make restore-latest` 可將最新本機備份還原到 Compose PostgreSQL。
+
+下一階段會接 Cloudflare R2，讓最新備份離開 VPS。
 
 ## 1. 確認備份狀態
 
@@ -15,128 +20,125 @@
 cat backups/backup_status.json
 ```
 
-列出可用備份檔：
+查看最新成功備份 manifest：
+
+```bash
+cat backups/backup_manifest.json
+```
+
+列出本機備份：
 
 ```bash
 ls -lh backups/kaiyn_trading_bot_*.sql.gz
+ls -lh backups/kaiyn_trading_bot_*.sql.gz.sha256
 ```
 
-設定要驗證的備份檔路徑：
+## 2. 手動立即備份
+
+平常 `db-backup` 會依 `BACKUP_INTERVAL_SECONDS` 自動備份。需要在升級或操作前先手動打一份：
 
 ```bash
-BACKUP_FILE=backups/kaiyn_trading_bot_YYYYMMDD_HHMMSS.sql.gz
+make backup-now
 ```
 
-## 2. 啟動臨時 PostgreSQL
+這會使用同一套 `db-backup` container 與 `scripts/backup_database.sh`，產生：
 
-清除既有同名 container：
+- `backups/kaiyn_trading_bot_YYYYMMDD_HHMMSS.sql.gz`
+- `backups/kaiyn_trading_bot_YYYYMMDD_HHMMSS.sql.gz.sha256`
+- `backups/backup_status.json`
+- `backups/backup_manifest.json`
+
+備份使用 `pg_dump --no-owner --no-privileges`，降低在新 VPS、不同 DB owner 或臨時 DB 還原時的角色相容性問題。
+
+## 3. 本機一鍵還原最新備份
+
+危險：還原會改寫目標 PostgreSQL database。若 DB 已有資料，必須明確加 `CONFIRM_RESTORE=YES`。
+
+在空 DB 或新 VPS 上：
 
 ```bash
-docker rm -f kaiyn_restore_test
+make restore-latest
 ```
 
-啟動獨立臨時 PostgreSQL 16 container：
+在既有非空 DB 上確認覆蓋：
 
 ```bash
-docker run -d --name kaiyn_restore_test \
-  -e POSTGRES_DB=restore_test \
-  -e POSTGRES_USER=restore \
-  -e POSTGRES_PASSWORD=restore \
-  postgres:16-alpine
+CONFIRM_RESTORE=YES make restore-latest
 ```
 
-確認 PostgreSQL 已可連線：
+指定某一份備份：
 
 ```bash
-docker exec kaiyn_restore_test pg_isready -U restore -d restore_test
+BACKUP_FILE=backups/kaiyn_trading_bot_YYYYMMDD_HHMMSS.sql.gz CONFIRM_RESTORE=YES make restore-latest
 ```
 
-若 PostgreSQL 尚未 ready，等待數秒後重試。
+`restore-latest` 會自動：
 
-備份檔包含原始資料庫 owner。本專案預設 owner 為 `kaiyn`。還原前在臨時 DB 建立同名 role，避免 `OWNER TO kaiyn` 造成還原錯誤：
+1. 找最新 `backups/kaiyn_trading_bot_*.sql.gz`。
+2. 若 `.sha256` 存在，先驗 checksum。
+3. 啟動 Compose `postgres`。
+4. 檢查目標 DB 是否已有資料表。
+5. 非空 DB 且沒有 `CONFIRM_RESTORE=YES` 時拒絕還原。
+6. `CONFIRM_RESTORE=YES` 時先重建 `public` schema。
+7. 將 gzip SQL dump 還原到 Compose `postgres`。
+8. 執行 `alembic upgrade head`。
+9. 執行 `python -m app.main --check-db`。
+
+## 4. 新 VPS 災難恢復流程
+
+在尚未接 Cloudflare R2 前，新 VPS 仍需要你先把最新備份檔放進 `backups/`：
 
 ```bash
-docker exec kaiyn_restore_test psql -U restore -d restore_test \
-  -c "create role kaiyn;"
+scp kaiyn_trading_bot_YYYYMMDD_HHMMSS.sql.gz deploy@<new-vps>:/opt/kaiyn-trading-bot/backups/
+scp kaiyn_trading_bot_YYYYMMDD_HHMMSS.sql.gz.sha256 deploy@<new-vps>:/opt/kaiyn-trading-bot/backups/
 ```
 
-## 3. 還原備份
-
-將 gzip SQL 備份還原到臨時 DB：
+然後在新 VPS：
 
 ```bash
-gunzip -c "$BACKUP_FILE" | docker exec -i kaiyn_restore_test psql -v ON_ERROR_STOP=1 -U restore -d restore_test
+cd /opt/kaiyn-trading-bot
+cp .env.template .env
+nano .env
+make restore-latest
+docker compose up -d bot maintenance db-backup
+docker compose ps
 ```
 
-還原過程不應出現 `ERROR`。出現錯誤時，檢查備份檔完整性、container ready 狀態，以及備份來源是否使用相同 PostgreSQL major version。
+注意：
 
-## 4. 驗證 schema 版本
+- `.env` 內的 `ENCRYPTION_KEY` 必須是原 production key，否則 DB 內 encrypted API credentials 無法解密。
+- `POSTGRES_PASSWORD` 必須和 `DATABASE_URL` 一致。
+- 還原完成後再啟動 `bot`，避免 bot 在空 DB 或半還原狀態下運行。
 
-確認 Alembic 版本：
+## 5. 本機保留策略
 
-```bash
-docker exec kaiyn_restore_test psql -U restore -d restore_test \
-  -c "select version_num from alembic_version;"
+預設：
+
+```env
+BACKUP_LOCAL_KEEP_COUNT=3
+RETENTION_DAYS=30
 ```
 
-預期 Alembic 版本：
+也就是：
 
-```text
-20260512_0004
-```
+- 最多保留最近 3 份本機 SQL gzip dump。
+- 同時刪除超過 `RETENTION_DAYS` 的舊備份。
 
-## 5. 驗證主要資料表
+此設計符合目前需求：主要使用最新備份，但保留少量 previous backup，避免最新檔剛好損壞。
 
-確認主要資料表存在：
+## 6. Cloudflare R2 下一階段
 
-```bash
-docker exec kaiyn_restore_test psql -U restore -d restore_test \
-  -c "select table_name from information_schema.tables where table_schema = 'public' order by table_name;"
-```
+下一個 PR 會接 Cloudflare R2：
 
-至少應包含：
+- 備份成功後上傳 encrypted latest backup。
+- 上傳 checksum 與 manifest。
+- 新增 `make disaster-restore`，從 R2 下載最新備份並還原。
 
-- `alembic_version`
-- `users`
-- `trades`
-- `pending_orders`
-- `channel_groups`
-- `system_logs`
-- `notification_logs`
-- `trading_pairs`
+需要你手動準備：
 
-確認主要資料表可查詢：
+- Cloudflare 帳號。
+- R2 bucket。
+- R2 access key / secret key。
+- 備份 client-side encryption key。
 
-```bash
-docker exec kaiyn_restore_test psql -U restore -d restore_test \
-  -c "select 'users' as table_name, count(*) from users
-      union all select 'trades', count(*) from trades
-      union all select 'pending_orders', count(*) from pending_orders
-      union all select 'channel_groups', count(*) from channel_groups
-      union all select 'system_logs', count(*) from system_logs
-      order by table_name;"
-```
-
-只要查詢可正常完成，就代表備份可讀、主要 schema 可用。筆數為 0 不一定是錯誤，需依當時環境資料量判斷。
-
-## 6. 清除臨時環境
-
-驗證完成後清除臨時 container：
-
-```bash
-docker rm -f kaiyn_restore_test
-```
-
-此命令只會移除臨時還原測試 container，不會影響 Docker Compose 的正式 `postgres` service 或 `postgres_data` volume。
-
-## 7. 驗證紀錄
-
-每次正式驗證後記錄：
-
-- 驗證日期。
-- 使用的備份檔名。
-- `alembic_version` 結果。
-- 主要資料表查詢是否成功。
-- 是否成功清除臨時 container。
-
-如還原失敗，應立即檢查 `db-backup` service log 與 `backups/backup_status.json`，不要等到真正需要恢復資料時才處理。
+在 R2 尚未接上前，不要把 VPS 本機 `backups/` 當成唯一災備來源。至少在重要變更前後手動拉一份最新備份到本機或雲端。

@@ -185,6 +185,7 @@ Production configuration is injected via `.env`. See [.env.template](.env.templa
 | `BITGET_API_URL` | Bitget API base URL |
 | `SIGNAL_CHART_*` | Optional `/send_signal` chart generation toggle, granularity, candle limit, and timeout |
 | `RETENTION_DAYS` | Number of days to retain accumulated records and backups |
+| `BACKUP_LOCAL_KEEP_COUNT` | Number of latest local SQL backups to keep |
 | `ADMIN_ALERT_*` / `BITGET_ALERT_*` | Admin alert and Bitget consecutive error thresholds |
 
 ## Testing & CI
@@ -224,7 +225,8 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 ## Operations
 
 - The `maintenance` service runs daily cleanup of records older than 30 days.
-- The `db-backup` service produces daily gzip SQL backups and retains them for 30 days.
+- The `db-backup` service produces gzip SQL backups with checksum and manifest files.
+- Run `make backup-now` before risky operations and `make restore-latest` to restore the latest local backup.
 - Both Docker container logs and Bot file logs are configured with rotation.
 - `/admin_health` reports DB, backup, cleanup, Bitget API, and recent error status.
 - `/admin_audit [limit]` displays a summary of admin, signal sender, and order execution events.
