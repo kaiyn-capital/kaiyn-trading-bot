@@ -185,6 +185,7 @@ docker compose up -d bot maintenance db-backup
 | `BITGET_API_URL` | Bitget API 基礎 URL |
 | `SIGNAL_CHART_*` | `/send_signal` 附圖功能開關、K 線週期、K 線數量與 timeout |
 | `RETENTION_DAYS` | 累積紀錄與備份保留天數 |
+| `BACKUP_LOCAL_KEEP_COUNT` | 本機保留最近幾份 SQL 備份 |
 | `ADMIN_ALERT_*` / `BITGET_ALERT_*` | 管理員告警與 Bitget 連續錯誤門檻 |
 
 ## 測試與 CI
@@ -224,7 +225,8 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 ## 運維
 
 - `maintenance` 服務每日清理超過 30 天的累積紀錄。
-- `db-backup` 服務每日產生 gzip SQL 備份並保留 30 天。
+- `db-backup` 服務產生 gzip SQL 備份，並附 checksum 與 manifest。
+- 高風險操作前可執行 `make backup-now`，需要還原時使用 `make restore-latest` 還原最新本機備份。
 - Docker container logs 與 Bot file logs 都配置 rotation。
 - `/admin_health` 提供 DB、backup、cleanup、Bitget API 與近期錯誤狀態。
 - `/admin_audit [limit]` 查詢管理員、發單員與下單關鍵操作摘要。

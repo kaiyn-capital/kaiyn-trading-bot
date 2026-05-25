@@ -100,6 +100,14 @@ cleanup-dry-run: ## Preview retention cleanup
 cleanup: ## Run retention cleanup
 	$(COMPOSE) run --rm bot python -m app.main --cleanup-retention
 
+.PHONY: backup-now
+backup-now: ## Run a PostgreSQL backup immediately
+	$(COMPOSE) run --rm db-backup sh /scripts/backup_database.sh
+
+.PHONY: restore-latest
+restore-latest: ## Restore the latest local PostgreSQL backup
+	COMPOSE="$(COMPOSE)" sh scripts/restore_latest_backup.sh
+
 .PHONY: lock
 lock: ## Regenerate uv.lock with Dockerized uv
 	docker run --rm -v "$$PWD:/app" -w /app $(UV_IMAGE) uv lock

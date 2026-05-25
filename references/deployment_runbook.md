@@ -494,23 +494,37 @@ BOT_IMAGE=ghcr.io/kaiyn-capital/kaiyn-trading-bot@sha256:<known-good-digest> mak
 
 ```bash
 cat backups/backup_status.json
+cat backups/backup_manifest.json
 ls -lh backups
 docker compose logs --tail 80 db-backup
 ```
 
-每週手動拉一份備份到本機或雲端：
+高風險操作前立即打一份備份：
+
+```bash
+make backup-now
+```
+
+每週或重大變更後，手動拉一份最新備份與 checksum 到本機或雲端：
 
 ```bash
 scp deploy@<droplet-ip>:/opt/kaiyn-trading-bot/backups/kaiyn_trading_bot_*.sql.gz ./kaiyn-backups/
+scp deploy@<droplet-ip>:/opt/kaiyn-trading-bot/backups/kaiyn_trading_bot_*.sql.gz.sha256 ./kaiyn-backups/
 ```
 
-正式部署前至少做一次還原驗證，之後每月或重大改版後再驗證一次：
+還原最新本機備份：
 
 ```bash
-cat references/backup_restore_runbook.md
+make restore-latest
 ```
 
-還原流程請以 [backup_restore_runbook.md](backup_restore_runbook.md) 為準。不要在正式 `postgres` service 或正式 `postgres_data` volume 裡做還原測試。
+若目標 DB 非空且確定要覆蓋：
+
+```bash
+CONFIRM_RESTORE=YES make restore-latest
+```
+
+完整流程請以 [backup_restore_runbook.md](backup_restore_runbook.md) 為準。下一階段會接 Cloudflare R2，讓最新備份離開 VPS。
 
 ## 14. 常用操作
 

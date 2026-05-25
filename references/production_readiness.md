@@ -94,17 +94,18 @@ Bitget/API 錯誤會統一分類並轉成簡短使用者訊息。
 
 備份制度：
 
-- `db-backup` 每日產生 gzip SQL 備份。
+- `db-backup` 定期產生 gzip SQL 備份。
 - 備份檔輸出到 `backups/`。
-- 備份檔保留 30 天。
+- 備份檔預設保留最近 3 份，並刪除超過 retention window 的舊備份。
+- 每份備份產生 `.sha256` checksum。
 - `backup_status.json` 記錄最近一次備份結果。
+- `backup_manifest.json` 記錄最新成功備份的檔名、時間、sha256、大小與資料庫名稱。
 
-還原驗證：
+還原流程：
 
 - 還原流程記錄於 [backup_restore_runbook.md](backup_restore_runbook.md)。
-- 還原測試使用獨立臨時 PostgreSQL container。
-- 還原測試不連到正式 `postgres_data` volume。
-- 驗證內容包含 Alembic version、主要資料表存在性與資料表查詢。
+- `make restore-latest` 會驗 checksum、檢查目標 DB 是否非空、還原 dump、執行 migration 與 DB health check。
+- 目標 DB 非空時必須明確設定 `CONFIRM_RESTORE=YES`。
 
 ## Core Flow Tests
 
