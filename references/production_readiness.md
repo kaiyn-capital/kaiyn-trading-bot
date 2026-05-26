@@ -1,6 +1,6 @@
 # Production Readiness Record
 
-更新日期：2026-05-16
+更新日期：2026-05-26
 
 本文件記錄 Kaiyn Trading Bot 的 production readiness 設計與完成項目。專案定位為 Telegram + Bitget USDT-FUTURES 下單 bot，目標是在 VPS 上長期運行，並降低真金交易時的操作風險。
 
@@ -29,13 +29,20 @@
 - `bot`、`postgres`、`maintenance`、`db-backup` 服務。
 - Docker log rotation 與 Bot 檔案 log 每日輪轉。
 - DB retention 與每日 PostgreSQL 備份。
+- Cloudflare R2 加密異地備份與最新備份災難還原流程。
 - Pending order 寫入 DB，並使用 row lock 避免重複確認下單。
+- Pending order 使用 deterministic `clientOid`，卡住 `processing` 時由 health monitor 透過 Bitget detail/history 查單補本地狀態，不自動重送。
 - 市價下單與 GTC 限價掛單。
 - `/send_signal` 支援備註與 UTC+8 時間戳。
+- `/send_signal` 與 `/update_chart` 預覽 session 加密保存於 PostgreSQL，Bot 重啟後仍可在 TTL 內確認。
+- Telegram callback payload token 化，交易信號、圖表預覽與下單狀態由 DB/session store 保存。
 - 交易所規則防呆：交易對狀態、最小下單量、最小名義價值、精度、單筆上限與止損方向檢查。
+- 本地 hard risk caps：最大名義倉位與每日下單次數。
+- 下單 critical path 使用 `Decimal`，DB critical path 欄位使用 `Numeric(38, 18)`。
 - Bitget API 錯誤分類與使用者簡短回報。
+- Telegram 輸出統一使用 HTML formatting helper，動態文字預設 escape。
 - 管理員告警與 `/admin_health` 健康檢查。
-- 備份還原 runbook 與獨立臨時 PostgreSQL 還原驗證流程。
+- 備份還原 runbook、R2 download smoke test 與 guarded restore 流程。
 - 操作審計與 `/admin_audit` 查詢。
 - Docker-first pytest，包含 PostgreSQL integration tests。
 - GitHub Actions CI，涵蓋 lockfile、Alembic migration/model、Ruff、mypy、PostgreSQL integration、coverage output、`py_compile` 與 whitespace 檢查。
@@ -57,8 +64,14 @@
 
 風控邊界：
 
-- 系統不設定 1R 全域上限。
-- 系統不設定止損距離百分比上下限。
+- `MAX_POSITION_SIZE` 為全域單筆名義倉位上限。
+- `users.max_position_size` 為可選使用者層覆寫；`NULL`、`0` 或負數代表不覆寫，全域值生效。
+- 有效名義倉位上限取全域與使用者層的較嚴格正數。
+- `MAX_DAILY_TRADES` 為全域每日下單次數上限。
+- `users.daily_trade_limit` 為可選使用者層覆寫；有效每日限制取較嚴格正數。
+- 每日交易次數以 UTC+8 日切計算，且 DB transaction 內再次檢查，避免同一使用者併發突破限制。
+- 系統目前不設定固定 1R 金額全域上限。
+- 系統目前不設定止損距離百分比上下限。
 - 交易權限與帳戶風控由 Bitget 送單結果判定。
 
 ## Bitget API Error Handling
@@ -94,7 +107,7 @@ Bitget/API 錯誤會統一分類並轉成簡短使用者訊息。
 
 備份制度：
 
-- `db-backup` 定期產生 gzip SQL 備份。
+- `db-backup` 依 `BACKUP_INTERVAL_SECONDS` 定期產生 gzip SQL 備份，預設 86400 秒一次。
 - 備份檔輸出到 `backups/`。
 - 備份檔預設保留最近 3 份，並刪除超過 retention window 的舊備份。
 - 每份備份產生 `.sha256` checksum。
@@ -108,6 +121,8 @@ Bitget/API 錯誤會統一分類並轉成簡短使用者訊息。
 - 還原流程記錄於 [backup_restore_runbook.md](backup_restore_runbook.md)。
 - `make restore-latest` 會驗 checksum、檢查目標 DB 是否非空、還原 dump、執行 migration 與 DB health check。
 - `make disaster-restore` 會從 R2 下載最新 encrypted backup、解密、驗 checksum，再呼叫本機還原流程。
+- 自動部署不額外強制打一份備份；部署、migration 或手動操作前需要即時備份時，應明確執行 `make backup-now`。
+- R2 端目前維護 latest manifest，但不自動清理歷史 encrypted objects；本機備份會依 `BACKUP_LOCAL_KEEP_COUNT` 與 `RETENTION_DAYS` 清理。
 - 目標 DB 非空時必須明確設定 `CONFIRM_RESTORE=YES`。
 
 ## Core Flow Tests
@@ -126,8 +141,13 @@ Bitget/API 錯誤會統一分類並轉成簡短使用者訊息。
 - Long/Short 掛單價格選擇。
 - 掛單價可能立即成交時切換市價確認。
 - 1R 倉位計算。
+- Decimal/Numeric order sizing critical path。
+- client order id 格式與碰撞防護。
 - 交易安全防呆規則。
 - Pending order confirm/cancel/expired/executed/failed 狀態流程。
+- stale `processing` Bitget reconciliation。
+- persistent user session repository。
+- R2 backup script syntax、manifest、checksum、encrypt/decrypt helper。
 - Pending order repository PostgreSQL integration。
 
 ## Permission And Audit

@@ -1,6 +1,6 @@
 # Deployment Engineering Record
 
-更新日期：2026-05-16
+更新日期：2026-05-26
 
 本文件記錄 Kaiyn Trading Bot 的工程化部署設計。專案採 Docker Compose 優先流程，並以相同容器環境執行開發檢查、CI、資料庫 migration、正式部署與維護任務。正式部署主線為 DigitalOcean Droplet，由 GitHub Actions 發布 GHCR image，再透過 SSH 執行 image-based production deployment。
 
@@ -19,7 +19,7 @@
 - GitHub Actions CI，以 Docker Compose 執行 lockfile、Alembic migration/model、Ruff、mypy、DB integration、coverage output、py_compile 與 whitespace 檢查。
 - GitHub Actions CD，在 CI 通過後發布 GHCR multi-arch image，並透過 SSH 以 image digest 部署到 DigitalOcean VPS。
 - Dependabot 每週檢查 Python packages 與 GitHub Actions；GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 merge。
-- DigitalOcean VPS、SSH CD 與 backup/restore runbooks，涵蓋首次部署、更新、rollback、備份拉取、還原驗證與故障處理。
+- DigitalOcean VPS、SSH CD 與 backup/restore runbooks，涵蓋首次部署、更新、rollback、R2 異地備份、還原驗證與故障處理。
 
 ## Dependency Management
 
@@ -116,7 +116,7 @@ CI passed
 -> deploy ghcr.io/kaiyn-capital/kaiyn-trading-bot@sha256:<digest>
 ```
 
-Production deployment 使用 `compose.yml` + `compose.prod.yml` 與 `make deploy-image`。`bot` 與 `maintenance` 由 GHCR image digest 啟動；`postgres` 與 `db-backup` 保留 Docker Compose service model。
+Production deployment 使用 `compose.yml` + `compose.prod.yml` 與 `make deploy-image`。`bot`、`maintenance` 與 `db-backup` 由同一個 GHCR image digest 啟動；`postgres` 保留 PostgreSQL base image 與 Compose volume。`make deploy-image` 成功啟動服務後會把目前部署的 image digest 寫入 `.bot_image`，供後續手動備份、R2 下載與還原 target 自動沿用 production compose override，避免 VPS 嘗試重新 build local image。
 
 GitHub `production` environment 需提供：
 
@@ -158,11 +158,20 @@ make check-db
 make up
 make logs
 make deploy-image
+make backup-now
+make r2-download-latest
+make restore-latest
+make disaster-restore
+make generate-backup-key
 ```
 
 - `make verify` 執行完整 Docker-first 檢查：test image build、lockfile、migration、Alembic model consistency、Ruff、mypy、PostgreSQL integration tests、py_compile 與 whitespace。
 - `make deploy` 執行 build、PostgreSQL startup、migration、DB check 與服務啟動。
 - `make deploy-image` 使用 `BOT_IMAGE=<ghcr image digest>` 執行 image-based production deployment。
+- `make backup-now` 使用目前 deployment mode 執行立即備份；若 `.bot_image` 存在，會使用 GHCR image 與 `compose.prod.yml`。
+- `make r2-download-latest` 只下載並解密 R2 最新備份，不還原 DB，適合部署後 smoke test。
+- `make restore-latest` 還原最新本機 SQL dump；目標 DB 非空時需要 `CONFIRM_RESTORE=YES`。
+- `make disaster-restore` 從 R2 latest manifest 下載最新 encrypted backup、解密、驗 checksum，並呼叫本機還原流程。
 - CI 維持直接執行 Docker Compose 命令，避免 CI 行為被 Makefile abstraction 隱藏。
 
 ## Dependabot
@@ -215,6 +224,7 @@ GitHub repository settings：
 - 使用 Docker Compose。
 - `make deploy-image` 使用 GHCR image digest 執行 Alembic migration、DB check 與 service startup。
 - 同時啟動 `bot`、`maintenance`、`db-backup`。
+- `.bot_image` 記錄最近一次 `make deploy-image` 使用的 digest；它不是 secret，但不提交到 git。
 - Bot 啟動時不自動套用 migration。
 - GitHub Actions 可在 CI 通過與 `production` environment approval 後透過 SSH 執行 image-based deployment。
 
@@ -235,7 +245,10 @@ GitHub repository settings：
 - Bitget API 不綁定 IP whitelist。
 - VPS firewall 只開 SSH。
 - PostgreSQL host port 綁定 `127.0.0.1:5432`。
-- 備份檔定期從 VPS 拉到本機或雲端保存。
+- `db-backup` 服務定期產生本機 gzip SQL dump、checksum 與 manifest。
+- 若 `R2_BACKUP_ENABLED=true`，SQL dump 會先用 `BACKUP_ENCRYPTION_KEY` client-side 加密，再上傳到 Cloudflare R2。
+- `BACKUP_ENCRYPTION_KEY` 遺失後，R2 上的 encrypted backup 無法解密。
+- 高風險操作前執行 `make backup-now`；新 VPS 災難恢復優先使用 `make disaster-restore`。
 
 ## Out Of Scope
 
@@ -244,6 +257,8 @@ GitHub repository settings：
 - Render / Railway / DigitalOcean App Platform deployment variants。
 - Grafana / Prometheus / Sentry 等外部監控平台。
 - 大量壓測。
-- 限價單送出後生命週期追蹤。
+- 限價單送出後完整生命週期追蹤。
+- PostgreSQL PITR 與自動 restore drill。
+- R2 歷史 encrypted object 自動清理。
 - Python dependency auto-merge。
 - Dependabot major update auto-merge。

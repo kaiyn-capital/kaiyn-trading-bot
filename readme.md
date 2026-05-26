@@ -26,11 +26,15 @@ Users can configure encrypted API credentials via Telegram, set a fixed 1R risk 
 ## Highlights
 
 - PostgreSQL-backed pending orders with row locking to prevent duplicate submissions from repeated clicks.
+- Deterministic Bitget `clientOid` generation and stale `processing` reconciliation via official Bitget order lookup, without automatic resubmission.
+- Decimal-based order sizing on the critical path, persisted with PostgreSQL `Numeric(38, 18)` fields for prices, quantities, notional value, risk, and fees.
+- Hard local risk caps for maximum position value and per-user daily trade count, with global defaults and optional user-level stricter overrides.
 - Bitget contract-rule validation before execution — checks symbol status, minimum order size, notional value, precision, and per-order limits before submitting.
 - Market / GTC limit order flow with fixed 1R sizing, supporting both market orders and limit order confirmation flows.
 - Encrypted API credential storage using Fernet encryption for Bitget API Key, Secret Key, and Passphrase.
+- PostgreSQL-backed Telegram preview sessions and tokenized callback flows, so pending previews survive Bot restarts within their TTL.
 - Admin alerts, health checks, and audit trail via `/admin_health`, `/admin_audit`, startup notifications, and exception alerts.
-- Docker-first deployment with retention and backup, including log rotation, DB retention cleanup, and daily PostgreSQL backups.
+- Docker-first deployment with retention and backup, including log rotation, DB retention cleanup, local PostgreSQL dumps, and optional encrypted Cloudflare R2 offsite backups.
 - CI/CD with Ruff, mypy, Alembic checks, pytest, PostgreSQL integration tests, GHCR image publishing, VPS SSH deployment, and Dependabot.
 
 ## Architecture
@@ -46,8 +50,9 @@ flowchart TD
     bot --> channels["Telegram channels / groups / forum topics"]
 
     maintenance["maintenance service<br/>30-day retention cleanup"] --> db
-    backup["db-backup service<br/>daily gzip SQL dump"] --> db
+    backup["db-backup service<br/>gzip SQL dump + checksum"] --> db
     backup --> files["backups/"]
+    backup --> r2["Cloudflare R2<br/>encrypted offsite latest backup"]
 
     ci["GitHub Actions CI"] --> test["test service<br/>Ruff + mypy + pytest + DB integration"]
     test --> db
@@ -64,7 +69,7 @@ flowchart TD
     class users,admins actor;
     class bot,maintenance,backup,test ops;
     class db,files storage;
-    class bitget,channels,ci,ghcr external;
+    class bitget,channels,ci,ghcr,r2 external;
     class deploy ops;
 ```
 
@@ -111,12 +116,13 @@ sequenceDiagram
 | Database | PostgreSQL 16 + SQLAlchemy asyncio 2.0.49 + `asyncpg` 0.31.0 |
 | Schema migration | Alembic 1.18.4 |
 | Credential security | `cryptography` Fernet 48.0.0 |
+| Financial values | `Decimal` critical path + PostgreSQL `Numeric(38, 18)` |
 | Deployment | Docker Compose services: `postgres`, `bot`, `maintenance`, `db-backup` |
 | Dependency lock | uv lockfile + `uv sync --locked` |
-| Long-term operations | Docker log rotation, file log rotation, DB retention, daily SQL backup |
-| Testing | pytest 9.0.3 + opt-in PostgreSQL integration tests |
+| Long-term operations | Docker/file log rotation, DB retention, local SQL backup, encrypted R2 offsite backup |
+| Testing | pytest 9.0.3 + pytest-asyncio 1.3.0 + PostgreSQL integration tests + 70% critical-path coverage threshold |
 | Lint / format | Ruff 0.15.14 |
-| Type checking | mypy 1.16.0 on critical path modules |
+| Type checking | mypy 2.1.0 on critical path modules |
 | CI | GitHub Actions with Docker Compose-first checks |
 | CD | GHCR multi-arch image + VPS SSH deployment by digest |
 | Dependency automation | Dependabot weekly updates; GitHub Actions patch/minor auto-merge |
@@ -125,16 +131,20 @@ sequenceDiagram
 
 - Telegram-based Bitget USDT-FUTURES signal execution.
 - Encrypted user API credential storage and API connectivity checks.
-- Fixed 1R risk sizing with market and GTC limit order modes.
-- Persistent pending order and Telegram preview/session flows backed by PostgreSQL.
+- Fixed 1R risk sizing with market and GTC limit order modes, hard position caps, and daily trade limits.
+- Persistent pending order, signal, and Telegram preview/session flows backed by PostgreSQL.
+- Deterministic `clientOid` generation and stale `processing` reconciliation against Bitget order detail/history.
 - Managed channel/group forwarding with Telegram forum topic support.
-- Admin health checks, alerts, audit events, retention cleanup, and backups.
+- Admin health checks, alerts, audit events, retention cleanup, local backups, and encrypted R2 offsite backup/restore.
 - Docker Compose local/deployment parity with CI-backed verification.
 
 ## Engineering Notes
 
 - Trading state and Telegram conversation sessions are persisted in PostgreSQL, so pending confirmations and active previews survive Bot restarts within their TTL.
+- Telegram callback payloads carry short tokens; order/signal/session state lives in PostgreSQL instead of callback data.
 - Exchange execution is validated against Bitget contract rules before confirmation and again before order submission.
+- Order sizing and risk comparison use Decimal values through the critical path, with explicit JSON/text conversion at boundaries.
+- Telegram output uses HTML formatting helpers that escape dynamic text by default.
 - Operations are part of the product surface: health checks, audit events, retention cleanup, backups, and restore documentation are included.
 - CI mirrors the Docker Compose runtime path, including lockfile, migration/model, type, and PostgreSQL integration checks instead of relying on host-local services.
 - CD publishes multi-arch images to GHCR and deploys production through SSH after environment approval.
@@ -226,7 +236,7 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 ## Operations
 
 - The `maintenance` service runs daily cleanup of records older than 30 days.
-- The `db-backup` service produces gzip SQL backups with checksum and manifest files.
+- The `db-backup` service produces gzip SQL backups with checksum and manifest files on `BACKUP_INTERVAL_SECONDS` intervals.
 - Run `make backup-now` before risky operations and `make restore-latest` to restore the latest local backup.
 - When Cloudflare R2 is configured, `db-backup` uploads encrypted backups offsite and `make disaster-restore` downloads the latest R2 backup before restoring it.
 - Both Docker container logs and Bot file logs are configured with rotation.
@@ -254,6 +264,7 @@ For backup restore verification, see [backup_restore_runbook.md](references/back
 ├── app/                    # Telegram bot, Bitget client, order flow, repositories
 ├── alembic/                # Alembic migration environment and versions
 ├── tests/                  # pytest unit and PostgreSQL integration tests
+├── scripts/                # backup, R2 upload/download, and restore helper scripts
 ├── docs/                   # GitHub Pages site (index.html, CNAME, assets)
 ├── references/             # command, trading, deployment, backup, readiness documentation
 ├── compose.yml             # postgres, bot, test, maintenance, db-backup services
@@ -272,4 +283,5 @@ For backup restore verification, see [backup_restore_runbook.md](references/back
 - Runtime logs use a summarization strategy and do not output API keys, secrets, passphrases, or full exchange responses.
 - PostgreSQL backups contain encrypted API credentials and trade records — treat them as sensitive data.
 - If `ENCRYPTION_KEY` is lost, existing encrypted API credentials cannot be decrypted.
+- If `BACKUP_ENCRYPTION_KEY` is lost, encrypted Cloudflare R2 backups cannot be decrypted.
 - Telegram channel/group forwarding requires the Bot to have the appropriate admin permissions.
