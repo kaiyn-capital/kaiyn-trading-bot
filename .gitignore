@@ -3,6 +3,7 @@
 .env.*
 *.env
 !.env.template
+.bot_image
 
 # Python cache and build artifacts
 __pycache__/

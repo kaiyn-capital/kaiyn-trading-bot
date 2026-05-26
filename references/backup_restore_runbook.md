@@ -61,6 +61,8 @@ make backup-now
 
 R2 上不存 plaintext SQL dump。
 
+自動部署本身不會額外強制打一份備份；備份節奏由長駐 `db-backup` service 的 `BACKUP_INTERVAL_SECONDS` 決定，預設 86400 秒一次。部署、migration 或手動操作前需要即時備份時，明確執行 `make backup-now`。
+
 ## 3. Cloudflare R2 設定
 
 `.env` 需要：
@@ -90,6 +92,8 @@ BACKUP_ENCRYPTION_KEY=<make_generate_backup_key_output>
 make backup-now
 cat backups/r2_backup_status.json
 ```
+
+若 VPS 使用 image-based deployment，`make deploy-image` 會把目前部署的 GHCR image digest 記錄在 `.bot_image`。之後上述備份/下載/還原 target 會自動使用 `compose.prod.yml`，不會在 VPS 上重新 build local image。
 
 只下載最新 R2 備份、不還原：
 

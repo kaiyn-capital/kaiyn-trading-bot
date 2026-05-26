@@ -61,6 +61,10 @@ def test_restore_script_has_checksum_and_non_empty_database_guard():
 def test_makefile_exposes_manual_backup_and_restore_targets():
     makefile = read_repo_file("Makefile")
 
+    assert "BOT_IMAGE_FILE ?= .bot_image" in makefile
+    assert "RESOLVED_BOT_IMAGE" in makefile
+    assert "BACKUP_COMPOSE" in makefile
+    assert "printf '%s\\n' \"$(BOT_IMAGE)\" > \"$(BOT_IMAGE_FILE)\"" in makefile
     assert "backup-now:" in makefile
     assert "r2-download-latest:" in makefile
     assert "restore-latest:" in makefile
@@ -75,3 +79,9 @@ def test_backup_image_installs_postgres_client():
     dockerfile = read_repo_file("Dockerfile")
 
     assert "postgresql-client" in dockerfile
+
+
+def test_deployed_bot_image_marker_is_ignored():
+    gitignore = read_repo_file(".gitignore")
+
+    assert ".bot_image" in gitignore

@@ -467,7 +467,10 @@ pull GHCR image by digest
 -> run alembic upgrade head with the deployment image
 -> run DB health check with the deployment image
 -> start bot, maintenance, db-backup
+-> record the deployed image digest in .bot_image
 ```
+
+`.bot_image` 只保存目前部署的 GHCR image digest，不是 secret，且不提交到 git。後續在 VPS 手動執行 `make backup-now`、`make r2-download-latest`、`make restore-latest`、`make disaster-restore` 時，Makefile 會自動用 `.bot_image` 切到 `compose.prod.yml`，避免在 VPS 上 build local image。
 
 手動執行同一套 image-based deployment：
 

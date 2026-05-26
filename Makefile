@@ -5,6 +5,10 @@ COMPOSE_PROD ?= $(COMPOSE) -f compose.yml -f compose.prod.yml
 UV_IMAGE ?= ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 LOG_SERVICE ?= bot
 LOG_TAIL ?= 80
+BOT_IMAGE_FILE ?= .bot_image
+RESOLVED_BOT_IMAGE := $(strip $(if $(BOT_IMAGE),$(BOT_IMAGE),$(shell [ -f "$(BOT_IMAGE_FILE)" ] && sed -n '1p' "$(BOT_IMAGE_FILE)")))
+BACKUP_COMPOSE := $(if $(RESOLVED_BOT_IMAGE),$(COMPOSE_PROD),$(COMPOSE))
+BACKUP_BOT_IMAGE_ENV := $(if $(RESOLVED_BOT_IMAGE),BOT_IMAGE="$(RESOLVED_BOT_IMAGE)",)
 PY_COMPILE_FILES := app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py scripts/*.py tests/*.py
 
 .DEFAULT_GOAL := help
@@ -67,6 +71,7 @@ check-db-image: require-bot-image ## Check database connectivity using BOT_IMAGE
 .PHONY: up-image
 up-image: require-bot-image ## Start long-running services using BOT_IMAGE
 	BOT_IMAGE="$(BOT_IMAGE)" $(COMPOSE_PROD) up -d bot maintenance db-backup
+	printf '%s\n' "$(BOT_IMAGE)" > "$(BOT_IMAGE_FILE)"
 
 .PHONY: deploy-image
 deploy-image: require-bot-image ## Pull BOT_IMAGE, migrate, check DB, and start services
@@ -102,23 +107,23 @@ cleanup: ## Run retention cleanup
 
 .PHONY: backup-now
 backup-now: ## Run a PostgreSQL backup immediately
-	$(COMPOSE) run --rm db-backup sh /scripts/backup_database.sh
+	$(BACKUP_BOT_IMAGE_ENV) $(BACKUP_COMPOSE) run --rm db-backup sh /scripts/backup_database.sh
 
 .PHONY: r2-download-latest
 r2-download-latest: ## Download and decrypt the latest R2 backup into ./backups
-	$(COMPOSE) run --rm db-backup python /scripts/r2_backup.py download-latest --output-dir /backups --status-output /backups/r2_restore_status.json --filename-output /backups/r2_latest_backup_filename.txt
+	$(BACKUP_BOT_IMAGE_ENV) $(BACKUP_COMPOSE) run --rm db-backup python /scripts/r2_backup.py download-latest --output-dir /backups --status-output /backups/r2_restore_status.json --filename-output /backups/r2_latest_backup_filename.txt
 
 .PHONY: restore-latest
 restore-latest: ## Restore the latest local PostgreSQL backup
-	COMPOSE="$(COMPOSE)" sh scripts/restore_latest_backup.sh
+	$(BACKUP_BOT_IMAGE_ENV) COMPOSE="$(BACKUP_COMPOSE)" sh scripts/restore_latest_backup.sh
 
 .PHONY: disaster-restore
 disaster-restore: ## Download latest R2 backup and restore it
-	COMPOSE="$(COMPOSE)" sh scripts/disaster_restore_from_r2.sh
+	$(BACKUP_BOT_IMAGE_ENV) COMPOSE="$(BACKUP_COMPOSE)" sh scripts/disaster_restore_from_r2.sh
 
 .PHONY: generate-backup-key
 generate-backup-key: ## Generate a Fernet key for BACKUP_ENCRYPTION_KEY
-	$(COMPOSE) run --rm bot python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+	$(BACKUP_BOT_IMAGE_ENV) $(BACKUP_COMPOSE) run --rm bot python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
 
 .PHONY: lock
 lock: ## Regenerate uv.lock with Dockerized uv
