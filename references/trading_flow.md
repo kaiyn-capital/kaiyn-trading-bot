@@ -45,6 +45,7 @@ GTC 限價掛單：
 - Short 使用 entry 區間較低點。
 - 送出 GTC limit order 並同時帶止損。
 - 成功後 `trades.status` 記為 `pending`。
+- 目前系統只記錄 Bitget 已接收限價單；送出後不持續追蹤成交、取消或過期狀態。
 - 掛單價格已可能立即成交時，Bot 切換到市價下單確認流程並提示原因。
 
 ## Signal Chart
@@ -67,6 +68,8 @@ GTC 限價掛單：
 ```
 
 市價下單的計算價格為當前市價；限價掛單的計算價格為掛單價。
+
+下單 critical path 使用 `Decimal` 計算與比較，並以 PostgreSQL `Numeric(38, 18)` 保存價格、數量、名義價值、risk 與 fee。圖表 K 線與非下單展示資料仍可使用 float，不能反向流入 sizing 或風控判斷。
 
 ## Exchange Rule Validation
 

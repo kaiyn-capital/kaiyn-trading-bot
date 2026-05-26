@@ -26,11 +26,15 @@ Kaiyn Trading Bot 是整合 Telegram 與 Bitget USDT-FUTURES 的交易信號執�
 ## 亮點功能
 
 - PostgreSQL 支援的待確認訂單搭配 row locking，避免使用者重複點擊造成重複送單。
+- 使用 deterministic Bitget `clientOid`，並對卡住的 `processing` 狀態透過 Bitget 官方查單補本地狀態，不自動重送訂單。
+- 下單 critical path 使用 Decimal 計算，價格、數量、名義價值、risk 與 fee 以 PostgreSQL `Numeric(38, 18)` 保存。
+- 落實本地 hard risk caps：最大名義倉位與每日下單次數支援全域預設與使用者層更嚴格覆寫。
 - 送單前執行 Bitget 合約規則驗證——檢查交易對狀態、最小下單量、名義價值、精度與單筆上限。
 - 市價單／GTC 限價單流程搭配固定 1R 風險計算，支援市價下單與限價掛單確認流程。
 - 使用 Fernet 加密保存 Bitget API Key、Secret Key、Passphrase。
+- Telegram 預覽 session 與 tokenized callback flow 由 PostgreSQL 保存，Bot 重啟後仍可在 TTL 內確認。
 - 管理員告警、健康檢查與審計紀錄——提供 `/admin_health`、`/admin_audit`、啟動通知與異常告警。
-- Docker-first 部署搭配資料保留與備份，包含 log rotation、DB 資料清理、每日 PostgreSQL 備份。
+- Docker-first 部署搭配資料保留與備份，包含 log rotation、DB 資料清理、本機 PostgreSQL dump 與可選 Cloudflare R2 加密異地備份。
 - CI/CD 涵蓋 Ruff、mypy、Alembic 檢查、pytest、PostgreSQL 整合測試、GHCR image 發布、VPS SSH 部署與 Dependabot。
 
 ## 架構
@@ -46,8 +50,9 @@ flowchart TD
     bot --> channels["Telegram 頻道／群組／論壇主題"]
 
     maintenance["maintenance 服務<br/>30 天資料清理"] --> db
-    backup["db-backup 服務<br/>每日 gzip SQL 備份"] --> db
+    backup["db-backup 服務<br/>gzip SQL 備份 + checksum"] --> db
     backup --> files["backups/"]
+    backup --> r2["Cloudflare R2<br/>加密異地最新備份"]
 
     ci["GitHub Actions CI"] --> test["test 服務<br/>Ruff + mypy + pytest + DB 整合測試"]
     test --> db
@@ -64,7 +69,7 @@ flowchart TD
     class users,admins actor;
     class bot,maintenance,backup,test ops;
     class db,files storage;
-    class bitget,channels,ci,ghcr external;
+    class bitget,channels,ci,ghcr,r2 external;
     class deploy ops;
 ```
 
@@ -111,12 +116,13 @@ sequenceDiagram
 | 資料庫 | PostgreSQL 16 + SQLAlchemy asyncio 2.0.49 + `asyncpg` 0.31.0 |
 | Schema 遷移 | Alembic 1.18.4 |
 | 憑證安全 | `cryptography` Fernet 48.0.0 |
+| 金融數值 | 下單 critical path 使用 `Decimal` + PostgreSQL `Numeric(38, 18)` |
 | 部署方式 | Docker Compose 服務：`postgres`、`bot`、`maintenance`、`db-backup` |
 | 依賴鎖定 | uv lockfile + `uv sync --locked` |
-| 長期運維 | Docker log rotation、檔案 log rotation、DB 資料保留、每日 SQL 備份 |
-| 測試 | pytest 9.0.3 + 可選 PostgreSQL 整合測試 |
+| 長期運維 | Docker/檔案 log rotation、DB 資料保留、本機 SQL 備份、R2 加密異地備份 |
+| 測試 | pytest 9.0.3 + pytest-asyncio 1.3.0 + PostgreSQL 整合測試 + critical path 70% coverage 門檻 |
 | Lint／格式化 | Ruff 0.15.14 |
-| 型別檢查 | mypy 1.16.0，針對 critical path modules |
+| 型別檢查 | mypy 2.1.0，針對 critical path modules |
 | CI | GitHub Actions 搭配 Docker Compose-first 檢查 |
 | CD | GHCR 多架構 image + VPS SSH 以 digest 部署 |
 | 依賴自動化 | Dependabot 每週更新；GitHub Actions patch/minor 自動合併 |
@@ -125,16 +131,20 @@ sequenceDiagram
 
 - 基於 Telegram 的 Bitget USDT-FUTURES 交易信號執行。
 - 加密使用者 API 憑證儲存與 API 連線檢查。
-- 固定 1R 風險計算，支援市價單與 GTC 限價單模式。
-- 以 PostgreSQL 為後端的待確認訂單與 Telegram 預覽／session 流程。
+- 固定 1R 風險計算，支援市價單與 GTC 限價單模式、hard position cap 與每日下單限制。
+- 以 PostgreSQL 為後端的待確認訂單、交易信號與 Telegram 預覽／session 流程。
+- deterministic `clientOid` 與卡住 `processing` 訂單的 Bitget detail/history 查單補狀態。
 - 管理頻道／群組轉發，支援 Telegram 論壇主題。
-- 管理員健康檢查、告警、審計事件、資料清理與備份。
+- 管理員健康檢查、告警、審計事件、資料清理、本機備份與 R2 加密異地備份/還原。
 - Docker Compose 本地／部署一致性，搭配 CI 驗證。
 
 ## 工程備註
 
 - 交易狀態與 Telegram 對話 session 儲存於 PostgreSQL，待確認訂單與有效 TTL 內的預覽在 Bot 重啟後仍然有效。
+- Telegram callback payload 只攜帶短 token；order/signal/session 狀態保存在 PostgreSQL。
 - 交易所執行在確認前與送單前各驗證一次 Bitget 合約規則。
+- 下單 sizing 與 risk 比較在 critical path 使用 Decimal，僅在 JSON/text 邊界明確轉換。
+- Telegram 輸出統一使用 HTML formatting helper，動態文字預設 escape。
 - 運維是產品功能的一部分：健康檢查、審計事件、資料清理、備份與還原文件均已內建。
 - CI 使用與正式環境相同的 Docker Compose 流程，包含 lockfile、migration/model、型別與 PostgreSQL 整合測試，不依賴本機服務。
 - CD 發布多架構 image 到 GHCR，並在 environment approval 後透過 SSH 部署到 VPS。
@@ -226,7 +236,7 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 ## 運維
 
 - `maintenance` 服務每日清理超過 30 天的累積紀錄。
-- `db-backup` 服務產生 gzip SQL 備份，並附 checksum 與 manifest。
+- `db-backup` 服務依 `BACKUP_INTERVAL_SECONDS` 週期產生 gzip SQL 備份，並附 checksum 與 manifest。
 - 高風險操作前可執行 `make backup-now`，需要還原時使用 `make restore-latest` 還原最新本機備份。
 - 設定 Cloudflare R2 後，`db-backup` 會把加密備份上傳到異地，`make disaster-restore` 會先下載最新 R2 備份再還原。
 - Docker container logs 與 Bot file logs 都配置 rotation。
@@ -254,6 +264,7 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 ├── app/                    # Telegram bot、Bitget client、下單流程、repositories
 ├── alembic/                # Alembic migration 環境與版本
 ├── tests/                  # pytest 單元測試與 PostgreSQL 整合測試
+├── scripts/                # 備份、R2 上傳/下載與還原輔助腳本
 ├── docs/                   # GitHub Pages 網站 (index.html, CNAME, assets)
 ├── references/             # 指令、交易、部署、備份、readiness 文件
 ├── compose.yml             # postgres、bot、test、maintenance、db-backup 服務
@@ -272,4 +283,5 @@ docker run --rm -v "$PWD:/app" -w /app ghcr.io/astral-sh/uv:python3.11-bookworm-
 - Runtime logs 採摘要化策略，不輸出 API key、secret、passphrase 或完整交易所 response。
 - PostgreSQL 備份包含加密後的 API 憑證與交易紀錄，需以敏感資料保護。
 - `ENCRYPTION_KEY` 遺失後，既有加密 API 憑證無法解密。
+- `BACKUP_ENCRYPTION_KEY` 遺失後，Cloudflare R2 上的加密備份無法解密。
 - Telegram 頻道／群組轉發需要 Bot 具備相應管理權限。

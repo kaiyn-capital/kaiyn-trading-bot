@@ -122,3 +122,12 @@
 - 確認信號上出現「市价下单」與「挂单」。
 - 點擊兩種下單方式，確認可進入 pending order 確認畫面。
 - 使用 forum supergroup 時，設定 `/set_channel_topic` 後確認信號出現在指定 topic。
+
+若啟用 Cloudflare R2 備份，部署後可在 VPS 上執行一次只下載、不還原的備份 smoke test：
+
+```bash
+make r2-download-latest
+cat backups/r2_restore_status.json
+```
+
+不要在 production smoke test 直接執行 `make disaster-restore`；那是新 VPS 或明確還原情境才使用的 destructive flow。
