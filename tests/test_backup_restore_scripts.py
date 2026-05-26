@@ -64,7 +64,7 @@ def test_makefile_exposes_manual_backup_and_restore_targets():
     assert "BOT_IMAGE_FILE ?= .bot_image" in makefile
     assert "RESOLVED_BOT_IMAGE" in makefile
     assert "BACKUP_COMPOSE" in makefile
-    assert "printf '%s\\n' \"$(BOT_IMAGE)\" > \"$(BOT_IMAGE_FILE)\"" in makefile
+    assert 'printf \'%s\\n\' "$(BOT_IMAGE)" > "$(BOT_IMAGE_FILE)"' in makefile
     assert "backup-now:" in makefile
     assert "r2-download-latest:" in makefile
     assert "restore-latest:" in makefile
