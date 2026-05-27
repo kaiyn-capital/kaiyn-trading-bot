@@ -77,3 +77,7 @@ id_ed25519*
 tmp/
 temp/
 .tmp/
+
+#codegraph data files
+.codegraph/
+.cursor/
