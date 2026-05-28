@@ -183,6 +183,7 @@ async def test_setup_commands_only_sets_private_scope():
         "status",
         "balance",
         "settings",
+        "trader",
     ]
 
 

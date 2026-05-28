@@ -81,3 +81,7 @@ temp/
 #codegraph data files
 .codegraph/
 .cursor/
+
+#mcptools and agent data files
+.agent/
+.gemini/

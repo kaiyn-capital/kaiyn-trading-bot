@@ -88,6 +88,9 @@ class BotHandlerContext:
     async def _require_admin(self, update):
         return await self._owner._require_admin(update)
 
+    async def _require_trader(self, update):
+        return await self._owner._require_trader(update)
+
     def _is_admin_user(self, user) -> bool:
         return self._owner._is_admin_user(user)
 

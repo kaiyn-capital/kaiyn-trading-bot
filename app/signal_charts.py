@@ -255,6 +255,7 @@ def _draw_signal_overlay(
     for target in levels.other_targets:
         ax.hlines(target, x_start, x_end, colors=reward_edge, linewidth=0.8, linestyles="dashed", alpha=0.75)
         _draw_level_text(ax, x_end, target, "tp", va="center")
+        _draw_price_tag(ax, target, reward_edge)
 
     _draw_level_text(ax, x_end, levels.target, "tp", va="bottom" if is_long else "top")
     _draw_level_text(ax, x_end, levels.entry, "entry", va="top" if is_long else "bottom")
