@@ -143,6 +143,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
         )
         self.application.add_handler(CommandHandler("add_channel", self.add_channel_command, filters=private_chat))
         self.application.add_handler(CommandHandler("send_signal", self.send_signal_command, filters=private_chat))
+        self.application.add_handler(CommandHandler("trader", self.trader_command, filters=private_chat))
         self.application.add_handler(CommandHandler("update_chart", self.update_chart_command, filters=private_chat))
         self.application.add_handler(
             CommandHandler("send_to_channel", self.send_to_channel_command, filters=private_chat)
@@ -170,6 +171,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             BotCommand("status", "查看连接状态"),
             BotCommand("balance", "查看账户余额"),
             BotCommand("settings", "交易设置"),
+            BotCommand("trader", "交易员面板"),
         ]
 
         try:

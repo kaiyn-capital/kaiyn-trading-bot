@@ -84,6 +84,32 @@ class OrderHandlers:
             return session
         return None
 
+    async def trader_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Show trader panel with signal command templates."""
+        user = await self.bot._require_trader(update)
+        if user is None:
+            return
+
+        panel_text = (
+            "👨‍💼 <b>交易员面板</b>\n\n"
+            "💡 <b>一键复制指令模板</b>\n"
+            "点击以下代码块即可复制到输入框进行修改：\n\n"
+            "<b>1. 发送新信号</b>\n"
+            f"{html_code('/send_signal 交易对 方向 entry[进场] sl[止损] tp[止盈1 止盈2] [备注]')}\n\n"
+            "<i>空白模板：</i>\n"
+            f"{html_code('/send_signal USDT long entry[] sl[] tp[]')}\n"
+            f"{html_code('/send_signal USDT short entry[] sl[] tp[]')}\n\n"
+            "<i>完整範例：</i>\n"
+            f"{html_code('/send_signal BTCUSDT long entry[65000] sl[64000] tp[66000 68000]')}\n\n"
+            "<b>2. 更新已有信号图表</b>\n"
+            f"{html_code('/update_chart 交易id [备注文字]')}\n\n"
+            "<i>空白模板：</i>\n"
+            f"{html_code('/update_chart ')}\n\n"
+            "<i>完整範例：</i>\n"
+            f"{html_code('/update_chart 7cg8h2k 达到第一止盈位，保护性止损已上移')}"
+        )
+        await update.message.reply_text(panel_text, parse_mode=HTML_PARSE_MODE)
+
     async def send_signal_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Send a trading signal to configured channels."""
         user = await self.bot._get_or_create_user(update)
@@ -345,7 +371,7 @@ class OrderHandlers:
         await self.bot.delete_user_session(user.telegram_id)
         await self._edit_signal_preview_message(
             query,
-            f"✅ <b>交易信号已转发</b>\n\n📺 发送到频道：{result['sent_count']} 个",
+            f"✅ <b>交易信号已转发</b>\n交易id: <code>{session.signal_public_id}</code>\n\n📺 发送到频道：{result['sent_count']} 个",
             parse_mode=HTML_PARSE_MODE,
         )
         await emit_audit_event(
@@ -563,6 +589,9 @@ class OrderHandlersMixin:
         self, telegram_id: int
     ) -> SignalPreviewSession | ChartUpdatePreviewSession | None:
         return await self.order_handlers._get_active_preview_session(telegram_id)
+
+    async def trader_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.order_handlers.trader_command(update, context)
 
     async def send_signal_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self.order_handlers.send_signal_command(update, context)
