@@ -3,6 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from ..models import PendingOrder
 from ..repository_types import PendingOrderRecord
@@ -34,31 +35,33 @@ class PendingOrderRepository:
         async with self.db.get_session() as session:
             for _ in range(5):
                 token = secrets.token_urlsafe(8)
-                existing = await session.execute(select(PendingOrder.id).where(PendingOrder.token == token))
-                if existing.scalar_one_or_none() is None:
-                    break
+                try:
+                    async with session.begin_nested():
+                        pending_order = PendingOrder(
+                            token=token,
+                            user_id=user_id,
+                            telegram_id=telegram_id,
+                            symbol=symbol,
+                            direction=direction,
+                            order_mode=order_mode,
+                            limit_price=limit_price,
+                            entry_lower=entry_lower,
+                            entry_upper=entry_upper,
+                            quantity=quantity,
+                            stop_loss=stop_loss,
+                            position_value=position_value,
+                            current_price=current_price,
+                            expires_at=expires_at,
+                        )
+                        session.add(pending_order)
+                        await session.flush()
+                        return pending_order_record_from_model(pending_order)
+                except IntegrityError as e:
+                    if "pending_orders_token_key" in str(e) or "UNIQUE constraint failed: pending_orders.token" in str(e):
+                        continue
+                    raise
             else:
                 raise RuntimeError("Failed to generate unique pending order token")
-
-            pending_order = PendingOrder(
-                token=token,
-                user_id=user_id,
-                telegram_id=telegram_id,
-                symbol=symbol,
-                direction=direction,
-                order_mode=order_mode,
-                limit_price=limit_price,
-                entry_lower=entry_lower,
-                entry_upper=entry_upper,
-                quantity=quantity,
-                stop_loss=stop_loss,
-                position_value=position_value,
-                current_price=current_price,
-                expires_at=expires_at,
-            )
-            session.add(pending_order)
-            await session.flush()
-            return pending_order_record_from_model(pending_order)
 
     async def claim_pending_order(self, token: str, telegram_id: int) -> tuple[PendingOrderRecord | None, str]:
         """Atomically claim a pending order for execution."""
