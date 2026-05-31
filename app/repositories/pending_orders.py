@@ -3,7 +3,6 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
 
 from ..models import PendingOrder
 from ..repository_types import PendingOrderRecord
@@ -33,37 +32,40 @@ class PendingOrderRepository:
     ) -> PendingOrderRecord:
         """Create a pending order with a short callback token."""
         async with self.db.get_session() as session:
-            for _ in range(5):
-                token = secrets.token_urlsafe(8)
-                try:
-                    async with session.begin_nested():
-                        pending_order = PendingOrder(
-                            token=token,
-                            user_id=user_id,
-                            telegram_id=telegram_id,
-                            symbol=symbol,
-                            direction=direction,
-                            order_mode=order_mode,
-                            limit_price=limit_price,
-                            entry_lower=entry_lower,
-                            entry_upper=entry_upper,
-                            quantity=quantity,
-                            stop_loss=stop_loss,
-                            position_value=position_value,
-                            current_price=current_price,
-                            expires_at=expires_at,
-                        )
-                        session.add(pending_order)
-                        await session.flush()
-                        return pending_order_record_from_model(pending_order)
-                except IntegrityError as e:
-                    if "pending_orders_token_key" in str(e) or "UNIQUE constraint failed: pending_orders.token" in str(
-                        e
-                    ):
-                        continue
-                    raise
-            else:
+            # Generate a batch of candidate tokens
+            candidate_tokens = [secrets.token_urlsafe(8) for _ in range(5)]
+
+            # Check which tokens already exist in the database
+            result = await session.execute(
+                select(PendingOrder.token).where(PendingOrder.token.in_(candidate_tokens))
+            )
+            existing_tokens = set(result.scalars().all())
+
+            # Find the first token that does not exist
+            token = next((t for t in candidate_tokens if t not in existing_tokens), None)
+
+            if token is None:
                 raise RuntimeError("Failed to generate unique pending order token")
+
+            pending_order = PendingOrder(
+                token=token,
+                user_id=user_id,
+                telegram_id=telegram_id,
+                symbol=symbol,
+                direction=direction,
+                order_mode=order_mode,
+                limit_price=limit_price,
+                entry_lower=entry_lower,
+                entry_upper=entry_upper,
+                quantity=quantity,
+                stop_loss=stop_loss,
+                position_value=position_value,
+                current_price=current_price,
+                expires_at=expires_at,
+            )
+            session.add(pending_order)
+            await session.flush()
+            return pending_order_record_from_model(pending_order)
 
     async def claim_pending_order(self, token: str, telegram_id: int) -> tuple[PendingOrderRecord | None, str]:
         """Atomically claim a pending order for execution."""
