@@ -57,7 +57,9 @@ class PendingOrderRepository:
                         await session.flush()
                         return pending_order_record_from_model(pending_order)
                 except IntegrityError as e:
-                    if "pending_orders_token_key" in str(e) or "UNIQUE constraint failed: pending_orders.token" in str(e):
+                    if "pending_orders_token_key" in str(e) or "UNIQUE constraint failed: pending_orders.token" in str(
+                        e
+                    ):
                         continue
                     raise
             else:
