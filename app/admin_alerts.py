@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta
@@ -107,16 +108,21 @@ async def send_direct_admin_alert(
     sent_any = False
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     async with httpx.AsyncClient(timeout=10) as client:
-        for admin_id in admin_ids:
+
+        async def _send(admin_id: int):
             try:
                 response = await client.post(
                     url,
                     json={"chat_id": admin_id, "text": text, "parse_mode": HTML_PARSE_MODE},
                 )
                 response.raise_for_status()
-                sent_any = True
+                return True
             except httpx.HTTPError as exc:
                 logger.error(f"Failed to send direct admin alert to {admin_id}: {exc}")
+                return False
+
+        results = await asyncio.gather(*[_send(admin_id) for admin_id in admin_ids])
+        sent_any = any(results)
 
     return sent_any
 
@@ -151,13 +157,16 @@ class AdminAlertManager:
             if not self.state_store.should_send(alert_key, cooldown):
                 return False
 
-        sent_any = False
-        for admin_id in admin_ids:
+        async def _send(admin_id: int):
             try:
                 await self.bot.send_message(chat_id=admin_id, text=text, parse_mode=HTML_PARSE_MODE)
-                sent_any = True
+                return True
             except TelegramError as exc:
                 logger.error(f"Failed to send admin alert to {admin_id}: {exc}")
+                return False
+
+        results = await asyncio.gather(*[_send(admin_id) for admin_id in admin_ids])
+        sent_any = any(results)
 
         return sent_any
 
