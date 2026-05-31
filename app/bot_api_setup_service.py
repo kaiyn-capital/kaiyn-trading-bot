@@ -65,7 +65,7 @@ class TelegramApiSetupService:
         try:
             await update.message.delete()
         except TelegramError as e:
-            logger.warning(f"Failed to delete API key message: {e}")
+            logger.warning(f"Failed to delete API key message: {type(e).__name__}")
 
         if not api_key or len(api_key) < 10:
             await context.bot.send_message(
@@ -109,7 +109,7 @@ class TelegramApiSetupService:
         try:
             await update.message.delete()
         except TelegramError as e:
-            logger.warning(f"Failed to delete secret key message: {e}")
+            logger.warning(f"Failed to delete secret key message: {type(e).__name__}")
 
         if not secret_key or len(secret_key) < 10:
             await context.bot.send_message(
@@ -153,7 +153,7 @@ class TelegramApiSetupService:
         try:
             await update.message.delete()
         except TelegramError as e:
-            logger.warning(f"Failed to delete passphrase message: {e}")
+            logger.warning(f"Failed to delete passphrase message: {type(e).__name__}")
 
         if not passphrase:
             await context.bot.send_message(
