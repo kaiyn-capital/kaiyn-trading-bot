@@ -219,7 +219,8 @@ def validate_order_preview(
     if calculation_error:
         return calculation_error
 
-    assert calculation_price is not None
+    if calculation_price is None:
+        raise ValueError("Calculation price is missing after evaluation")
     stop_loss_error = _validate_stop_loss_direction(direction, to_decimal(preview.stop_loss), calculation_price)
     if stop_loss_error:
         return stop_loss_error
@@ -228,7 +229,8 @@ def validate_order_preview(
     if quantity_error:
         return quantity_error
 
-    assert calculation_price is not None
+    if calculation_price is None:
+        raise ValueError("Calculation price is missing after evaluation")
     calculation_price, limit_price, limit_price_text, limit_price_error = _normalize_limit_price(
         preview,
         rules,
@@ -238,8 +240,10 @@ def validate_order_preview(
     if limit_price_error:
         return limit_price_error
 
-    assert quantity is not None
-    assert calculation_price is not None
+    if quantity is None:
+        raise ValueError("Quantity is missing after normalization")
+    if calculation_price is None:
+        raise ValueError("Calculation price is missing after normalization")
     position_value_decimal, position_value_error = _validate_position_value(quantity, calculation_price, rules)
     if position_value_error:
         return position_value_error
