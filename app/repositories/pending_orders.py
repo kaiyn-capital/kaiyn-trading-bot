@@ -36,9 +36,7 @@ class PendingOrderRepository:
             candidate_tokens = [secrets.token_urlsafe(8) for _ in range(5)]
 
             # Check which tokens already exist in the database
-            result = await session.execute(
-                select(PendingOrder.token).where(PendingOrder.token.in_(candidate_tokens))
-            )
+            result = await session.execute(select(PendingOrder.token).where(PendingOrder.token.in_(candidate_tokens)))
             existing_tokens = set(result.scalars().all())
 
             # Find the first token that does not exist
