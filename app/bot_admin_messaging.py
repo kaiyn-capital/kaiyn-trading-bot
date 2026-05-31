@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -41,7 +42,7 @@ class AdminMessaging:
 
             sender_username = self.bot._get_sender_username(update)
 
-            for channel in channels:
+            async def send_to_channel(channel):
                 try:
                     send_kwargs = {
                         "chat_id": channel.chat_id,
@@ -51,12 +52,16 @@ class AdminMessaging:
                     if channel.message_thread_id:
                         send_kwargs["message_thread_id"] = channel.message_thread_id
                     await context.bot.send_message(**send_kwargs)
-                    sent_to_channels += 1
+                    return True
                 except TelegramError as e:
                     logger.warning(
                         f"Failed to send broadcast to channel {channel.chat_id} thread {channel.message_thread_id}: {e}"
                     )
-                    failed_channels += 1
+                    return False
+
+            results = await asyncio.gather(*(send_to_channel(channel) for channel in channels))
+            sent_to_channels = sum(1 for r in results if r)
+            failed_channels = sum(1 for r in results if not r)
 
             await status_msg.edit_text(
                 f"✅ <b>广播完成</b>\n\n成功发送：{sent_to_channels} 个频道/群组\n发送失败：{failed_channels} 个频道/群组",
