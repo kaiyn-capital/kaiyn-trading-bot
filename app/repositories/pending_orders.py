@@ -9,6 +9,15 @@ from ..models import PendingOrder
 from ..repository_types import PendingOrderRecord
 
 
+def _is_pending_order_token_unique_violation(error: IntegrityError) -> bool:
+    error_text = str(error)
+    return (
+        "ix_pending_orders_token" in error_text
+        or "pending_orders_token_key" in error_text
+        or "UNIQUE constraint failed: pending_orders.token" in error_text
+    )
+
+
 class PendingOrderRepository:
     """Pending order persistence for restart-safe confirmations."""
 
@@ -57,9 +66,7 @@ class PendingOrderRepository:
                         await session.flush()
                         return pending_order_record_from_model(pending_order)
                 except IntegrityError as e:
-                    if "pending_orders_token_key" in str(e) or "UNIQUE constraint failed: pending_orders.token" in str(
-                        e
-                    ):
+                    if _is_pending_order_token_unique_violation(e):
                         continue
                     raise
             else:

@@ -229,8 +229,6 @@ def validate_order_preview(
     if quantity_error:
         return quantity_error
 
-    if calculation_price is None:
-        raise ValueError("Calculation price is missing after evaluation")
     calculation_price, limit_price, limit_price_text, limit_price_error = _normalize_limit_price(
         preview,
         rules,
