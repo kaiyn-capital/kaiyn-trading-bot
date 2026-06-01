@@ -12,6 +12,7 @@ from sqlalchemy.pool import NullPool
 
 from app.database import PendingOrderRepository, TradeRepository
 from app.models import PendingOrder, Trade, User
+from app.repositories import pending_orders as pending_order_module
 from app.risk_limits import RiskLimitExceeded
 
 
@@ -233,6 +234,23 @@ async def test_claim_missing_and_expired_pending_order():
 
         saved = await load_pending(db, expired.token)
         assert saved.status == "expired"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_create_pending_order_retries_token_collision(monkeypatch):
+    tokens = iter(["duplicate_token", "duplicate_token", "fresh_token"])
+    monkeypatch.setattr(pending_order_module.secrets, "token_urlsafe", lambda _size: next(tokens))
+
+    async with integration_database() as db:
+        repo = PendingOrderRepository(db)
+        user_id = await seed_user(db)
+
+        first = await create_pending(repo, user_id)
+        second = await create_pending(repo, user_id)
+
+        assert first.token == "duplicate_token"
+        assert second.token == "fresh_token"
 
 
 @pytest.mark.integration
