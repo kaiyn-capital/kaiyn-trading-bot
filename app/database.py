@@ -1,7 +1,7 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -19,6 +19,7 @@ from .repositories import (
     UserSessionRepository,
 )
 from .settings import Settings
+from .time_utils import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ async def cleanup_retention_records(retention_days: int, dry_run: bool = False) 
     if retention_days <= 0:
         raise ValueError("retention_days must be greater than 0")
 
-    cutoff = datetime.utcnow() - timedelta(days=retention_days)
+    cutoff = utc_now_naive() - timedelta(days=retention_days)
     cleanup_targets = [
         ("pending_orders", PendingOrder),
         ("trades", Trade),

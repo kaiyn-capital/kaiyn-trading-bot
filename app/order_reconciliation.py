@@ -12,6 +12,7 @@ from .bitget_errors import BitgetAPIError, ClassifiedBitgetError, classify_bitge
 from .decimal_utils import to_decimal_or_none
 from .order_flow import build_client_order_id
 from .telegram_formatting import HTML_PARSE_MODE, html_escape
+from .time_utils import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ class PendingOrderReconciliationService:
         limit: int,
         now: datetime | None = None,
     ) -> PendingOrderReconciliationSummary:
-        now = now or datetime.utcnow()
+        now = now or utc_now_naive()
         cutoff = now - timedelta(seconds=stale_after_seconds)
         pending_orders = await self.pending_order_repo.get_stale_processing_orders(cutoff, limit)
         summary = PendingOrderReconciliationSummary(scanned=len(pending_orders))

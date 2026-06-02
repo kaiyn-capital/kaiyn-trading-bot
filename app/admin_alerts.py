@@ -10,6 +10,7 @@ from telegram.error import TelegramError
 from .bitget_errors import BitgetErrorCategory, ClassifiedBitgetError
 from .settings import Settings
 from .telegram_formatting import HTML_PARSE_MODE, html_escape
+from .time_utils import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +21,6 @@ ALERTABLE_BITGET_CATEGORIES = {
     BitgetErrorCategory.TEMPORARY_EXCHANGE,
     BitgetErrorCategory.UNKNOWN,
 }
-
-
-def _utcnow() -> datetime:
-    return datetime.utcnow()
 
 
 def _parse_iso_datetime(value: str | None) -> datetime | None:
@@ -74,7 +71,7 @@ class AlertStateStore:
     ) -> bool:
         state = self.load()
         sent = state.setdefault("sent", {})
-        now = now or _utcnow()
+        now = now or utc_now_naive()
         last_sent = _parse_iso_datetime(sent.get(alert_key))
         if last_sent and now - last_sent < timedelta(seconds=cooldown_seconds):
             return False
@@ -207,7 +204,7 @@ class AdminAlertManager:
         await self._log_bitget_failure(classified_error, source, context or {})
 
         category = classified_error.category.value
-        now = _utcnow()
+        now = utc_now_naive()
         window_start = now - timedelta(seconds=self.settings.bitget_alert_window_seconds)
         failures = [timestamp for timestamp in self.bitget_failures.get(category, []) if timestamp >= window_start]
         failures.append(now)

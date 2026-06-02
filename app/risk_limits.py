@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any
 
 from .decimal_utils import decimal_json, to_decimal_or_none
+from .time_utils import utc_now_naive
 
 UTC_PLUS_8 = timezone(timedelta(hours=8))
 
@@ -51,7 +52,7 @@ def get_effective_daily_trade_limit(user_data: object, global_daily_trade_limit:
 
 def get_daily_limit_day_start_utc(now: datetime | None = None) -> datetime:
     """Return naive UTC datetime for the current UTC+8 trading day start."""
-    now = now or datetime.utcnow()
+    now = now or utc_now_naive()
     if now.tzinfo is None:
         now_utc = now.replace(tzinfo=UTC)
     else:

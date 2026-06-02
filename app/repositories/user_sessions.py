@@ -4,6 +4,7 @@ from sqlalchemy import delete, func, select
 
 from ..models import UserSession
 from ..repository_types import UserSessionRecord
+from ..time_utils import utc_now_naive
 
 
 class UserSessionRepository:
@@ -28,7 +29,7 @@ class UserSessionRepository:
                 select(UserSession).where(UserSession.telegram_id == telegram_id).with_for_update()
             )
             stored_session = result.scalar_one_or_none()
-            now = datetime.utcnow()
+            now = utc_now_naive()
             if not stored_session:
                 stored_session = UserSession(
                     telegram_id=telegram_id,

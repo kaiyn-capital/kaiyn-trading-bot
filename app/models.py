@@ -1,5 +1,4 @@
 import json
-from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -16,6 +15,8 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
+
+from .time_utils import utc_now_naive
 
 Base = declarative_base()
 
@@ -53,8 +54,8 @@ class User(Base):
     is_trader = Column(Boolean, default=False)  # 是否為發單員
 
     # 時間戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
     last_login = Column(DateTime, nullable=True)
 
     # 關聯
@@ -77,8 +78,8 @@ class UserSession(Base):
     payload_encrypted = Column(Text, nullable=False)
     payload_version = Column(Integer, nullable=False, default=1)
     expires_at = Column(DateTime, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive, nullable=False)
 
     user = relationship("User", back_populates="sessions")
 
@@ -111,8 +112,8 @@ class Trade(Base):
     error_message = Column(Text, nullable=True)
 
     # 時間戳
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive, index=True)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
     executed_at = Column(DateTime, nullable=True)
 
     # 關聯
@@ -146,8 +147,8 @@ class PendingOrder(Base):
     error_message = Column(Text, nullable=True)
 
     # 時間戳
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive, index=True)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
     expires_at = Column(DateTime, nullable=False, index=True)
 
     # 關聯
@@ -179,8 +180,8 @@ class SignalRecord(Base):
     chart_status = Column(String, nullable=True)
     chart_error = Column(String, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive, nullable=False)
     confirmed_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="signal_records")
@@ -208,7 +209,7 @@ class SignalChannelMessage(Base):
     message_thread_id = Column(Integer, nullable=True)
     telegram_message_id = Column(Integer, nullable=False)
     sent_as = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False)
 
     signal_record = relationship("SignalRecord", back_populates="channel_messages")
 
@@ -232,7 +233,7 @@ class NotificationLog(Base):
     extra_data = Column(Text, nullable=True)  # JSON 格式
 
     # 時間戳
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utc_now_naive, index=True)
     sent_at = Column(DateTime, nullable=True)
 
     # 關聯
@@ -272,8 +273,8 @@ class TradingPair(Base):
     is_trading_enabled = Column(Boolean, default=True)
 
     # 時間戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
 
 class ChannelGroup(Base):
@@ -299,8 +300,8 @@ class ChannelGroup(Base):
     description = Column(String, nullable=True)  # 頻道描述
 
     # 時間戳
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
 
 class SystemLog(Base):
@@ -323,7 +324,7 @@ class SystemLog(Base):
     stack_trace = Column(Text, nullable=True)
 
     # 時間戳
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utc_now_naive, index=True)
 
     def set_extra_data(self, data: dict):
         """設置額外數據"""

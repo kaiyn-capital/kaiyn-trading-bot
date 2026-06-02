@@ -1,9 +1,8 @@
-from datetime import datetime
-
 from sqlalchemy import select
 
 from ..models import NotificationLog
 from ..repository_types import NotificationRecord
+from ..time_utils import utc_now_naive
 
 
 class NotificationRepository:
@@ -40,7 +39,7 @@ class NotificationRepository:
 
             notification.is_sent = True
             notification.telegram_message_id = telegram_message_id
-            notification.sent_at = datetime.utcnow()
+            notification.sent_at = utc_now_naive()
             return True
 
     async def get_unsent_notifications(self) -> list[NotificationRecord]:

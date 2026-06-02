@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ..models import PendingOrder
 from ..repository_types import PendingOrderRecord
+from ..time_utils import utc_now_naive
 
 
 def _is_pending_order_token_unique_violation(error: IntegrityError) -> bool:
@@ -90,13 +91,13 @@ class PendingOrderRepository:
             if pending_order.status != "pending":
                 return pending_order_record_from_model(pending_order), pending_order.status
 
-            if pending_order.expires_at <= datetime.utcnow():
+            if pending_order.expires_at <= utc_now_naive():
                 pending_order.status = "expired"
                 await session.flush()
                 return pending_order_record_from_model(pending_order), "expired"
 
             pending_order.status = "processing"
-            pending_order.updated_at = datetime.utcnow()
+            pending_order.updated_at = utc_now_naive()
             await session.flush()
             return pending_order_record_from_model(pending_order), "processing"
 
@@ -153,7 +154,7 @@ class PendingOrderRepository:
                 return pending_order.status
 
             pending_order.status = "cancelled"
-            pending_order.updated_at = datetime.utcnow()
+            pending_order.updated_at = utc_now_naive()
             return "cancelled"
 
     async def _update_status(
@@ -172,7 +173,7 @@ class PendingOrderRepository:
             pending_order.status = status
             pending_order.trade_id = trade_id
             pending_order.error_message = error_message
-            pending_order.updated_at = datetime.utcnow()
+            pending_order.updated_at = utc_now_naive()
             return True
 
 

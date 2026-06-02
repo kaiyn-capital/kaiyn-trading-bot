@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, select
 from ..models import Trade
 from ..repository_types import TradeRecord
 from ..risk_limits import build_daily_trade_limit_error
+from ..time_utils import utc_now_naive
 
 RISK_LIMIT_ADVISORY_LOCK_NAMESPACE = 724019
 
@@ -112,7 +113,7 @@ class TradeRepository:
             trade.error_message = error_message
 
             if status in ["filled", "cancelled", "failed"]:
-                trade.executed_at = datetime.utcnow()
+                trade.executed_at = utc_now_naive()
 
             return True
 
@@ -147,7 +148,7 @@ class TradeRepository:
 
     async def get_daily_trades_count(self, user_id: int) -> int:
         """獲取用戶今日交易次數"""
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = utc_now_naive().replace(hour=0, minute=0, second=0, microsecond=0)
         return await self.count_daily_non_failed_trades(user_id, today)
 
 

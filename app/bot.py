@@ -50,6 +50,7 @@ from .order_reconciliation import PendingOrderReconciliationService
 from .repository_types import UserAccountRecord
 from .session_store import DatabaseSessionStore
 from .settings import Settings
+from .time_utils import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -419,7 +420,7 @@ class TelegramBot(AccountHandlersMixin, AdminHandlersMixin, OrderHandlersMixin):
             )
 
             logger.info("Telegram bot started successfully")
-            self.started_at = datetime.utcnow()
+            self.started_at = utc_now_naive()
             await self.alert_manager.alert_startup_success()
             self.health_monitor_task = asyncio.create_task(self._health_monitor_loop())
 

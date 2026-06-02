@@ -14,6 +14,7 @@ from .session_types import (
     with_session_expiry,
 )
 from .settings import Settings
+from .time_utils import utc_now_naive
 
 
 class InMemorySessionStore:
@@ -27,7 +28,7 @@ class InMemorySessionStore:
     ):
         self._sessions = sessions_dict
         self._ttl_seconds = ttl_seconds if ttl_seconds is not None else Settings.from_env().user_session_ttl_seconds
-        self._now_func = now_func or datetime.utcnow
+        self._now_func = now_func or utc_now_naive
 
     def _now(self) -> datetime:
         return self._now_func()
@@ -103,7 +104,7 @@ class DatabaseSessionStore:
         self._repo = session_repo
         self._encryption_manager = encryption_manager
         self._ttl_seconds = ttl_seconds if ttl_seconds is not None else Settings.from_env().user_session_ttl_seconds
-        self._now_func = now_func or datetime.utcnow
+        self._now_func = now_func or utc_now_naive
 
     def _now(self) -> datetime:
         return self._now_func()
