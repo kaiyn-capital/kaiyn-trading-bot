@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .settings import Settings
 from .telegram_formatting import html_escape
+from .time_utils import utc_now_naive
 
 BACKUPS_DIR = Path("backups")
 BACKUP_STATUS_FILE = "backup_status.json"
@@ -70,7 +71,7 @@ def read_backup_health(
     stale_hours: int | None = None,
     now: datetime | None = None,
 ) -> BackupHealth:
-    now = now or datetime.utcnow()
+    now = now or utc_now_naive()
     stale_hours = stale_hours if stale_hours is not None else Settings.from_env().backup_stale_hours
     status_path = backups_dir / BACKUP_STATUS_FILE
 
@@ -133,7 +134,7 @@ async def read_maintenance_health(
     stale_hours: int | None = None,
     now: datetime | None = None,
 ) -> MaintenanceHealth:
-    now = now or datetime.utcnow()
+    now = now or utc_now_naive()
     stale_hours = stale_hours if stale_hours is not None else Settings.from_env().maintenance_stale_hours
     latest = await system_log_repo.get_latest_log(
         module="maintenance",
@@ -163,7 +164,7 @@ async def build_admin_health_report(
     backups_dir: Path = BACKUPS_DIR,
     settings: Settings | None = None,
 ) -> tuple[str, dict]:
-    now = datetime.utcnow()
+    now = utc_now_naive()
     settings = settings or Settings.from_env()
     db_ok = await db_manager.health_check()
     backup_health = read_backup_health(
@@ -233,7 +234,7 @@ def format_admin_health_report(
     processing_threshold_seconds: int = 900,
     now: datetime | None = None,
 ) -> str:
-    now = now or datetime.utcnow()
+    now = now or utc_now_naive()
     uptime = format_duration((now - started_at).total_seconds()) if started_at else "未知"
     db_text = "✅ 正常" if db_ok else "❌ 异常"
     backup_icon = "✅" if not backup_health.is_problem else "❌"

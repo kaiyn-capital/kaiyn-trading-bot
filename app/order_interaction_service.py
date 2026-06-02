@@ -37,6 +37,7 @@ from .risk_limits import (
 )
 from .settings import Settings
 from .telegram_formatting import HTML_PARSE_MODE, html_code, html_escape
+from .time_utils import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -374,7 +375,7 @@ class TelegramOrderFlowService:
                 stop_loss=preview.stop_loss,
                 position_value=preview.position_value,
                 current_price=preview.current_price,
-                expires_at=datetime.utcnow() + timedelta(minutes=10),
+                expires_at=utc_now_naive() + timedelta(minutes=10),
             )
             logger.info(
                 f"Stored {preview.order_mode} pending order {pending_order.token} "

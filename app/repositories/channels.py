@@ -1,9 +1,8 @@
-from datetime import datetime
-
 from sqlalchemy import func, select
 
 from ..models import ChannelGroup
 from ..repository_types import ChannelRecord
+from ..time_utils import utc_now_naive
 
 
 class ChannelRepository:
@@ -91,7 +90,7 @@ class ChannelRepository:
                 return False
 
             channel.is_active = False
-            channel.updated_at = datetime.utcnow()
+            channel.updated_at = utc_now_naive()
             return True
 
     async def reactivate_channel(
@@ -122,7 +121,7 @@ class ChannelRepository:
             channel.is_active = True
             channel.auto_forward_signals = True
             channel.forward_with_buttons = True
-            channel.updated_at = datetime.utcnow()
+            channel.updated_at = utc_now_naive()
             return True
 
     async def update_channel_topic(self, chat_id: str, message_thread_id: int, thread_title: str | None = None) -> bool:
@@ -140,7 +139,7 @@ class ChannelRepository:
 
             channel.message_thread_id = message_thread_id
             channel.thread_title = thread_title
-            channel.updated_at = datetime.utcnow()
+            channel.updated_at = utc_now_naive()
             return True
 
     async def clear_channel_topic(self, chat_id: str) -> bool:
@@ -158,7 +157,7 @@ class ChannelRepository:
 
             channel.message_thread_id = None
             channel.thread_title = None
-            channel.updated_at = datetime.utcnow()
+            channel.updated_at = utc_now_naive()
             return True
 
     async def count_active_channels(self) -> int:

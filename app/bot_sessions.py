@@ -3,6 +3,7 @@ from datetime import datetime
 from .session_store import InMemorySessionStore
 from .session_types import UserSessionPayload
 from .settings import Settings
+from .time_utils import utc_now_naive
 
 SESSION_EXPIRED_MESSAGE = "⏳ 此設定流程已超过 5 分钟，请重新开始。"
 
@@ -11,7 +12,7 @@ class UserSessionMixin:
     """Per-user conversation session helpers."""
 
     def _session_now(self) -> datetime:
-        return datetime.utcnow()
+        return utc_now_naive()
 
     @property
     def session_store(self):

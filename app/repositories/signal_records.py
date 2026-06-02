@@ -1,10 +1,9 @@
-from datetime import datetime
-
 from sqlalchemy import select
 
 from ..models import SignalChannelMessage, SignalRecord
 from ..order_types import SignalDraft
 from ..repository_types import SignalChannelMessageRecord, SignalRecordSnapshot
+from ..time_utils import utc_now_naive
 
 
 class SignalRecordRepository:
@@ -66,9 +65,9 @@ class SignalRecordRepository:
                 return False
 
             record.status = status
-            record.updated_at = datetime.utcnow()
+            record.updated_at = utc_now_naive()
             if status == "sent":
-                record.confirmed_at = datetime.utcnow()
+                record.confirmed_at = utc_now_naive()
             return True
 
     async def add_channel_message(
