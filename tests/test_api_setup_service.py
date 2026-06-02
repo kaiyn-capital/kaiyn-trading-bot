@@ -1,7 +1,9 @@
+import logging
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from telegram.error import TelegramError
 
 from app.bot_api_setup_service import TelegramApiSetupService
 from app.bot_sessions import SESSION_EXPIRED_MESSAGE, UserSessionMixin
@@ -32,6 +34,13 @@ class FakeBot:
         return message
 
 
+class FakeEditFailureBot(FakeBot):
+    async def send_message(self, chat_id, text, **kwargs):
+        message = FakeEditFailureSentMessage(chat_id, text, kwargs)
+        self.messages.append(message)
+        return message
+
+
 class FakeSentMessage:
     def __init__(self, chat_id, text, kwargs):
         self.chat_id = chat_id
@@ -41,6 +50,11 @@ class FakeSentMessage:
 
     async def edit_text(self, text, **kwargs):
         self.edits.append({"text": text, "kwargs": kwargs})
+
+
+class FakeEditFailureSentMessage(FakeSentMessage):
+    async def edit_text(self, text, **kwargs):
+        raise TelegramError("edit failed with valid-passphrase")
 
 
 class FakeSessionOwner(UserSessionMixin):
@@ -66,6 +80,11 @@ class FakeUserRepo:
             }
         )
         return True
+
+
+class FakeFailingUserRepo(FakeUserRepo):
+    async def update_user_api_credentials(self, user_id, encrypted_api_key, encrypted_secret_key, encrypted_passphrase):
+        raise ValueError("save failed with valid-secret-key-123")
 
 
 class FakeEncryptionManager:
@@ -132,6 +151,10 @@ def make_update(text):
 
 def make_context():
     return SimpleNamespace(bot=FakeBot())
+
+
+def make_edit_failure_context():
+    return SimpleNamespace(bot=FakeEditFailureBot())
 
 
 @pytest.mark.asyncio
@@ -212,3 +235,49 @@ async def test_api_setup_service_successful_passphrase_saves_credentials_and_inv
     assert harness.logged_actions == [{"user_id": 1, "action": "api_setup_success"}]
     assert context.bot.messages[0].edits[-1]["text"].startswith("✅ <b>API 设置成功！</b>")
     assert context.bot.messages[0].edits[-1]["kwargs"]["parse_mode"] == "HTML"
+
+
+@pytest.mark.asyncio
+async def test_api_setup_service_logs_only_error_type_when_save_fails(caplog):
+    harness = ApiSetupHarness()
+    harness.user_repo = FakeFailingUserRepo()
+    harness.service.user_repo = harness.user_repo
+    await harness.session_owner.set_user_session(
+        123,
+        ApiSetupSession(
+            step="passphrase",
+            api_key="valid-api-key-123",
+            secret_key="valid-secret-key-123",
+        ),
+    )
+    update = make_update("valid-passphrase")
+    context = make_context()
+
+    with caplog.at_level(logging.ERROR):
+        result = await harness.service.set_passphrase(update, context)
+
+    assert result == -1
+    assert "API setup failed: ValueError" in caplog.text
+    assert "valid-secret-key-123" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_api_setup_service_logs_only_error_type_when_update_message_fails(caplog):
+    harness = ApiSetupHarness()
+    await harness.session_owner.set_user_session(
+        123,
+        ApiSetupSession(
+            step="passphrase",
+            api_key="valid-api-key-123",
+            secret_key="valid-secret-key-123",
+        ),
+    )
+    update = make_update("valid-passphrase")
+    context = make_edit_failure_context()
+
+    with caplog.at_level(logging.WARNING):
+        result = await harness.service.set_passphrase(update, context)
+
+    assert result == -1
+    assert "Failed to update API setup message: TelegramError" in caplog.text
+    assert "valid-passphrase" not in caplog.text

@@ -213,13 +213,13 @@ class TelegramApiSetupService:
                 text=f"❌ {classified.user_message}",
             )
         except (SQLAlchemyError, TypeError, ValueError) as e:
-            logger.error(f"API setup failed: {e}")
+            logger.error("API setup failed: %s", type(e).__name__)
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
                 text=f"❌ {UNKNOWN_MESSAGE}",
             )
         except TelegramError as e:
-            logger.warning(f"Failed to update API setup message: {e}")
+            logger.warning("Failed to update API setup message: %s", type(e).__name__)
 
         finally:
             await self.session_owner.delete_user_session(user.telegram_id)
