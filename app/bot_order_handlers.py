@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import math
 import secrets
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -16,6 +18,7 @@ from .bot_messages import (
     chart_update_message,
     signal_usage_message,
 )
+from .market_types import MarketCandle
 from .order_flow import parse_signal_args
 from .order_interaction_service import ConfirmedOrderRequest, TelegramOrderFlowService
 from .order_types import SignalDraft
@@ -31,6 +34,84 @@ SIGNAL_PREVIEW_EXPIRED_MESSAGE = "⏳ 预览已过期或已被新的信号取代
 SIGNAL_PREVIEW_PROMPT = "📋 <b>请确认是否转发以下交易信号</b>"
 CHART_UPDATE_PREVIEW_EXPIRED_MESSAGE = "⏳ 预览已过期或已被新的更新取代，请重新发送 /update_chart"
 CHART_UPDATE_PREVIEW_PROMPT = "📋 <b>请确认是否转发以下图表更新</b>"
+UPDATE_CHART_GRANULARITY_ORDER = ("1H", "4H", "6H", "12H", "1D", "3D", "1W")
+UPDATE_CHART_GRANULARITY_DURATION = {
+    "1H": timedelta(hours=1),
+    "4H": timedelta(hours=4),
+    "6H": timedelta(hours=6),
+    "12H": timedelta(hours=12),
+    "1D": timedelta(days=1),
+    "3D": timedelta(days=3),
+    "1W": timedelta(weeks=1),
+}
+UPDATE_CHART_MIN_PRE_SIGNAL_BARS = 80
+UPDATE_CHART_MAX_CANDLE_LIMIT = 1000
+
+
+@dataclass(frozen=True)
+class SignalUpdateChartWindow:
+    granularity: str
+    limit: int
+    start_time: datetime
+    end_time: datetime
+
+
+def build_signal_update_chart_windows(
+    original_granularity: str,
+    signal_time: datetime,
+    now: datetime | None = None,
+) -> tuple[SignalUpdateChartWindow, ...]:
+    """Return official Bitget candle windows that keep update overlays around half-width."""
+    signal_time_utc = _ensure_aware_utc(signal_time)
+    now_utc = _ensure_aware_utc(now or datetime.now(UTC))
+    if now_utc < signal_time_utc:
+        now_utc = signal_time_utc
+
+    start_index = _update_chart_granularity_start_index(original_granularity)
+    windows = []
+    for granularity in UPDATE_CHART_GRANULARITY_ORDER[start_index:]:
+        duration = UPDATE_CHART_GRANULARITY_DURATION[granularity]
+        post_signal_bars = math.ceil((now_utc - signal_time_utc).total_seconds() / duration.total_seconds())
+        pre_signal_bars = max(post_signal_bars, UPDATE_CHART_MIN_PRE_SIGNAL_BARS)
+        limit = pre_signal_bars + post_signal_bars + 1
+        if limit > UPDATE_CHART_MAX_CANDLE_LIMIT:
+            continue
+        windows.append(
+            SignalUpdateChartWindow(
+                granularity=granularity,
+                limit=limit,
+                start_time=signal_time_utc - duration * pre_signal_bars,
+                end_time=now_utc,
+            )
+        )
+
+    return tuple(windows)
+
+
+def _update_chart_granularity_start_index(granularity: str) -> int:
+    normalized = str(granularity or "").upper()
+    if normalized in UPDATE_CHART_GRANULARITY_ORDER:
+        return UPDATE_CHART_GRANULARITY_ORDER.index(normalized)
+    return 0
+
+
+def _ensure_aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _candles_cover_signal_time(candles: list[MarketCandle], granularity: str, signal_time: datetime) -> bool:
+    if len(candles) < 2:
+        return False
+
+    duration = UPDATE_CHART_GRANULARITY_DURATION.get(str(granularity or "").upper())
+    if duration is None:
+        return False
+
+    signal_time_utc = _ensure_aware_utc(signal_time)
+    timestamps = sorted(_ensure_aware_utc(candle.timestamp) for candle in candles)
+    return timestamps[0] <= signal_time_utc <= timestamps[-1] + duration
 
 
 class OrderHandlers:
@@ -276,13 +357,32 @@ class OrderHandlers:
             await update.message.reply_text("❌ 更新图表时发生错误")
 
     async def _create_signal_update_chart(self, signal: SignalDraft, signal_time: datetime, granularity: str) -> bytes:
-        candles = await self.bot.trade_manager.get_candles(
-            signal.symbol,
-            granularity,
-            self.bot.settings.signal_update_candle_limit,
-            end_time=datetime.now(UTC),
-        )
-        return await asyncio.to_thread(render_signal_update_chart, signal, candles, granularity, signal_time)
+        last_error = None
+        for window in build_signal_update_chart_windows(granularity, signal_time):
+            candles = await self.bot.trade_manager.get_candles(
+                signal.symbol,
+                window.granularity,
+                window.limit,
+                start_time=window.start_time,
+                end_time=window.end_time,
+            )
+            if not _candles_cover_signal_time(candles, window.granularity, signal_time):
+                last_error = ValueError("candles do not cover signal time")
+                continue
+            try:
+                return await asyncio.to_thread(
+                    render_signal_update_chart,
+                    signal,
+                    candles,
+                    window.granularity,
+                    signal_time,
+                )
+            except ValueError as exc:
+                last_error = exc
+
+        if last_error:
+            raise last_error
+        raise ValueError("no supported update chart candle window")
 
     async def _send_chart_update_preview(self, update: Update, update_text: str, chart_bytes: bytes, reply_markup):
         preview_text = f"{CHART_UPDATE_PREVIEW_PROMPT}\n\n{update_text}"

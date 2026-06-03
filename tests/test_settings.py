@@ -25,7 +25,6 @@ def test_settings_from_env_parses_runtime_values_without_dotenv():
             MAX_DAILY_TRADES="5",
             MAX_POSITION_SIZE="1000000.25",
             SIGNAL_CHART_ENABLED="false",
-            SIGNAL_UPDATE_CANDLE_LIMIT="200",
             BITGET_API_URL="https://example.bitget.test",
         ),
         load_env_file=False,
@@ -39,7 +38,6 @@ def test_settings_from_env_parses_runtime_values_without_dotenv():
     assert settings.max_daily_trades == 5
     assert settings.max_position_size == Decimal("1000000.25")
     assert settings.signal_chart_enabled is False
-    assert settings.signal_update_candle_limit == 200
     assert settings.bitget_api_url == "https://example.bitget.test"
 
 

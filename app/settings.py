@@ -68,7 +68,6 @@ class Settings:
     signal_chart_enabled: bool
     signal_chart_granularity: str
     signal_chart_candle_limit: int
-    signal_update_candle_limit: int
     signal_chart_timeout_seconds: float
     max_daily_trades: int
     max_position_size: Decimal
@@ -108,7 +107,6 @@ class Settings:
             signal_chart_enabled=_env_bool(source, "SIGNAL_CHART_ENABLED", True),
             signal_chart_granularity=_get_value(source, "SIGNAL_CHART_GRANULARITY", "1H") or "1H",
             signal_chart_candle_limit=_env_int(source, "SIGNAL_CHART_CANDLE_LIMIT", 120),
-            signal_update_candle_limit=_env_int(source, "SIGNAL_UPDATE_CANDLE_LIMIT", 200),
             signal_chart_timeout_seconds=_env_float(source, "SIGNAL_CHART_TIMEOUT_SECONDS", 8.0),
             max_daily_trades=_env_int(source, "MAX_DAILY_TRADES", 10),
             max_position_size=_env_decimal(source, "MAX_POSITION_SIZE", "1000"),
