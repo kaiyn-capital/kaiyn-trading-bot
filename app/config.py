@@ -25,7 +25,6 @@ _CONFIG_ATTRIBUTE_MAP = {
     "SIGNAL_CHART_ENABLED": "signal_chart_enabled",
     "SIGNAL_CHART_GRANULARITY": "signal_chart_granularity",
     "SIGNAL_CHART_CANDLE_LIMIT": "signal_chart_candle_limit",
-    "SIGNAL_UPDATE_CANDLE_LIMIT": "signal_update_candle_limit",
     "SIGNAL_CHART_TIMEOUT_SECONDS": "signal_chart_timeout_seconds",
     "MAX_DAILY_TRADES": "max_daily_trades",
     "MAX_POSITION_SIZE": "max_position_size",

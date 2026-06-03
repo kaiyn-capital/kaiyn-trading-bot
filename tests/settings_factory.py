@@ -28,7 +28,6 @@ def make_settings(**overrides) -> Settings:
         "signal_chart_enabled": True,
         "signal_chart_granularity": "1H",
         "signal_chart_candle_limit": 120,
-        "signal_update_candle_limit": 200,
         "signal_chart_timeout_seconds": 8.0,
         "max_daily_trades": 10,
         "max_position_size": Decimal("1000"),

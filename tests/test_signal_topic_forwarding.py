@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -9,6 +9,7 @@ from telegram.error import TelegramError
 import app.bot_order_handlers as bot_order_handlers
 from app.bot_order_handlers import OrderHandlersMixin
 from app.bot_sessions import UserSessionMixin
+from app.market_types import MarketCandle
 from app.repository_types import ChannelRecord, SignalChannelMessageRecord, SignalRecordSnapshot
 
 
@@ -121,6 +122,7 @@ class FakeBot:
 class RecordingCandleTradeManager:
     def __init__(self):
         self.calls = []
+        self.missing_granularities: set[str] = set()
 
     async def get_candles(self, symbol, granularity, limit, **kwargs):
         self.calls.append(
@@ -131,7 +133,21 @@ class RecordingCandleTradeManager:
                 "kwargs": kwargs,
             }
         )
-        return []
+        if granularity in self.missing_granularities:
+            return []
+        duration = bot_order_handlers.UPDATE_CHART_GRANULARITY_DURATION[granularity]
+        start_time = kwargs.get("start_time") or datetime.now(UTC) - duration * limit
+        return [
+            MarketCandle(
+                timestamp=start_time + duration * index,
+                open=1.0,
+                high=2.0,
+                low=0.5,
+                close=1.5,
+                volume=100.0,
+            )
+            for index in range(limit)
+        ]
 
 
 class FakeChannelRepo:
@@ -524,20 +540,112 @@ async def test_update_chart_allows_admin_to_update_other_users_signal():
     assert chart_update.message.photos
 
 
+def test_signal_update_chart_window_keeps_short_signal_on_original_granularity():
+    signal_time = datetime(2026, 5, 22, tzinfo=UTC)
+    now = signal_time + timedelta(hours=3)
+
+    windows = bot_order_handlers.build_signal_update_chart_windows("1H", signal_time, now)
+
+    assert windows[0].granularity == "1H"
+    assert windows[0].limit == 84
+    assert windows[0].start_time == signal_time - timedelta(hours=80)
+    assert windows[0].end_time == now
+
+
+def test_signal_update_chart_window_keeps_overlay_near_half_width_for_older_signal():
+    signal_time = datetime(2026, 5, 22, tzinfo=UTC)
+    now = signal_time + timedelta(hours=180)
+
+    windows = bot_order_handlers.build_signal_update_chart_windows("1H", signal_time, now)
+
+    assert windows[0].granularity == "1H"
+    assert windows[0].limit == 361
+    assert windows[0].start_time == signal_time - timedelta(hours=180)
+
+
+def test_signal_update_chart_window_falls_back_to_higher_official_granularity():
+    signal_time = datetime(2026, 5, 1, tzinfo=UTC)
+    now = signal_time + timedelta(hours=800)
+
+    windows = bot_order_handlers.build_signal_update_chart_windows("1H", signal_time, now)
+
+    assert windows[0].granularity == "4H"
+    assert windows[0].limit == 401
+
+
+def test_signal_update_chart_window_never_downshifts_original_granularity():
+    signal_time = datetime(2026, 5, 1, tzinfo=UTC)
+    now = signal_time + timedelta(days=3)
+
+    windows = bot_order_handlers.build_signal_update_chart_windows("4H", signal_time, now)
+
+    assert windows[0].granularity == "4H"
+
+
 @pytest.mark.asyncio
-async def test_signal_update_chart_uses_configured_candle_limit(monkeypatch):
+async def test_signal_update_chart_uses_automatic_candle_window(monkeypatch):
     monkeypatch.setattr(bot_order_handlers, "render_signal_update_chart", lambda *args: b"fake-update-png")
-    handler = FakeOrderHandler(settings=make_settings(signal_update_candle_limit=200))
+    handler = FakeOrderHandler(settings=make_settings())
     handler.trade_manager = RecordingCandleTradeManager()
     signal = SimpleNamespace(symbol="BTCUSDT")
+    signal_time = datetime.now(UTC) - timedelta(hours=180)
 
-    image = await handler._create_signal_update_chart(signal, datetime(2026, 5, 22), "1H")
+    image = await handler._create_signal_update_chart(signal, signal_time, "1H")
 
     assert image == b"fake-update-png"
     assert handler.trade_manager.calls[-1]["symbol"] == "BTCUSDT"
     assert handler.trade_manager.calls[-1]["granularity"] == "1H"
-    assert handler.trade_manager.calls[-1]["limit"] == 200
+    assert handler.trade_manager.calls[-1]["limit"] >= 361
+    assert "start_time" in handler.trade_manager.calls[-1]["kwargs"]
     assert "end_time" in handler.trade_manager.calls[-1]["kwargs"]
+
+
+@pytest.mark.asyncio
+async def test_signal_update_chart_retries_higher_granularity_when_candles_miss_signal_time(monkeypatch):
+    monkeypatch.setattr(bot_order_handlers, "render_signal_update_chart", lambda *args: b"fake-update-png")
+    handler = FakeOrderHandler(settings=make_settings())
+    handler.trade_manager = RecordingCandleTradeManager()
+    handler.trade_manager.missing_granularities.add("1H")
+    signal = SimpleNamespace(symbol="BTCUSDT")
+    signal_time = datetime.now(UTC) - timedelta(hours=3)
+
+    image = await handler._create_signal_update_chart(signal, signal_time, "1H")
+
+    assert image == b"fake-update-png"
+    assert [call["granularity"] for call in handler.trade_manager.calls[:2]] == ["1H", "4H"]
+
+
+@pytest.mark.asyncio
+async def test_signal_update_chart_retries_higher_granularity_when_render_window_fails(monkeypatch):
+    def fake_render_signal_update_chart(signal, candles, granularity, signal_time):
+        if granularity == "1H":
+            raise ValueError("candles do not cover signal time")
+        return b"fake-update-png"
+
+    monkeypatch.setattr(bot_order_handlers, "render_signal_update_chart", fake_render_signal_update_chart)
+    handler = FakeOrderHandler(settings=make_settings())
+    handler.trade_manager = RecordingCandleTradeManager()
+    signal = SimpleNamespace(symbol="BTCUSDT")
+    signal_time = datetime.now(UTC) - timedelta(hours=3)
+
+    image = await handler._create_signal_update_chart(signal, signal_time, "1H")
+
+    assert image == b"fake-update-png"
+    assert [call["granularity"] for call in handler.trade_manager.calls[:2]] == ["1H", "4H"]
+
+
+@pytest.mark.asyncio
+async def test_signal_update_chart_raises_when_all_candidate_windows_fail(monkeypatch):
+    def fake_render_signal_update_chart(signal, candles, granularity, signal_time):
+        raise ValueError("not enough candles")
+
+    monkeypatch.setattr(bot_order_handlers, "render_signal_update_chart", fake_render_signal_update_chart)
+    handler = FakeOrderHandler(settings=make_settings())
+    handler.trade_manager = RecordingCandleTradeManager()
+    signal = SimpleNamespace(symbol="BTCUSDT")
+
+    with pytest.raises(ValueError, match="not enough candles"):
+        await handler._create_signal_update_chart(signal, datetime.now(UTC) - timedelta(hours=3), "1H")
 
 
 @pytest.mark.asyncio
