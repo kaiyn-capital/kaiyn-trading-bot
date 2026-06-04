@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,7 +9,6 @@ from telegram.error import TelegramError
 
 from .audit import summarize_identifier
 from .bitget_errors import BitgetAPIError, ClassifiedBitgetError, classify_bitget_exception
-from .decimal_utils import to_decimal_or_none
 from .order_flow import build_client_order_id
 from .telegram_formatting import HTML_PARSE_MODE, html_escape
 from .time_utils import utc_now_naive
@@ -27,6 +26,12 @@ OPEN_EXCHANGE_STATUSES = {"live", "partially_filled"}
 FILLED_EXCHANGE_STATUSES = {"filled"}
 CANCELLED_EXCHANGE_STATUSES = {"canceled", "cancelled"}
 FAILED_EXCHANGE_STATUSES = {"failed", "rejected"}
+
+
+class InvalidHistoryPayloadError(ValueError):
+    def __init__(self, details: dict[str, str]):
+        super().__init__("invalid_history_payload")
+        self.details = details
 
 
 @dataclass
@@ -108,6 +113,14 @@ class PendingOrderReconciliationService:
             classified = classify_bitget_exception(exc)
             await self._record_query_failure(pending_order, client_order_id, classified)
             return "deferred"
+        except InvalidHistoryPayloadError as exc:
+            await self._defer_with_admin_alert(
+                pending_order,
+                client_order_id,
+                "Cannot reconcile processing order because Bitget history payload is invalid",
+                {"reason": "invalid_history_payload", **exc.details},
+            )
+            return "deferred"
         except (RuntimeError, TypeError, ValueError) as exc:
             logger.exception("Unexpected error while reconciling processing order")
             classified = classify_bitget_exception(exc)
@@ -133,8 +146,27 @@ class PendingOrderReconciliationService:
             )
             return "deferred"
 
-        trade = trade or await self._create_recovered_trade(pending_order, user, client_order_id, order_data)
-        await self._update_trade_from_order(trade.id, order_data, local_status)
+        try:
+            trade = trade or await self._create_recovered_trade(
+                pending_order,
+                user,
+                client_order_id,
+                order_data,
+            )
+            await self._update_trade_from_order(trade.id, order_data, local_status)
+        except (TypeError, ValueError) as exc:
+            await self._defer_with_admin_alert(
+                pending_order,
+                client_order_id,
+                "Cannot reconcile processing order because Bitget returned invalid numeric trade data",
+                {
+                    "reason": "invalid_numeric_trade_data",
+                    "exception_type": type(exc).__name__,
+                    "error": str(exc),
+                    "order": _summarize_order_data(order_data),
+                },
+            )
+            return "deferred"
 
         if local_status in {"cancelled", "failed"}:
             await self.pending_order_repo.mark_failed(pending_order.token, RETRY_ORDER_MESSAGE)
@@ -188,8 +220,38 @@ class PendingOrderReconciliationService:
                 return None
             raise
 
-        orders = ((history.get("data") or {}).get("entrustedList")) or []
+        if not isinstance(history, dict):
+            raise InvalidHistoryPayloadError({"history_type": type(history).__name__})
+
+        data = history.get("data")
+        if not isinstance(data, dict):
+            raise InvalidHistoryPayloadError(
+                {
+                    "history_type": type(history).__name__,
+                    "data_type": type(data).__name__,
+                }
+            )
+
+        orders = data.get("entrustedList")
+        if not isinstance(orders, list):
+            raise InvalidHistoryPayloadError(
+                {
+                    "history_type": type(history).__name__,
+                    "data_type": type(data).__name__,
+                    "entrusted_list_type": type(orders).__name__,
+                }
+            )
+
         for order in orders:
+            if not isinstance(order, dict):
+                raise InvalidHistoryPayloadError(
+                    {
+                        "history_type": type(history).__name__,
+                        "data_type": type(data).__name__,
+                        "entrusted_list_type": type(orders).__name__,
+                        "order_type": type(order).__name__,
+                    }
+                )
             if order.get("clientOid") == client_order_id:
                 return order
         return None
@@ -199,7 +261,9 @@ class PendingOrderReconciliationService:
         if order_type not in {"market", "limit"}:
             order_type = pending_order.order_mode if pending_order.order_mode in {"market", "limit"} else "market"
 
-        exchange_price = _parse_optional_decimal(order_data.get("price"))
+        exchange_price = (
+            _parse_optional_decimal(order_data.get("price"), field_name="price") if order_type == "limit" else None
+        )
         return await self.trade_repo.create_trade(
             user_id=user.id,
             symbol=pending_order.symbol,
@@ -217,10 +281,14 @@ class PendingOrderReconciliationService:
             trade_id,
             bitget_order_id=order_data.get("orderId") or None,
             status=local_status,
-            filled_quantity=_parse_decimal(order_data.get("baseVolume"), default=Decimal("0")),
-            avg_price=_parse_optional_decimal(order_data.get("priceAvg")),
-            total_amount=_parse_optional_decimal(order_data.get("quoteVolume")),
-            fee=_parse_decimal(order_data.get("fee"), default=Decimal("0")),
+            filled_quantity=_parse_decimal(
+                order_data.get("baseVolume"),
+                default=Decimal("0"),
+                field_name="baseVolume",
+            ),
+            avg_price=_parse_optional_decimal(order_data.get("priceAvg"), field_name="priceAvg"),
+            total_amount=_parse_optional_decimal(order_data.get("quoteVolume"), field_name="quoteVolume"),
+            fee=_parse_decimal(order_data.get("fee"), default=Decimal("0"), field_name="fee"),
         )
 
     async def _mark_failed_not_found(self, pending_order, trade, client_order_id: str):
@@ -273,12 +341,19 @@ class PendingOrderReconciliationService:
 
     async def _defer_with_admin_alert(self, pending_order, client_order_id: str, message: str, extra_data: dict):
         await self._log_reconciliation_event("WARNING", message, pending_order, client_order_id, extra_data)
+        alert_detail_lines = []
+        if "exchange_status" in extra_data:
+            alert_detail_lines.append(f"Exchange Status：{html_escape(str(extra_data['exchange_status']))}")
+        if "order" in extra_data:
+            alert_detail_lines.append(f"Order Summary：{html_escape(str(extra_data['order']))}")
+        alert_details = "\n" + "\n".join(alert_detail_lines) if alert_detail_lines else ""
         await self.alert_manager.send_alert(
             "⚠️ Kaiyn Trading Bot processing 订单查单无法完成。\n\n"
             f"Symbol：{html_escape(pending_order.symbol)}\n"
             f"Pending Token：{html_escape(summarize_identifier(pending_order.token))}\n"
             f"Client OID：{html_escape(summarize_identifier(client_order_id))}\n"
-            f"原因：{html_escape(message)}",
+            f"原因：{html_escape(message)}"
+            f"{alert_details}",
             alert_key="pending_order_reconciliation_deferred",
         )
 
@@ -355,15 +430,37 @@ def _side_from_pending_order(pending_order) -> str:
     return "buy" if pending_order.direction == "long" else "sell"
 
 
-def _parse_optional_decimal(value: Any) -> Decimal | None:
-    if value is None or value == "":
+def _parse_optional_decimal(value: Any, *, field_name: str) -> Decimal | None:
+    if value is None:
         return None
-    return to_decimal_or_none(value)
+    return _coerce_decimal_value(value, field_name=field_name)
 
 
-def _parse_decimal(value: Any, default: Decimal) -> Decimal:
-    parsed = _parse_optional_decimal(value)
+def _parse_decimal(value: Any, default: Decimal, *, field_name: str) -> Decimal:
+    if value is None:
+        return default
+    parsed = _coerce_decimal_value(value, field_name=field_name)
     return default if parsed is None else parsed
+
+
+def _coerce_decimal_value(value: Any, *, field_name: str) -> Decimal:
+    if isinstance(value, Decimal):
+        decimal_value = value
+    elif isinstance(value, float):
+        decimal_value = Decimal(str(value))
+    elif isinstance(value, (str, int)) and not isinstance(value, bool):
+        if value == "":
+            raise ValueError(f"{field_name} contains an empty decimal value")
+        try:
+            decimal_value = Decimal(str(value))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(f"{field_name} contains an invalid decimal value") from exc
+    else:
+        raise TypeError(f"{field_name} has unsupported decimal type: {type(value).__name__}")
+
+    if not decimal_value.is_finite():
+        raise ValueError(f"{field_name} contains a non-finite decimal value")
+    return decimal_value
 
 
 def _summarize_order_data(order_data: dict) -> dict:
