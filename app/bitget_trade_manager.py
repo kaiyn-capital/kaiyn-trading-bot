@@ -224,7 +224,18 @@ class BitgetTradeManager:
         return await client.cancel_order(symbol, order_id, client_order_id)
 
     async def cleanup(self):
-        for client in self._clients.values():
-            await client.close()
+        """Close all cached authenticated clients and the public market client."""
+        for user_id, client in list(self._clients.items()):
+            try:
+                await client.close()
+            except (RuntimeError, httpx.HTTPError):
+                logger.warning(
+                    "Failed to close cached Bitget client for user_id=%s during cleanup", user_id, exc_info=True
+                )
+
         self._clients.clear()
-        await self.public_market.close()
+
+        try:
+            await self.public_market.close()
+        except (RuntimeError, httpx.HTTPError):
+            logger.warning("Failed to close Bitget public market client during cleanup", exc_info=True)
