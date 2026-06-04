@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from settings_factory import make_settings
 
+from app.audit import summarize_identifier
 from app.bitget_client import BitgetAPIClient
 from app.bitget_errors import BitgetAPIError
 from app.bot import TelegramBot
@@ -294,6 +295,98 @@ async def test_reconcile_filled_order_updates_trade_fields():
 
 
 @pytest.mark.asyncio
+async def test_reconcile_filled_order_float_values_use_string_decimal_conversion():
+    pending = make_pending()
+    trade_manager = FakeTradeManager(
+        detail={
+            "code": "00000",
+            "data": make_order(
+                state="filled",
+                baseVolume=0.1,
+                priceAvg=50100.25,
+                quoteVolume=5010.5,
+                fee=-0.01,
+            ),
+        }
+    )
+    service, pending_repo, trade_repo, _manager, _bot, _logs, _alerts = make_service(
+        pending_orders=[pending],
+        trade_manager=trade_manager,
+    )
+
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
+
+    assert summary.recovered == 1
+    assert trade_repo.updated[-1]["filled_quantity"] == Decimal("0.1")
+    assert trade_repo.updated[-1]["avg_price"] == Decimal("50100.25")
+    assert trade_repo.updated[-1]["total_amount"] == Decimal("5010.5")
+    assert trade_repo.updated[-1]["fee"] == Decimal("-0.01")
+    assert pending_repo.executed == [{"token": pending.token, "trade_id": 77}]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_filled_order_none_values_keep_defaults_and_optional_nones():
+    pending = make_pending()
+    trade_manager = FakeTradeManager(
+        detail={
+            "code": "00000",
+            "data": make_order(
+                state="filled",
+                baseVolume=None,
+                priceAvg=None,
+                quoteVolume=None,
+                fee=None,
+            ),
+        }
+    )
+    service, pending_repo, trade_repo, _manager, _bot, _logs, _alerts = make_service(
+        pending_orders=[pending],
+        trade_manager=trade_manager,
+    )
+
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
+
+    assert summary.recovered == 1
+    assert trade_repo.updated[-1]["filled_quantity"] == Decimal("0")
+    assert trade_repo.updated[-1]["avg_price"] is None
+    assert trade_repo.updated[-1]["total_amount"] is None
+    assert trade_repo.updated[-1]["fee"] == Decimal("0")
+    assert pending_repo.executed == [{"token": pending.token, "trade_id": 77}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field_name", "field_value"),
+    [
+        ("baseVolume", ""),
+        ("priceAvg", "not-a-number"),
+        ("quoteVolume", object()),
+        ("fee", []),
+    ],
+)
+async def test_reconcile_invalid_numeric_trade_data_defers_and_alerts_admin(field_name, field_value):
+    pending = make_pending()
+    order = make_order(state="filled")
+    order[field_name] = field_value
+    trade_manager = FakeTradeManager(detail={"code": "00000", "data": order})
+    service, pending_repo, trade_repo, _manager, bot, logs, alerts = make_service(
+        pending_orders=[pending],
+        trade_manager=trade_manager,
+    )
+
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
+
+    assert summary.deferred == 1
+    assert pending_repo.failed == []
+    assert pending_repo.executed == []
+    assert trade_repo.updated == []
+    assert bot.messages == []
+    assert alerts.alerts
+    assert logs.logs[-1]["extra_data"]["reason"] == "invalid_numeric_trade_data"
+    assert logs.logs[-1]["extra_data"]["error"]
+
+
+@pytest.mark.asyncio
 async def test_reconcile_cancelled_order_marks_failed_and_notifies_user():
     pending = make_pending()
     trade_manager = FakeTradeManager(detail={"code": "00000", "data": make_order(state="canceled")})
@@ -354,6 +447,114 @@ async def test_reconcile_detail_and_history_not_found_marks_failed_without_new_t
     assert trade_repo.updated[-1]["status"] == "failed"
     assert pending_repo.failed[-1]["token"] == pending.token
     assert "重新按一次" in bot.messages[-1]["text"]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_unknown_exchange_status_defers_with_diagnostic_context():
+    pending = make_pending()
+    existing_trade = SimpleNamespace(id=42, client_order_id=build_client_order_id(pending.token), bitget_order_id=None)
+    trade_manager = FakeTradeManager(detail={"code": "00000", "data": make_order(state="mystery_status")})
+    service, pending_repo, trade_repo, _manager, bot, logs, alerts = make_service(
+        pending_orders=[pending],
+        trade=existing_trade,
+        trade_manager=trade_manager,
+    )
+
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
+
+    assert summary.deferred == 1
+    assert summary.recovered == 0
+    assert summary.failed == 0
+    assert pending_repo.executed == []
+    assert pending_repo.failed == []
+    assert trade_repo.updated == []
+    assert trade_repo.created == []
+    assert bot.messages == []
+    assert alerts.alerts
+    assert "unknown order status" in alerts.alerts[-1]["text"]
+    assert "Exchange Status：mystery_status" in alerts.alerts[-1]["text"]
+    assert "Order Summary：" in alerts.alerts[-1]["text"]
+    assert (
+        logs.logs[-1]["message"] == "Cannot reconcile processing order because Bitget returned an unknown order status"
+    )
+    assert logs.logs[-1]["extra_data"]["reason"] == "unknown_exchange_status"
+    assert logs.logs[-1]["extra_data"]["exchange_status"] == "mystery_status"
+    assert logs.logs[-1]["extra_data"]["order"] == {
+        "orderId": summarize_identifier("order_1"),
+        "clientOid": summarize_identifier(build_client_order_id(pending.token)),
+        "state": "mystery_status",
+        "status": None,
+        "orderType": "limit",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("history_payload", "expected_types"),
+    [
+        (
+            {"code": "00000", "data": {"entrustedList": {}}},
+            {"entrusted_list_type": "dict"},
+        ),
+        (
+            {"code": "00000", "data": {"entrustedList": "bad-shape"}},
+            {"entrusted_list_type": "str"},
+        ),
+        (
+            {"code": "00000", "data": "bad-shape"},
+            {"data_type": "str"},
+        ),
+        (
+            {"code": "00000", "data": {"entrustedList": ["bad-entry"]}},
+            {"order_type": "str"},
+        ),
+    ],
+)
+async def test_reconcile_invalid_history_payload_defers_and_alerts_admin(history_payload, expected_types):
+    pending = make_pending()
+    not_found = BitgetAPIError(code="25204", message="Order does not exist")
+    trade_manager = FakeTradeManager(detail_exc=not_found, history=history_payload)
+    service, pending_repo, trade_repo, _manager, bot, logs, alerts = make_service(
+        pending_orders=[pending],
+        trade_manager=trade_manager,
+    )
+
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
+
+    assert summary.deferred == 1
+    assert pending_repo.failed == []
+    assert pending_repo.executed == []
+    assert trade_repo.created == []
+    assert trade_repo.updated == []
+    assert bot.messages == []
+    assert alerts.alerts
+    assert "history payload is invalid" in alerts.alerts[-1]["text"]
+    assert logs.logs[-1]["message"] == "Cannot reconcile processing order because Bitget history payload is invalid"
+    assert logs.logs[-1]["extra_data"]["reason"] == "invalid_history_payload"
+    for key, value in expected_types.items():
+        assert logs.logs[-1]["extra_data"][key] == value
+
+
+@pytest.mark.asyncio
+async def test_reconcile_market_order_ignores_invalid_price_field_when_price_is_unused():
+    pending = make_pending(order_mode="market", limit_price=None)
+    trade_manager = FakeTradeManager(
+        detail={
+            "code": "00000",
+            "data": make_order(state="filled", orderType="market", price=object()),
+        }
+    )
+    service, pending_repo, trade_repo, _manager, _bot, _logs, _alerts = make_service(
+        pending_orders=[pending],
+        trade_manager=trade_manager,
+    )
+
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
+
+    assert summary.recovered == 1
+    assert trade_repo.created[-1]["order_type"] == "market"
+    assert trade_repo.created[-1]["price"] is None
+    assert pending_repo.executed == [{"token": pending.token, "trade_id": 77}]
 
 
 @pytest.mark.asyncio
