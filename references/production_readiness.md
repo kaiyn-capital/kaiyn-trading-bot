@@ -64,10 +64,10 @@
 
 風控邊界：
 
-- `MAX_POSITION_SIZE` 為全域單筆名義倉位上限。
+- `MAX_POSITION_SIZE` 為全域單筆名義倉位上限，必須是正數。
 - `users.max_position_size` 為可選使用者層覆寫；`NULL`、`0` 或負數代表不覆寫，全域值生效。
 - 有效名義倉位上限取全域與使用者層的較嚴格正數。
-- `MAX_DAILY_TRADES` 為全域每日下單次數上限。
+- `MAX_DAILY_TRADES` 為全域每日下單次數上限，必須是正數。
 - `users.daily_trade_limit` 為可選使用者層覆寫；有效每日限制取較嚴格正數。
 - 每日交易次數以 UTC+8 日切計算，且 DB transaction 內再次檢查，避免同一使用者併發突破限制。
 - 系統目前不設定固定 1R 金額全域上限。

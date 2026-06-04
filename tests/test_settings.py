@@ -63,6 +63,22 @@ def test_settings_validate_requires_async_postgresql_url():
         settings.validate_database_url()
 
 
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_settings_validate_requires_positive_global_position_cap(value):
+    settings = Settings.from_env(complete_env(MAX_POSITION_SIZE=value), load_env_file=False)
+
+    with pytest.raises(ValueError, match="MAX_POSITION_SIZE must be greater than 0"):
+        settings.validate()
+
+
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_settings_validate_requires_positive_global_daily_trade_limit(value):
+    settings = Settings.from_env(complete_env(MAX_DAILY_TRADES=value), load_env_file=False)
+
+    with pytest.raises(ValueError, match="MAX_DAILY_TRADES must be greater than 0"):
+        settings.validate()
+
+
 def test_config_shim_can_be_reloaded_for_legacy_callers():
     original = Config.settings()
     try:

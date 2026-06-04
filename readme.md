@@ -195,6 +195,7 @@ Production configuration is injected via `.env`. See [.env.template](.env.templa
 | `ENCRYPTION_KEY` | Fernet key for encrypting Bitget API credentials |
 | `DATABASE_URL` | PostgreSQL async connection URL |
 | `BITGET_API_URL` | Bitget API base URL |
+| `MAX_DAILY_TRADES` / `MAX_POSITION_SIZE` | Required positive global daily trade and position caps |
 | `SIGNAL_CHART_*` | Optional `/send_signal` chart generation toggle, granularity, candle limit, and shared chart timeout |
 | `RETENTION_DAYS` | Number of days to retain accumulated records and backups |
 | `BACKUP_LOCAL_KEEP_COUNT` | Number of latest local SQL backups to keep |

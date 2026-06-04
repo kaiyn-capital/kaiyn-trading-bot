@@ -85,6 +85,7 @@ GTC 限價掛單：
 風控邊界：
 
 - `users.max_position_size = NULL` 表示沒有使用者層覆寫，所有新舊使用者預設使用全域 `MAX_POSITION_SIZE`。
+- 全域 `MAX_POSITION_SIZE` 與 `MAX_DAILY_TRADES` 必須是正數；設定為 `0` 或負數會在啟動驗證時失敗。
 - 若 `users.max_position_size` 是正數，有效最大倉位名義價值取全域 `MAX_POSITION_SIZE` 與使用者 `max_position_size` 的較嚴格值；`0` 或負數視為沒有覆寫。
 - 有效每日交易次數取全域 `MAX_DAILY_TRADES` 與使用者 `daily_trade_limit` 的較嚴格值。
 - 每日交易次數以 UTC+8 日切計算，只計入非 `failed` 的 trade。

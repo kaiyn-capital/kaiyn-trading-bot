@@ -126,6 +126,7 @@ class Settings:
             raise ValueError("Missing TELEGRAM_ADMIN_IDS")
 
         self.validate_database_url()
+        self.validate_risk_limits()
         return True
 
     def validate_database_url(self) -> bool:
@@ -134,5 +135,14 @@ class Settings:
 
         if not self.database_url.startswith("postgresql+asyncpg://"):
             raise ValueError("DATABASE_URL must use postgresql+asyncpg://")
+
+        return True
+
+    def validate_risk_limits(self) -> bool:
+        if self.max_daily_trades <= 0:
+            raise ValueError("MAX_DAILY_TRADES must be greater than 0")
+
+        if self.max_position_size <= 0:
+            raise ValueError("MAX_POSITION_SIZE must be greater than 0")
 
         return True
