@@ -122,9 +122,9 @@ sequenceDiagram
 | 部署方式 | Docker Compose 服務：`postgres`、`bot`、`maintenance`、`db-backup` |
 | 依賴鎖定 | uv lockfile + `uv sync --locked` |
 | 長期運維 | Docker/檔案 log rotation、DB 資料保留、本機 SQL 備份、R2 加密異地備份 |
-| 測試 | pytest 9.0.3 + pytest-asyncio 1.3.0 + PostgreSQL 整合測試 + critical path 70% coverage 門檻 |
-| Lint／格式化 | Ruff 0.15.14 |
-| 型別檢查 | mypy 2.1.0，針對 critical path modules |
+| 測試 | pytest 9.0.3 + pytest-asyncio 1.4.0 + PostgreSQL 整合測試 + critical path 70% coverage 門檻 |
+| Lint／格式化 | Ruff 0.15.15 |
+| 型別檢查 | mypy 2.1.0，針對擴大的 critical path modules |
 | CI | GitHub Actions 搭配 Docker Compose-first 檢查 |
 | CD | GHCR 多架構 image + VPS SSH 以 digest 部署 |
 | 依賴自動化 | Dependabot 每週更新；GitHub Actions patch/minor 自動合併 |
@@ -195,6 +195,7 @@ docker compose up -d bot maintenance db-backup
 | `ENCRYPTION_KEY` | Fernet 金鑰，用於加密 Bitget API 憑證 |
 | `DATABASE_URL` | PostgreSQL 非同步連線 URL |
 | `BITGET_API_URL` | Bitget API 基礎 URL |
+| `MAX_DAILY_TRADES` / `MAX_POSITION_SIZE` | 必填正數全域每日下單與單筆名義倉位上限 |
 | `SIGNAL_CHART_*` | `/send_signal` 附圖功能開關、K 線週期、K 線數量與 timeout |
 | `RETENTION_DAYS` | 累積紀錄與備份保留天數 |
 | `BACKUP_LOCAL_KEEP_COUNT` | 本機保留最近幾份 SQL 備份 |
@@ -209,23 +210,22 @@ Docker-first 驗證指令：
 make verify
 ```
 
-等效 Docker Compose 展開命令：
+`make verify` 主要執行項目：
 
 ```bash
-docker compose build test
-docker compose run --rm test uv lock --check
-docker compose up -d postgres
-docker compose run --rm test alembic upgrade head
-docker compose run --rm test alembic check
-docker compose run --rm test ruff check .
-docker compose run --rm test ruff format --check .
-docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
-docker compose run --rm test python -m pytest --run-db
-docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py scripts/*.py tests/*.py
-git diff --check
+make build-test
+make lock-check
+make migrate-test
+make alembic-check
+make lint
+make format-check
+make mypy
+make test-db
+make py-compile
+make diff-check
 ```
 
-GitHub Actions 以相同 Docker Compose 流程執行 lockfile 一致性、Alembic migration/model 檢查、Ruff、mypy、PostgreSQL 整合測試與 coverage output、`py_compile` 與空白字元檢查。CI 通過後，release workflow 會發布多架構 image 到 GHCR，並在 `production` environment approval 後透過 SSH 部署 image digest 到 VPS。Coolify 文件保留為可選部署方案。
+GitHub Actions 以相同 Docker Compose-backed 檢查執行 lockfile 一致性、Alembic migration/model 檢查、Ruff、mypy、PostgreSQL 整合測試與 coverage output、`py_compile` 與空白字元檢查。CI 通過後，release workflow 會發布多架構 image 到 GHCR，並在 `production` environment approval 後透過 SSH 部署 image digest 到 VPS。Coolify 文件保留為可選部署方案。
 
 Dependabot 每週檢查 Python packages 與 GitHub Actions。GitHub Actions patch/minor PR 可在 CI 與 branch protection 通過後自動 squash merge；Python dependency PR 維持人工 review。
 

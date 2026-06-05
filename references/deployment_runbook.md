@@ -303,20 +303,19 @@ docker compose logs --tail 80 db-backup
 make verify
 ```
 
-等效 Docker Compose 展開流程：
+`make verify` 主要執行項目：
 
 ```bash
-docker compose build test
-docker compose run --rm test uv lock --check
-docker compose up -d postgres
-docker compose run --rm test alembic upgrade head
-docker compose run --rm test alembic check
-docker compose run --rm test ruff check .
-docker compose run --rm test ruff format --check .
-docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
-docker compose run --rm test python -m pytest --run-db
-docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py scripts/*.py tests/*.py
-git diff --check
+make build-test
+make lock-check
+make migrate-test
+make alembic-check
+make lint
+make format-check
+make mypy
+make test-db
+make py-compile
+make diff-check
 ```
 
 `test` service 只在 `docker compose run` 時啟動，不會因一般 `docker compose up -d` 長駐。
