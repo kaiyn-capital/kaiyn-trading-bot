@@ -1,5 +1,6 @@
 from app.log_sanitizer import (
     mask_value,
+    sanitize_log_text,
     summarize_balance_response,
     summarize_http_error,
     summarize_order_payload,
@@ -12,6 +13,24 @@ def test_mask_value_keeps_only_tail():
     assert mask_value("abc123456789") == "***6789"
     assert mask_value("") is None
     assert mask_value(None) is None
+
+
+def test_sanitize_log_text_masks_secret_assignments_and_bearer_tokens():
+    text = (
+        'invalid signature apiKey=plain-api secret:"plain-secret" '
+        "passphrase:plain-pass Authorization: Bearer auth-token Bearer loose-token"
+    )
+
+    sanitized = sanitize_log_text(text)
+
+    assert "plain-api" not in sanitized
+    assert "plain-secret" not in sanitized
+    assert "plain-pass" not in sanitized
+    assert "auth-token" not in sanitized
+    assert "loose-token" not in sanitized
+    assert "apiKey=***" in sanitized
+    assert 'secret:"***"' in sanitized
+    assert "passphrase:***" in sanitized
 
 
 def test_summarize_balance_response_excludes_amounts():

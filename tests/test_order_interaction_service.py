@@ -748,3 +748,122 @@ async def test_execute_order_marks_pending_failed_when_second_validation_fails()
     assert "下单数量低于交易所最小值" in bot.messages[-1]["text"]
     assert audit_owner.audit_events[-1]["action"] == "order_validation_failed"
     assert audit_owner.audit_events[-1]["details"]["pending_order_token"] == "***tion"
+
+
+@pytest.mark.asyncio
+async def test_execute_order_keeps_repository_calls_outside_bitget_calls():
+    events = []
+    active_repo_call = {"name": None}
+
+    def begin_repo_call(name):
+        assert active_repo_call["name"] is None
+        active_repo_call["name"] = name
+        events.append(f"repo:{name}:start")
+
+    def end_repo_call(name):
+        assert active_repo_call["name"] == name
+        active_repo_call["name"] = None
+        events.append(f"repo:{name}:end")
+
+    def record_bitget_call(name):
+        assert active_repo_call["name"] is None
+        events.append(f"bitget:{name}")
+
+    class SequencedUserRepo:
+        async def get_user_by_telegram_id(self, telegram_id):
+            begin_repo_call("user.get")
+            end_repo_call("user.get")
+            return SimpleNamespace(
+                id=7,
+                telegram_id=telegram_id,
+                is_api_connected=True,
+                encrypted_api_key="api",
+                encrypted_secret_key="secret",
+                encrypted_passphrase="passphrase",
+                fixed_risk_amount=10,
+                daily_trade_limit=10,
+                max_position_size=None,
+            )
+
+    class SequencedTradeRepo:
+        async def count_daily_non_failed_trades(self, user_id, day_start_utc):
+            begin_repo_call("trade.count_daily_non_failed")
+            end_repo_call("trade.count_daily_non_failed")
+            return 0
+
+        async def create_trade(self, **kwargs):
+            raise AssertionError("daily limit path should create the trade")
+
+        async def create_trade_with_daily_limit(self, **kwargs):
+            begin_repo_call("trade.create_with_daily_limit")
+            end_repo_call("trade.create_with_daily_limit")
+            return SimpleNamespace(id=77)
+
+        async def update_trade_result(self, trade_id, **kwargs):
+            begin_repo_call("trade.update_result")
+            end_repo_call("trade.update_result")
+
+    class SequencedPendingOrderRepo(FakeConfirmPendingOrderRepo):
+        async def mark_executed(self, token, trade_id):
+            begin_repo_call("pending.mark_executed")
+            end_repo_call("pending.mark_executed")
+            return True
+
+    class SequencedTradeManager(PermissiveRulesTradeManager):
+        async def get_contract_rules(self, symbol):
+            record_bitget_call("get_contract_rules")
+            return await super().get_contract_rules(symbol)
+
+        async def get_market_price(self, symbol):
+            record_bitget_call("get_market_price")
+            return await super().get_market_price(symbol)
+
+        async def place_market_order(self, *args, **kwargs):
+            record_bitget_call("place_market_order")
+            return {"code": "00000", "data": {"orderId": "market-order"}}
+
+        async def place_limit_order(self, *args, **kwargs):
+            record_bitget_call("place_limit_order")
+            raise AssertionError("limit order should not be placed")
+
+    service, _bot, _audit_owner = make_service(
+        pending_order_repo=SequencedPendingOrderRepo(),
+        user_repo=SequencedUserRepo(),
+        trade_repo=SequencedTradeRepo(),
+        trade_manager=SequencedTradeManager(),
+        system_log_repo=RecordingSystemLogRepo(),
+    )
+
+    result = await service.execute_order(
+        SimpleNamespace(
+            query=FakeQuery(),
+            user=make_user(),
+            symbol="BTCUSDT",
+            direction="long",
+            quantity=0.01,
+            stop_loss=79000,
+            position_value=800,
+            current_price=80000,
+            order_mode="market",
+            limit_price=None,
+            pending_order_token="tok_session",
+        )
+    )
+
+    assert result is True
+    assert active_repo_call["name"] is None
+    assert events == [
+        "repo:user.get:start",
+        "repo:user.get:end",
+        "repo:trade.count_daily_non_failed:start",
+        "repo:trade.count_daily_non_failed:end",
+        "bitget:get_contract_rules",
+        "bitget:get_market_price",
+        "repo:trade.create_with_daily_limit:start",
+        "repo:trade.create_with_daily_limit:end",
+        "bitget:place_market_order",
+        "repo:trade.update_result:start",
+        "repo:trade.update_result:end",
+        "repo:pending.mark_executed:start",
+        "repo:pending.mark_executed:end",
+    ]

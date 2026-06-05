@@ -4,6 +4,8 @@ from typing import Any
 
 import httpx
 
+from .log_sanitizer import sanitize_log_text
+
 
 class BitgetAPIError(Exception):
     """Structured error raised for Bitget API responses and transport failures."""
@@ -52,7 +54,7 @@ class ClassifiedBitgetError:
         if self.http_status:
             parts.append(f"http_status={self.http_status}")
         if self.raw_message:
-            parts.append(f"message={self.raw_message}")
+            parts.append(f"message={sanitize_log_text(self.raw_message)}")
         return " | ".join(parts)
 
     def to_log_data(self) -> dict:
@@ -60,10 +62,9 @@ class ClassifiedBitgetError:
             "category": self.category.value,
             "user_message": self.user_message,
             "raw_code": self.raw_code,
-            "raw_message": self.raw_message,
+            "raw_message": sanitize_log_text(self.raw_message),
             "http_status": self.http_status,
             "is_retryable": self.is_retryable,
-            "raw_data": self.raw_data,
         }
 
 
