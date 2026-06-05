@@ -36,6 +36,63 @@ def test_exchange_rejection_keeps_raw_code_and_message():
     assert "code=43012" in result.storage_message()
 
 
+def test_log_data_excludes_raw_exchange_payload():
+    result = classify_bitget_exception(
+        FakeBitgetAPIError(
+            "43012",
+            "insufficient balance",
+            http_status=400,
+            data={
+                "secret": "do-not-log-this",
+                "nested": {"passphrase": "nested-secret"},
+            },
+        )
+    )
+
+    log_data = result.to_log_data()
+    log_text = str(log_data)
+
+    assert result.raw_data == {
+        "secret": "do-not-log-this",
+        "nested": {"passphrase": "nested-secret"},
+    }
+    assert log_data == {
+        "category": "exchange_rejected",
+        "user_message": "交易所拒绝下单，请检查账户状态或参数。",
+        "raw_code": "43012",
+        "raw_message": "insufficient balance",
+        "http_status": 400,
+        "is_retryable": False,
+    }
+    assert "raw_data" not in log_data
+    assert "do-not-log-this" not in log_text
+    assert "nested-secret" not in log_text
+
+
+def test_log_data_sanitizes_raw_message_secrets():
+    result = classify_bitget_exception(
+        FakeBitgetAPIError(
+            "40001",
+            "invalid signature apiKey=plain-api secret:plain-secret passphrase=plain-pass Bearer bearer-secret",
+            http_status=403,
+        )
+    )
+
+    log_data = result.to_log_data()
+    storage_message = result.storage_message()
+    combined_log_text = f"{log_data} {storage_message}"
+
+    assert result.raw_message == (
+        "invalid signature apiKey=plain-api secret:plain-secret passphrase=plain-pass Bearer bearer-secret"
+    )
+    assert "plain-api" not in combined_log_text
+    assert "plain-secret" not in combined_log_text
+    assert "plain-pass" not in combined_log_text
+    assert "bearer-secret" not in combined_log_text
+    assert log_data["raw_message"] == "invalid signature apiKey=*** secret:*** passphrase=*** Bearer ***"
+    assert "message=invalid signature apiKey=*** secret:*** passphrase=*** Bearer ***" in storage_message
+
+
 def test_http_5xx_is_temporary_exchange_error():
     request = httpx.Request("GET", "https://api.bitget.com/test")
     response = httpx.Response(503, request=request)

@@ -1,4 +1,12 @@
+import re
 from typing import Any
+
+_SENSITIVE_ASSIGNMENT_PATTERN = re.compile(
+    r"([\"']?\b(?:api[-_ ]?key|apikey|access[-_ ]?key|secret(?:[-_ ]?key)?|passphrase|password|token|authorization)\b"
+    r"[\"']?\s*[:=]\s*[\"']?)((?:Bearer\s+)?[^\"'\s,;{}]+)([\"']?)",
+    re.IGNORECASE,
+)
+_BEARER_TOKEN_PATTERN = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]+=*", re.IGNORECASE)
 
 
 def mask_value(value: Any) -> str | None:
@@ -10,6 +18,21 @@ def mask_value(value: Any) -> str | None:
         return None
 
     return f"***{text[-4:]}"
+
+
+def sanitize_log_text(value: Any) -> str | None:
+    if value is None:
+        return None
+
+    text = str(value)
+    if not text:
+        return None
+
+    text = _SENSITIVE_ASSIGNMENT_PATTERN.sub(
+        lambda match: f"{match.group(1)}***{match.group(3)}",
+        text,
+    )
+    return _BEARER_TOKEN_PATTERN.sub("Bearer ***", text)
 
 
 def _get_message(response: dict[str, Any]) -> Any:
