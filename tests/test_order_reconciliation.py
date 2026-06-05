@@ -256,6 +256,103 @@ async def test_reconcile_uses_pending_token_client_order_id():
 
 
 @pytest.mark.asyncio
+async def test_reconcile_keeps_repository_calls_outside_bitget_calls():
+    events = []
+    active_repo_call = {"name": None}
+    pending = make_pending(token="tok_session")
+    client_order_id = build_client_order_id(pending.token)
+
+    def begin_repo_call(name):
+        assert active_repo_call["name"] is None
+        active_repo_call["name"] = name
+        events.append(f"repo:{name}:start")
+
+    def end_repo_call(name):
+        assert active_repo_call["name"] == name
+        active_repo_call["name"] = None
+        events.append(f"repo:{name}:end")
+
+    def record_bitget_call(name):
+        assert active_repo_call["name"] is None
+        events.append(f"bitget:{name}")
+
+    class SequencedPendingOrderRepo:
+        async def get_stale_processing_orders(self, cutoff, limit):
+            begin_repo_call("pending.get_stale_processing")
+            end_repo_call("pending.get_stale_processing")
+            return [pending]
+
+        async def mark_executed(self, token, trade_id):
+            begin_repo_call("pending.mark_executed")
+            end_repo_call("pending.mark_executed")
+            return True
+
+        async def mark_failed(self, token, error_message):
+            raise AssertionError("pending order should not be marked failed")
+
+    class SequencedUserRepo:
+        async def get_user_by_telegram_id(self, telegram_id):
+            begin_repo_call("user.get")
+            end_repo_call("user.get")
+            return make_user(telegram_id=telegram_id)
+
+    class SequencedTradeRepo:
+        async def get_by_client_order_id(self, lookup_client_order_id):
+            begin_repo_call("trade.get_by_client_order_id")
+            end_repo_call("trade.get_by_client_order_id")
+            assert lookup_client_order_id == client_order_id
+
+        async def create_trade(self, **kwargs):
+            begin_repo_call("trade.create")
+            end_repo_call("trade.create")
+            return SimpleNamespace(id=77, bitget_order_id=None, **kwargs)
+
+        async def update_trade_result(self, trade_id, bitget_order_id, status, **kwargs):
+            begin_repo_call("trade.update_result")
+            end_repo_call("trade.update_result")
+            return True
+
+    class SequencedTradeManager:
+        async def get_order_status(self, *args, **kwargs):
+            record_bitget_call("get_order_status")
+            return {"code": "00000", "data": make_order(clientOid=client_order_id, state="filled")}
+
+        async def get_order_history(self, *args, **kwargs):
+            record_bitget_call("get_order_history")
+            raise AssertionError("history should not be queried when detail succeeds")
+
+    service = PendingOrderReconciliationService(
+        bot=FakeBot(),
+        user_repo=SequencedUserRepo(),
+        pending_order_repo=SequencedPendingOrderRepo(),
+        trade_repo=SequencedTradeRepo(),
+        trade_manager=SequencedTradeManager(),
+        system_log_repo=FakeSystemLogRepo(),
+        alert_manager=FakeAlertManager(),
+    )
+
+    summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
+
+    assert summary.recovered == 1
+    assert active_repo_call["name"] is None
+    assert events == [
+        "repo:pending.get_stale_processing:start",
+        "repo:pending.get_stale_processing:end",
+        "repo:user.get:start",
+        "repo:user.get:end",
+        "repo:trade.get_by_client_order_id:start",
+        "repo:trade.get_by_client_order_id:end",
+        "bitget:get_order_status",
+        "repo:trade.create:start",
+        "repo:trade.create:end",
+        "repo:trade.update_result:start",
+        "repo:trade.update_result:end",
+        "repo:pending.mark_executed:start",
+        "repo:pending.mark_executed:end",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_reconcile_live_order_marks_trade_pending_and_pending_executed():
     pending = make_pending()
     existing_trade = SimpleNamespace(id=42, client_order_id=build_client_order_id(pending.token), bitget_order_id=None)
