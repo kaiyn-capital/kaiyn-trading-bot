@@ -2,6 +2,7 @@ import logging
 import time
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 import httpx
 
@@ -44,7 +45,7 @@ class BitgetPublicMarket:
     """Public Bitget market data and contract-rule cache."""
 
     def __init__(self, contracts_cache_ttl_seconds: int = 600, *, base_url: str | None = None):
-        self._contracts_cache = {}
+        self._contracts_cache: dict[str, dict[str, Any]] = {}
         self._contracts_cache_ttl_seconds = contracts_cache_ttl_seconds
         self.base_url = base_url or Settings.from_env().bitget_api_url
         self._client: httpx.AsyncClient | None = None
@@ -60,7 +61,7 @@ class BitgetPublicMarket:
 
     async def close(self) -> None:
         if self._client is not None:
-            await self._client.close()
+            await self._client.aclose()
             self._client = None
 
     async def get_market_price(self, symbol: str) -> Decimal:

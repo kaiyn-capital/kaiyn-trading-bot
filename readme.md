@@ -122,9 +122,9 @@ sequenceDiagram
 | Deployment | Docker Compose services: `postgres`, `bot`, `maintenance`, `db-backup` |
 | Dependency lock | uv lockfile + `uv sync --locked` |
 | Long-term operations | Docker/file log rotation, DB retention, local SQL backup, encrypted R2 offsite backup |
-| Testing | pytest 9.0.3 + pytest-asyncio 1.3.0 + PostgreSQL integration tests + 70% critical-path coverage threshold |
-| Lint / format | Ruff 0.15.14 |
-| Type checking | mypy 2.1.0 on critical path modules |
+| Testing | pytest 9.0.3 + pytest-asyncio 1.4.0 + PostgreSQL integration tests + 70% critical-path coverage threshold |
+| Lint / format | Ruff 0.15.15 |
+| Type checking | mypy 2.1.0 on expanded critical path modules |
 | CI | GitHub Actions with Docker Compose-first checks |
 | CD | GHCR multi-arch image + VPS SSH deployment by digest |
 | Dependency automation | Dependabot weekly updates; GitHub Actions patch/minor auto-merge |
@@ -210,23 +210,22 @@ Docker-first verification:
 make verify
 ```
 
-Equivalent Docker Compose commands:
+Main checks run by `make verify`:
 
 ```bash
-docker compose build test
-docker compose run --rm test uv lock --check
-docker compose up -d postgres
-docker compose run --rm test alembic upgrade head
-docker compose run --rm test alembic check
-docker compose run --rm test ruff check .
-docker compose run --rm test ruff format --check .
-docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
-docker compose run --rm test python -m pytest --run-db
-docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py scripts/*.py tests/*.py
-git diff --check
+make build-test
+make lock-check
+make migrate-test
+make alembic-check
+make lint
+make format-check
+make mypy
+make test-db
+make py-compile
+make diff-check
 ```
 
-GitHub Actions runs the same Docker Compose flow for lockfile consistency, Alembic migration/model checks, Ruff, mypy, PostgreSQL integration tests with coverage output, `py_compile`, and whitespace checks. After CI passes, the release workflow publishes a multi-arch image to GHCR and deploys it to the VPS via SSH after `production` environment approval. Coolify documentation is retained as an optional deployment variant.
+GitHub Actions runs the same Docker Compose-backed checks for lockfile consistency, Alembic migration/model checks, Ruff, mypy, PostgreSQL integration tests with coverage output, `py_compile`, and whitespace checks. After CI passes, the release workflow publishes a multi-arch image to GHCR and deploys it to the VPS via SSH after `production` environment approval. Coolify documentation is retained as an optional deployment variant.
 
 Dependabot checks Python packages and GitHub Actions weekly. GitHub Actions patch/minor PRs can be auto-squash-merged after CI and branch protection pass. Python dependency PRs require manual review.
 

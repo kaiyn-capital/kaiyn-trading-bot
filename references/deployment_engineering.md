@@ -14,7 +14,7 @@
 - PostgreSQL、Alembic migration、async SQLAlchemy。
 - `pyproject.toml` 作為 Python 依賴宣告來源，`uv.lock` 作為鎖定檔。
 - Ruff 作為 Python lint 與 format 工具。
-- mypy 作為下單 critical path 的靜態型別檢查工具。
+- mypy 作為交易執行 critical path 的靜態型別檢查工具。
 - pytest 作為測試框架，包含純邏輯、handler 與 PostgreSQL integration tests。
 - GitHub Actions CI，以 Docker Compose 執行 lockfile、Alembic migration/model、Ruff、mypy、DB integration、coverage output、py_compile 與 whitespace 檢查。
 - GitHub Actions CD，在 CI 通過後發布 GHCR multi-arch image，並透過 SSH 以 image digest 部署到 DigitalOcean VPS。
@@ -73,25 +73,22 @@ CI 檔案：
 - PR 指向 `main`
 - `workflow_dispatch`
 
-CI 執行項目：
+CI 核心檢查項目對應下列 Makefile target；coverage artifact 與清理由 workflow 額外處理：
 
 ```bash
-docker compose version
-docker compose build test
-docker compose up -d postgres
-docker compose run --rm test alembic upgrade head
-docker compose run --rm test alembic check
-docker compose run --rm test uv lock --check
-docker compose run --rm test ruff check .
-docker compose run --rm test ruff format --check .
-docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
-docker compose run --rm test python -m pytest --run-db --cov --cov-report=xml:coverage.xml
-docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py scripts/*.py tests/*.py
-git diff --check
-docker compose down -v --remove-orphans
+make build-test
+make lock-check
+make migrate-test
+make alembic-check
+make lint
+make format-check
+make mypy
+make test-db
+make py-compile
+make diff-check
 ```
 
-CI 不使用 production secrets，不連線 Telegram，也不呼叫 Bitget 真實 API。
+CI 不使用 production secrets，不連線 Telegram，也不呼叫 Bitget 真實 API。CI workflow 仍會負責測試後的 coverage artifact 與 Docker Compose 清理；具體命令以 `.github/workflows/ci.yml` 與 `Makefile` 為準。
 
 ## GHCR Image Pipeline And VPS SSH CD
 
@@ -172,7 +169,7 @@ make generate-backup-key
 - `make r2-download-latest` 只下載並解密 R2 最新備份，不還原 DB，適合部署後 smoke test。
 - `make restore-latest` 還原最新本機 SQL dump；目標 DB 非空時需要 `CONFIRM_RESTORE=YES`。
 - `make disaster-restore` 從 R2 latest manifest 下載最新 encrypted backup、解密、驗 checksum，並呼叫本機還原流程。
-- CI 維持直接執行 Docker Compose 命令，避免 CI 行為被 Makefile abstraction 隱藏。
+- Makefile target 仍是 Docker Compose-backed；CI 與本機驗證的具體命令以 `.github/workflows/ci.yml` 與 `Makefile` 為準。
 
 ## Dependabot
 

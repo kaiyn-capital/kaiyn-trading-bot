@@ -146,9 +146,23 @@ format: ## Apply Ruff lint fixes and formatting
 	$(COMPOSE) run --rm test ruff check --fix .
 	$(COMPOSE) run --rm test ruff format .
 
+MYPY_FILES := \
+	app/order_flow.py \
+	app/order_validation.py \
+	app/risk_limits.py \
+	app/bitget_errors.py \
+	app/config.py \
+	app/order_interaction_service.py \
+	app/order_reconciliation.py \
+	app/bitget_client.py \
+	app/bitget_public_market.py \
+	app/bitget_trade_manager.py \
+	app/settings.py \
+	app/decimal_utils.py
+
 .PHONY: mypy
 mypy: ## Run mypy type checking on critical path modules
-	$(COMPOSE) run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
+	$(COMPOSE) run --rm test mypy $(MYPY_FILES) --no-error-summary
 
 .PHONY: migrate-test
 migrate-test: ## Run Alembic upgrade head on test database

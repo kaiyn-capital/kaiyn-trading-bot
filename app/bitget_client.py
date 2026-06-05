@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import time
+from typing import Any
 
 import httpx
 
@@ -51,7 +52,13 @@ class BitgetAPIClient:
             "locale": "zh-CN",
         }
 
-    async def _make_request(self, method: str, endpoint: str, params: dict = None, data: dict = None) -> dict:
+    async def _make_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         url = f"{self.base_url}{endpoint}"
 
         query_string = ""
@@ -175,30 +182,32 @@ class BitgetAPIClient:
         except BitgetAPIError:
             raise
 
-    async def get_account_info(self, product_type: str = "USDT-FUTURES") -> dict:
+    async def get_account_info(self, product_type: str = "USDT-FUTURES") -> dict[str, Any]:
         params = {"productType": product_type}
         return await self._make_request("GET", "/api/v2/mix/account/account", params=params)
 
-    async def get_account_assets(self, product_type: str = "USDT-FUTURES") -> dict:
+    async def get_account_assets(self, product_type: str = "USDT-FUTURES") -> dict[str, Any]:
         params = {"productType": product_type}
         return await self._make_request("GET", "/api/v2/mix/account/accounts", params=params)
 
-    async def get_positions(self, product_type: str = "USDT-FUTURES") -> dict:
+    async def get_positions(self, product_type: str = "USDT-FUTURES") -> dict[str, Any]:
         params = {"productType": product_type}
         return await self._make_request("GET", "/api/v2/mix/position/all-position", params=params)
 
-    async def set_position_mode(self, product_type: str = "USDT-FUTURES", pos_mode: str = "hedge_mode") -> dict:
+    async def set_position_mode(
+        self, product_type: str = "USDT-FUTURES", pos_mode: str = "hedge_mode"
+    ) -> dict[str, Any]:
         data = {
             "productType": product_type,
             "posMode": pos_mode,
         }
         return await self._make_request("POST", "/api/v2/mix/account/set-position-mode", data=data)
 
-    async def get_symbols(self, product_type: str = "USDT-FUTURES") -> dict:
+    async def get_symbols(self, product_type: str = "USDT-FUTURES") -> dict[str, Any]:
         params = {"productType": product_type}
         return await self._make_request("GET", "/api/v2/mix/market/contracts", params=params)
 
-    async def get_ticker(self, symbol: str, product_type: str = "USDT-FUTURES") -> dict:
+    async def get_ticker(self, symbol: str, product_type: str = "USDT-FUTURES") -> dict[str, Any]:
         params = {"symbol": symbol, "productType": product_type}
         return await self._make_request("GET", "/api/v2/mix/market/ticker", params=params)
 
@@ -208,16 +217,16 @@ class BitgetAPIClient:
         side: str,
         order_type: str,
         size: str,
-        price: str = None,
-        client_order_id: str = None,
+        price: str | None = None,
+        client_order_id: str | None = None,
         margin_coin: str = "USDT",
         margin_mode: str = "crossed",
         product_type: str = "USDT-FUTURES",
         trade_side: str = "open",
-        stop_loss_price: str = None,
-        take_profit_price: str = None,
-        force: str = None,
-    ) -> dict:
+        stop_loss_price: str | None = None,
+        take_profit_price: str | None = None,
+        force: str | None = None,
+    ) -> dict[str, Any]:
         data = {
             "marginCoin": margin_coin,
             "marginMode": margin_mode,
@@ -248,8 +257,12 @@ class BitgetAPIClient:
         return await self._make_request("POST", "/api/v2/mix/order/place-order", data=data)
 
     async def cancel_order(
-        self, symbol: str, order_id: str = None, client_order_id: str = None, margin_coin: str = "USDT"
-    ) -> dict:
+        self,
+        symbol: str,
+        order_id: str | None = None,
+        client_order_id: str | None = None,
+        margin_coin: str = "USDT",
+    ) -> dict[str, Any]:
         data = {"symbol": symbol, "marginCoin": margin_coin}
 
         if order_id:
@@ -264,10 +277,10 @@ class BitgetAPIClient:
     async def get_order_info(
         self,
         symbol: str,
-        order_id: str = None,
-        client_order_id: str = None,
+        order_id: str | None = None,
+        client_order_id: str | None = None,
         product_type: str = "USDT-FUTURES",
-    ) -> dict:
+    ) -> dict[str, Any]:
         params = {"symbol": symbol, "productType": product_type}
 
         if order_id:
@@ -281,12 +294,12 @@ class BitgetAPIClient:
 
     async def get_order_history(
         self,
-        symbol: str = None,
+        symbol: str | None = None,
         limit: int = 50,
         product_type: str = "USDT-FUTURES",
-        order_id: str = None,
-        client_order_id: str = None,
-    ) -> dict:
+        order_id: str | None = None,
+        client_order_id: str | None = None,
+    ) -> dict[str, Any]:
         params = {"productType": product_type, "limit": str(limit)}
 
         if symbol:
@@ -298,8 +311,8 @@ class BitgetAPIClient:
 
         return await self._make_request("GET", "/api/v2/mix/order/orders-history", params=params)
 
-    async def get_account_uid(self) -> dict:
+    async def get_account_uid(self) -> dict[str, Any]:
         return await self._make_request("GET", "/api/v2/spot/account/info")
 
-    async def close(self):
+    async def close(self) -> None:
         await self.client.aclose()
