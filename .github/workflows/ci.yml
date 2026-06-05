@@ -52,7 +52,7 @@ jobs:
         run: docker compose run --rm test ruff format --check .
 
       - name: Run mypy type checking
-        run: docker compose run --rm test mypy app/order_flow.py app/order_validation.py app/risk_limits.py app/bitget_errors.py app/config.py --no-error-summary
+        run: make mypy
 
       - name: Run pytest with PostgreSQL integration
         run: docker compose run --rm test python -m pytest --run-db --cov --cov-report=xml:coverage.xml
@@ -66,7 +66,7 @@ jobs:
           badge-title: "Coverage"
 
       - name: Compile Python files
-        run: docker compose run --rm test python -m py_compile app/*.py app/repositories/*.py alembic/env.py alembic/versions/*.py tests/*.py
+        run: make py-compile
 
       - name: Check whitespace errors
         run: git diff --check

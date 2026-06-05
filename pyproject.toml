@@ -119,12 +119,8 @@ warn_return_any = true
 [[tool.mypy.overrides]]
 module = [
     "telegram.*",
-    "mplfinance.*",
-    "asyncpg.*",
     "sqlalchemy.*",
-    "alembic.*",
     "dotenv.*",
     "cryptography.*",
-    "pandas.*",
 ]
 ignore_missing_imports = true

@@ -1,6 +1,8 @@
 import contextlib
 import logging
+from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 import httpx
 
@@ -22,7 +24,7 @@ class BitgetTradeManager:
     def __init__(self, encryption_manager: EncryptionManager, *, settings: Settings | None = None):
         self.encryption_manager = encryption_manager
         self.settings = settings or Settings.from_env()
-        self._clients = {}
+        self._clients: dict[int, BitgetAPIClient] = {}
         self.public_market = BitgetPublicMarket(base_url=self.settings.bitget_api_url)
 
     def _get_client(self, user_id: int, encrypted_credentials: tuple[str, str, str]) -> BitgetAPIClient:
@@ -75,7 +77,7 @@ class BitgetTradeManager:
                 with contextlib.suppress(RuntimeError, httpx.HTTPError):
                     await client.close()
 
-    async def get_account_balance(self, user_id: int, encrypted_credentials: tuple[str, str, str]) -> dict:
+    async def get_account_balance(self, user_id: int, encrypted_credentials: tuple[str, str, str]) -> dict[str, Any]:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.get_account_assets()
 
@@ -103,10 +105,14 @@ class BitgetTradeManager:
     async def get_market_price(self, symbol: str) -> Decimal:
         return to_decimal(await self.public_market.get_market_price(symbol))
 
-    async def get_trading_pairs(self, product_type: str = "USDT-FUTURES", force_refresh: bool = False) -> list[dict]:
+    async def get_trading_pairs(
+        self,
+        product_type: str = "USDT-FUTURES",
+        force_refresh: bool = False,
+    ) -> list[dict[str, Any]]:
         return await self.public_market.get_trading_pairs(product_type, force_refresh=force_refresh)
 
-    async def get_contract_rules(self, symbol: str, product_type: str = "USDT-FUTURES") -> dict:
+    async def get_contract_rules(self, symbol: str, product_type: str = "USDT-FUTURES") -> dict[str, Any]:
         return await self.public_market.get_contract_rules(symbol, product_type)
 
     async def get_candles(
@@ -115,8 +121,8 @@ class BitgetTradeManager:
         granularity: str = "1H",
         limit: int = 120,
         product_type: str = "USDT-FUTURES",
-        start_time=None,
-        end_time=None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
     ) -> list[MarketCandle]:
         return await self.public_market.get_candles(symbol, granularity, limit, product_type, start_time, end_time)
 
@@ -127,12 +133,12 @@ class BitgetTradeManager:
         symbol: str,
         side: str,
         size: str,
-        client_order_id: str = None,
+        client_order_id: str | None = None,
         margin_coin: str = "USDT",
         trade_side: str = "open",
-        stop_loss_price: Decimal = None,
-        take_profit_price: Decimal = None,
-    ) -> dict:
+        stop_loss_price: Decimal | None = None,
+        take_profit_price: Decimal | None = None,
+    ) -> dict[str, Any]:
         client = self._get_client(user_id, encrypted_credentials)
 
         result = await client.place_order(
@@ -158,13 +164,13 @@ class BitgetTradeManager:
         side: str,
         size: str,
         price: str,
-        client_order_id: str = None,
+        client_order_id: str | None = None,
         margin_coin: str = "USDT",
         trade_side: str = "open",
-        stop_loss_price: Decimal = None,
-        take_profit_price: Decimal = None,
+        stop_loss_price: Decimal | None = None,
+        take_profit_price: Decimal | None = None,
         force: str = "gtc",
-    ) -> dict:
+    ) -> dict[str, Any]:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.place_order(
             symbol=symbol,
@@ -186,10 +192,10 @@ class BitgetTradeManager:
         user_id: int,
         encrypted_credentials: tuple[str, str, str],
         symbol: str,
-        order_id: str = None,
-        client_order_id: str = None,
+        order_id: str | None = None,
+        client_order_id: str | None = None,
         product_type: str = "USDT-FUTURES",
-    ) -> dict:
+    ) -> dict[str, Any]:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.get_order_info(symbol, order_id, client_order_id, product_type)
 
@@ -197,12 +203,12 @@ class BitgetTradeManager:
         self,
         user_id: int,
         encrypted_credentials: tuple[str, str, str],
-        symbol: str = None,
+        symbol: str | None = None,
         limit: int = 50,
         product_type: str = "USDT-FUTURES",
-        order_id: str = None,
-        client_order_id: str = None,
-    ) -> dict:
+        order_id: str | None = None,
+        client_order_id: str | None = None,
+    ) -> dict[str, Any]:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.get_order_history(
             symbol=symbol,
@@ -217,13 +223,13 @@ class BitgetTradeManager:
         user_id: int,
         encrypted_credentials: tuple[str, str, str],
         symbol: str,
-        order_id: str = None,
-        client_order_id: str = None,
-    ) -> dict:
+        order_id: str | None = None,
+        client_order_id: str | None = None,
+    ) -> dict[str, Any]:
         client = self._get_client(user_id, encrypted_credentials)
         return await client.cancel_order(symbol, order_id, client_order_id)
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """Close all cached authenticated clients and the public market client."""
         for user_id, client in list(self._clients.items()):
             try:
