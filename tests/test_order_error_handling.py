@@ -14,9 +14,11 @@ class FakeTradeRecord:
 class FakeTradeRepo:
     def __init__(self):
         self.updated_results = []
+        self.created_trades = []
 
     async def create_trade(self, **kwargs):
         self.created_trade = kwargs
+        self.created_trades.append(kwargs)
         return FakeTradeRecord()
 
     async def create_trade_with_daily_limit(self, **kwargs):
@@ -41,10 +43,16 @@ class RejectingTradeManager:
 
 
 class TimeoutTradeManager:
+    def __init__(self):
+        self.market_order_calls = []
+        self.limit_order_calls = []
+
     async def place_market_order(self, *args, **kwargs):
+        self.market_order_calls.append({"args": args, "kwargs": kwargs})
         raise BitgetAPIError("timeout", "Bitget request timeout")
 
     async def place_limit_order(self, *args, **kwargs):
+        self.limit_order_calls.append({"args": args, "kwargs": kwargs})
         raise BitgetAPIError("timeout", "Bitget request timeout")
 
 
@@ -77,12 +85,13 @@ async def test_execute_order_marks_trade_failed_with_classified_error():
 @pytest.mark.asyncio
 async def test_execute_order_keeps_trade_pending_when_submission_result_unknown():
     trade_repo = FakeTradeRepo()
+    trade_manager = TimeoutTradeManager()
 
     with pytest.raises(OrderExecutionUnknownResult) as exc_info:
         await execute_order(
             user_data=SimpleNamespace(id=7),
             trade_repo=trade_repo,
-            trade_manager=TimeoutTradeManager(),
+            trade_manager=trade_manager,
             credentials=("api", "secret", "passphrase"),
             telegram_id=123,
             symbol="BTCUSDT",
@@ -96,6 +105,10 @@ async def test_execute_order_keeps_trade_pending_when_submission_result_unknown(
     assert exc_info.value.trade_id == 77
     assert exc_info.value.client_order_id == "KTB_tok_timeout"
     assert exc_info.value.classified_error.is_retryable is True
+    assert trade_repo.created_trade["client_order_id"] == "KTB_tok_timeout"
+    assert len(trade_manager.market_order_calls) == 1
+    assert trade_manager.market_order_calls[0]["args"][5] == "KTB_tok_timeout"
+    assert trade_manager.limit_order_calls == []
     assert trade_repo.updated_results == []
 
 
@@ -115,9 +128,14 @@ class FakeUserRepo:
 class FakePendingOrderRepo:
     def __init__(self):
         self.failed = []
+        self.executed = []
 
     async def mark_failed(self, token, error_message):
         self.failed.append({"token": token, "error_message": error_message})
+        return True
+
+    async def mark_executed(self, token, trade_id):
+        self.executed.append({"token": token, "trade_id": trade_id})
         return True
 
 
@@ -150,10 +168,16 @@ class FakeOrderTradeManager(RejectingTradeManager):
 
 
 class TimeoutOrderTradeManager(FakeOrderTradeManager):
+    def __init__(self):
+        self.market_order_calls = []
+        self.limit_order_calls = []
+
     async def place_market_order(self, *args, **kwargs):
+        self.market_order_calls.append({"args": args, "kwargs": kwargs})
         raise BitgetAPIError("timeout", "Bitget request timeout")
 
     async def place_limit_order(self, *args, **kwargs):
+        self.limit_order_calls.append({"args": args, "kwargs": kwargs})
         raise BitgetAPIError("timeout", "Bitget request timeout")
 
 
@@ -248,13 +272,14 @@ async def test_order_flow_service_keeps_pending_processing_when_submission_resul
     system_log_repo = FakeSystemLogRepo()
     audit_owner = FakeAuditOwner()
     trade_repo = FakeTradeRepo()
+    trade_manager = TimeoutOrderTradeManager()
     failure_alert = RecordingFailureAlert()
     service = TelegramOrderFlowService(
         bot=bot,
         user_repo=FakeUserRepo(),
         pending_order_repo=pending_order_repo,
         trade_repo=trade_repo,
-        trade_manager=TimeoutOrderTradeManager(),
+        trade_manager=trade_manager,
         system_log_repo=system_log_repo,
         audit_owner=audit_owner,
         failure_alert_handler=failure_alert,
@@ -279,11 +304,20 @@ async def test_order_flow_service_keeps_pending_processing_when_submission_resul
 
     assert result is False
     assert pending_order_repo.failed == []
+    assert pending_order_repo.executed == []
+    assert trade_repo.created_trade["client_order_id"] == "KTB_tok_timeout"
     assert trade_repo.updated_results == []
+    assert len(trade_manager.market_order_calls) == 1
+    assert trade_manager.market_order_calls[0]["args"][5] == "KTB_tok_timeout"
+    assert trade_manager.limit_order_calls == []
     assert "订单状态待确认" in bot.messages[-1]["text"]
+    expected_masked_client_order_id = "***eout"
     assert system_log_repo.logs[-1]["message"] == "Bitget order execution result unknown"
+    assert system_log_repo.logs[-1]["extra_data"]["client_order_id"] == expected_masked_client_order_id
     assert system_log_repo.logs[-1]["extra_data"]["classified_error"]["is_retryable"] is True
     assert failure_alert.calls[-1]["source"] == "_execute_order_unknown_result"
+    assert failure_alert.calls[-1]["details"]["client_order_id"] == expected_masked_client_order_id
     assert audit_owner.audit_events[-1]["action"] == "order_execution_deferred"
     assert audit_owner.audit_events[-1]["details"]["status"] == "processing"
     assert audit_owner.audit_events[-1]["details"]["reason"] == "bitget_submission_result_unknown"
+    assert audit_owner.audit_events[-1]["details"]["client_order_id"] == expected_masked_client_order_id
