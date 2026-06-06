@@ -77,16 +77,32 @@ class DatabaseManager:
     async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
         """Yield a transactional async database session."""
         session = self.SessionLocal()
+        session_error: Exception | None = None
         try:
             yield session
             await session.commit()
         # Roll back for any caller exception raised inside the transaction context.
         except Exception as e:
-            await session.rollback()
+            session_error = e
+            try:
+                await session.rollback()
+            except Exception:
+                logger.exception(
+                    "Database session rollback failed while handling %s",
+                    type(e).__name__,
+                )
             logger.error(f"Database session error: {e}")
             raise
         finally:
-            await session.close()
+            try:
+                await session.close()
+            except Exception:
+                if session_error is None:
+                    raise
+                logger.exception(
+                    "Database session close failed while handling %s",
+                    type(session_error).__name__,
+                )
 
     async def health_check(self) -> bool:
         """Check database connectivity."""
