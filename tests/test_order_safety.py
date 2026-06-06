@@ -6,6 +6,7 @@ from app.order_flow import (
     parse_contract_rules,
     validate_order_preview,
 )
+from app.order_validation import DECIMAL_RANGE_ERROR
 
 
 def make_rules(**overrides):
@@ -98,6 +99,15 @@ def test_quantity_is_formatted_to_multiplier():
     assert applied.quantity == Decimal("0.012")
 
 
+def test_extreme_quantity_is_rejected():
+    result = assert_invalid(
+        make_preview(quantity=Decimal("1E+999999")),
+        make_rules(maxMarketOrderQty="0"),
+        "long",
+    )
+    assert result.error_message == DECIMAL_RANGE_ERROR
+
+
 def test_limit_price_is_formatted_to_price_step():
     preview = make_preview(
         requested_order_mode="limit",
@@ -110,6 +120,34 @@ def test_limit_price_is_formatted_to_price_step():
     assert result.is_valid
     assert result.limit_price == Decimal("79999.9")
     assert result.limit_price_text == "79999.9"
+
+
+def test_extreme_limit_price_is_rejected():
+    preview = make_preview(
+        requested_order_mode="limit",
+        order_mode="limit",
+        limit_price=Decimal("1E+999999"),
+        stop_loss=79000,
+        current_price=Decimal("2E+999999"),
+    )
+
+    result = assert_invalid(preview, make_rules(), "long")
+
+    assert result.error_message == DECIMAL_RANGE_ERROR
+
+
+def test_extreme_price_precision_is_rejected():
+    preview = make_preview(
+        requested_order_mode="limit",
+        order_mode="limit",
+        limit_price=79999,
+        stop_loss=79000,
+        current_price=81000,
+    )
+
+    result = assert_invalid(preview, make_rules(pricePlace="999999"), "long")
+
+    assert result.error_message == DECIMAL_RANGE_ERROR
 
 
 def test_market_order_max_quantity():

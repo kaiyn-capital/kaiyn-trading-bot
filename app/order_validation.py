@@ -1,9 +1,11 @@
 from dataclasses import replace
-from decimal import ROUND_DOWN, Decimal, InvalidOperation
+from decimal import ROUND_DOWN, Decimal, DecimalException, InvalidOperation
 from typing import Any
 
 from .decimal_utils import decimal_text, to_decimal
 from .order_types import ContractRules, OrderPreview, OrderValidationResult
+
+DECIMAL_RANGE_ERROR = "❌ 价格或数量超出可处理范围，无法下单"
 
 
 def _decimal_or_zero(value: object) -> Decimal:
@@ -207,6 +209,17 @@ def _validate_position_value(
 
 
 def validate_order_preview(
+    preview: OrderPreview,
+    rules: ContractRules,
+    direction: str,
+) -> OrderValidationResult:
+    try:
+        return _validate_order_preview(preview, rules, direction)
+    except DecimalException:
+        return OrderValidationResult(False, DECIMAL_RANGE_ERROR)
+
+
+def _validate_order_preview(
     preview: OrderPreview,
     rules: ContractRules,
     direction: str,
