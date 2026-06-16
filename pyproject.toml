@@ -9,11 +9,11 @@ description = "Telegram bot for Bitget futures signal execution"
 readme = "readme.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "python-telegram-bot[ext]==22.7",
+    "python-telegram-bot[ext]==22.8",
     "SQLAlchemy[asyncio]==2.0.49",
     "alembic==1.18.4",
     "asyncpg==0.31.0",
-    "cryptography==48.0.0",
+    "cryptography==49.0.0",
     "httpx==0.28.1",
     "mplfinance==0.12.10b0",
     "python-dotenv==1.2.2",
@@ -21,10 +21,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest==9.0.3",
+    "pytest==9.1.0",
     "pytest-asyncio==1.4.0",
     "pytest-cov==7.1.0",
-    "ruff==0.15.16",
+    "ruff==0.15.17",
     "mypy==2.1.0",
 ]
 
