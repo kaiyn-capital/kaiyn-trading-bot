@@ -17,7 +17,7 @@
 [![pytest](https://img.shields.io/badge/tests-pytest%209.0.3-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
 [![Dependabot](https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot&logoColor=white)](./.github/dependabot.yml)
 
-> 🌐 [中文版 README](readme_zh.md)
+> 🌐 [中文版 README](README_ZH.md)
 
 Kaiyn Trading Bot is a Telegram-integrated trading signal execution bot for Bitget USDT-FUTURES. The project is designed to production-ready standards, covering order confirmation flows, exchange rule validation, encrypted credential storage, audit trails, backup and restore, and CI/CD.
 
