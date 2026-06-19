@@ -2,7 +2,7 @@
 
 Repository-specific guidance for coding agents working on Kaiyn Trading Bot.
 Keep this file short and operational. Put long setup, deployment, and feature
-documentation in `readme.md` or `references/*.md`.
+documentation in `README.md` or `references/*.md`.
 
 ## Operating Rules
 
@@ -97,7 +97,7 @@ Get local-code evidence and be conservative before changing:
 
 ## Reference Index
 
-- `readme.md`: public overview and main setup path.
+- `README.md`: public overview and main setup path.
 - `Makefile`: source of truth for development, test, lint, migration, backup,
   and verification commands.
 - `references/commands.md`: Telegram command and signal syntax reference.

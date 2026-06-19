@@ -19,7 +19,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml uv.lock readme.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY app ./app
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic

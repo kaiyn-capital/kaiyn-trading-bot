@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "kaiyn-trading-bot"
 version = "0.1.0"
 description = "Telegram bot for Bitget futures signal execution"
-readme = "readme.md"
+readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "python-telegram-bot[ext]==22.8",

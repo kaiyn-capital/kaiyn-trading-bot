@@ -17,7 +17,7 @@
 [![pytest](https://img.shields.io/badge/tests-pytest%209.0.3-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
 [![Dependabot](https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot&logoColor=white)](./.github/dependabot.yml)
 
-> 🌐 [English README](readme.md)
+> 🌐 [English README](README.md)
 
 Kaiyn Trading Bot 是整合 Telegram 與 Bitget USDT-FUTURES 的交易信號執行機器人。專案以 production-ready 實務運行規格設計，涵蓋交易確認流程、交易所規則驗證、加密憑證保存、審計紀錄、備份還原與 CI/CD。
 
