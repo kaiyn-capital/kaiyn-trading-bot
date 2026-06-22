@@ -22,7 +22,7 @@ jobs:
   update-digests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: chainguard-dev/digestabot@v1.3.2
         with:
