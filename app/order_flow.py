@@ -338,7 +338,7 @@ async def execute_order(
 
         order_data = result.get("data", {})
         bitget_order_id = order_data.get("orderId", "")
-        status = "pending" if is_limit_order else "filled"
+        status = "pending" if is_limit_order else "submitted"
 
         await trade_repo.update_trade_result(
             trade_record_id,

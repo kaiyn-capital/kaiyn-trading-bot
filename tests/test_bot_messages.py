@@ -1,5 +1,7 @@
-from app.bot_messages import chart_update_message, signal_message
-from app.order_flow import parse_signal_args
+from decimal import Decimal
+
+from app.bot_messages import chart_update_message, order_success_message, signal_message
+from app.order_flow import OrderExecutionResult, parse_signal_args
 
 
 def test_signal_message_preserves_decimal_prices():
@@ -57,3 +59,25 @@ def test_chart_update_message_escapes_remark_and_signal_id():
 
     assert "&lt;b&gt;TP1 到达&lt;/b&gt; &amp; hold" in text
     assert "交易id: <code>sig&lt;1&gt;</code>" in text
+
+
+def test_market_order_success_message_reports_submission_without_claiming_fill():
+    result = OrderExecutionResult(
+        trade_id=1,
+        bitget_order_id="bitget-market-order",
+        symbol="BTCUSDT",
+        side="buy",
+        order_type="market",
+        status="submitted",
+        quantity=Decimal("0.01"),
+        position_value=Decimal("800"),
+        limit_price=None,
+    )
+
+    text = order_success_message(result, "long", Decimal("79000"), Decimal("80000"), Decimal("10"))
+
+    assert "市价单已送出" in text
+    assert "参考价格" in text
+    assert "不代表已成交" in text
+    assert "下单成功" not in text
+    assert "进场价格" not in text

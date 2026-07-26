@@ -177,7 +177,7 @@ async def test_market_execute_order_uses_same_client_order_id_for_trade_record_a
     trade_manager = RecordingTradeManager()
     client_order_id = build_client_order_id("tok_market")
 
-    await execute_order(
+    result = await execute_order(
         user_data=SimpleNamespace(id=7),
         trade_repo=trade_repo,
         trade_manager=trade_manager,
@@ -196,6 +196,8 @@ async def test_market_execute_order_uses_same_client_order_id_for_trade_record_a
     assert trade_repo.created_trade["price"] is None
     assert trade_manager.market_orders[-1]["args"][4] == "0.01"
     assert trade_manager.market_orders[-1]["args"][5] == client_order_id
+    assert result.status == "submitted"
+    assert trade_repo.updated_results[-1]["status"] == "submitted"
 
 
 @pytest.mark.asyncio
@@ -204,7 +206,7 @@ async def test_limit_execute_order_uses_same_client_order_id_for_trade_record_an
     trade_manager = RecordingTradeManager()
     client_order_id = build_client_order_id("tok_limit")
 
-    await execute_order(
+    result = await execute_order(
         user_data=SimpleNamespace(id=7),
         trade_repo=trade_repo,
         trade_manager=trade_manager,
@@ -228,6 +230,8 @@ async def test_limit_execute_order_uses_same_client_order_id_for_trade_record_an
     assert trade_manager.limit_orders[-1]["args"][4] == "0.02"
     assert trade_manager.limit_orders[-1]["args"][5] == "80200"
     assert trade_manager.limit_orders[-1]["args"][6] == client_order_id
+    assert result.status == "pending"
+    assert trade_repo.updated_results[-1]["status"] == "pending"
 
 
 @pytest.mark.asyncio
