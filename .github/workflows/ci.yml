@@ -30,6 +30,9 @@ jobs:
       - name: Show Docker Compose version
         run: docker compose version
 
+      - name: Validate production Compose configuration
+        run: make compose-prod-check
+
       - name: Build test image
         run: docker compose build test
 
