@@ -3,49 +3,77 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Kaiyn Trading Bot</title>
+    <title>Kaiyn Trading Bot — Risk-Aware Telegram Trade Execution</title>
     <meta
       name="description"
-      content="Telegram bot for Bitget USDT-FUTURES signal execution with encrypted credentials, fixed 1R sizing, order confirmation, audits, backups, and Docker-first deployment."
+      content="A Telegram-based Bitget USDT-FUTURES execution system built around confirmation-first order flow, deterministic order identity, risk controls, and auditable operations."
     >
+    <meta name="author" content="Kyle Wu">
     <meta name="theme-color" content="#07111f">
     <link rel="canonical" href="https://kaiyn.kylewu.me/">
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 
-    <meta property="og:title" content="Kaiyn Trading Bot">
+    <meta property="og:title" content="Kaiyn Trading Bot — Risk-Aware Telegram Trade Execution">
     <meta
       property="og:description"
-      content="Telegram bot for Bitget USDT-FUTURES signal execution with encrypted credentials, fixed 1R sizing, order confirmation, audits, backups, and Docker-first deployment."
+      content="Confirmation-first Bitget signal execution with deterministic order identity, risk controls, and auditable operations."
     >
     <meta property="og:image" content="https://kaiyn.kylewu.me/assets/og-image.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Kaiyn Trading Bot project overview">
     <meta property="og:url" content="https://kaiyn.kylewu.me/">
     <meta property="og:type" content="website">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Kaiyn Trading Bot">
+    <meta name="twitter:title" content="Kaiyn Trading Bot — Risk-Aware Telegram Trade Execution">
     <meta
       name="twitter:description"
-      content="Telegram bot for Bitget USDT-FUTURES signal execution with encrypted credentials, fixed 1R sizing, order confirmation, audits, backups, and Docker-first deployment."
+      content="Confirmation-first Bitget signal execution with deterministic order identity, risk controls, and auditable operations."
     >
     <meta name="twitter:image" content="https://kaiyn.kylewu.me/assets/og-image.png">
+    <meta name="twitter:image:alt" content="Kaiyn Trading Bot project overview">
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareSourceCode",
+        "name": "Kaiyn Trading Bot",
+        "description": "A Telegram-based Bitget USDT-FUTURES execution system built around confirmation-first order flow, deterministic order identity, risk controls, and auditable operations.",
+        "url": "https://kaiyn.kylewu.me/",
+        "codeRepository": "https://github.com/kaiyn-capital/kaiyn-trading-bot",
+        "programmingLanguage": "Python",
+        "runtimePlatform": "Python 3.11, PostgreSQL 16, Docker Compose",
+        "author": {
+          "@type": "Person",
+          "name": "Kyle Wu",
+          "url": "https://kylewu.me/"
+        },
+        "isPartOf": {
+          "@type": "WebSite",
+          "name": "Kyle Wu",
+          "url": "https://kylewu.me/"
+        }
+      }
+    </script>
 
     <style>
       :root {
         color-scheme: dark;
         --bg: #07111f;
-        --bg-soft: #0d1b2e;
-        --panel: #112236;
-        --panel-strong: #172a42;
-        --line: #284568;
-        --line-soft: rgba(127, 164, 210, 0.24);
-        --text: #eef6ff;
-        --muted: #a9b8cc;
-        --subtle: #7e91ac;
-        --cyan: #38c7f4;
-        --green: #37d67a;
-        --orange: #ffb454;
-        --shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+        --bg-deep: #050d17;
+        --surface: #0d1b2e;
+        --surface-strong: #11243a;
+        --line: rgba(151, 181, 218, 0.22);
+        --line-strong: rgba(56, 199, 244, 0.48);
+        --text: #f3f2ee;
+        --muted: #aab8ca;
+        --subtle: #7f90a7;
+        --accent: #38c7f4;
+        --accent-ink: #04121e;
+        --max-width: 1180px;
+        --radius: 10px;
+        --shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
       }
 
       * {
@@ -60,9 +88,9 @@
         margin: 0;
         background: var(--bg);
         color: var(--text);
-        font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        line-height: 1.5;
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.55;
+        text-rendering: optimizeLegibility;
       }
 
       a {
@@ -75,90 +103,120 @@
         max-width: 100%;
       }
 
+      h1,
+      h2,
+      h3,
+      p,
+      figure {
+        margin: 0;
+      }
+
+      a:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 4px;
+      }
+
+      .skip-link {
+        position: fixed;
+        z-index: 20;
+        top: 12px;
+        left: 12px;
+        padding: 10px 14px;
+        background: var(--text);
+        color: var(--bg);
+        transform: translateY(-160%);
+      }
+
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
+      .container {
+        width: min(var(--max-width), calc(100% - 40px));
+        margin-inline: auto;
+      }
+
       .site-header {
         position: absolute;
-        z-index: 5;
+        z-index: 10;
         top: 0;
         right: 0;
         left: 0;
+        border-bottom: 1px solid rgba(151, 181, 218, 0.12);
+        background: linear-gradient(180deg, rgba(5, 13, 23, 0.82), rgba(5, 13, 23, 0));
+      }
+
+      .header-inner {
         display: flex;
+        min-height: 76px;
         align-items: center;
         justify-content: space-between;
-        gap: 24px;
-        width: min(1180px, calc(100% - 40px));
-        margin: 0 auto;
-        padding: 24px 0;
+        gap: 28px;
       }
 
       .brand {
         display: inline-flex;
+        flex: 0 0 auto;
         align-items: center;
-        gap: 12px;
-        min-width: 0;
-        font-weight: 750;
-        letter-spacing: 0;
+        gap: 11px;
+        font-size: 15px;
+        font-weight: 720;
+        letter-spacing: -0.01em;
       }
 
       .brand-mark {
         display: grid;
-        width: 38px;
-        height: 38px;
+        width: 35px;
+        height: 35px;
         place-items: center;
-        border: 1px solid rgba(56, 199, 244, 0.48);
-        border-radius: 9px;
-        background: rgba(7, 17, 31, 0.72);
-        box-shadow: 0 0 22px rgba(56, 199, 244, 0.22);
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        background: rgba(7, 17, 31, 0.82);
+        color: var(--accent);
       }
 
       .brand-mark svg {
-        width: 23px;
-        height: 23px;
+        width: 21px;
+        height: 21px;
       }
 
       .nav {
         display: flex;
+        min-width: 0;
         align-items: center;
-        gap: 8px;
+        gap: 4px;
         color: var(--muted);
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 650;
       }
 
-      .nav a,
-      .button {
+      .nav a {
         display: inline-flex;
-        min-height: 40px;
+        min-height: 42px;
         align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        padding: 0 14px;
+        padding: 0 11px;
+        border-radius: 7px;
+        white-space: nowrap;
       }
 
       .nav a:hover {
+        background: rgba(255, 255, 255, 0.06);
         color: var(--text);
-        background: rgba(255, 255, 255, 0.08);
       }
 
-      .button {
-        border: 1px solid rgba(56, 199, 244, 0.55);
-        background: rgba(56, 199, 244, 0.16);
+      .nav .repository-link {
+        margin-left: 4px;
+        border: 1px solid var(--line-strong);
         color: var(--text);
-        font-size: 14px;
-        font-weight: 750;
-        box-shadow: 0 16px 36px rgba(56, 199, 244, 0.15);
-      }
-
-      .button:hover {
-        background: rgba(56, 199, 244, 0.24);
       }
 
       .hero {
         position: relative;
         display: grid;
-        min-height: 84svh;
+        min-height: 88svh;
         align-items: end;
         overflow: hidden;
-        padding: 132px 0 78px;
+        padding: 150px 0 72px;
         isolation: isolate;
       }
 
@@ -170,8 +228,8 @@
         background-position: center top;
         background-size: cover;
         content: "";
-        filter: saturate(0.95);
-        transform: scale(1.02);
+        filter: saturate(0.82) contrast(1.04);
+        transform: scale(1.015);
       }
 
       .hero::after {
@@ -179,166 +237,145 @@
         inset: 0;
         z-index: -2;
         background:
-          linear-gradient(90deg, rgba(7, 17, 31, 0.96) 0%, rgba(7, 17, 31, 0.82) 42%, rgba(7, 17, 31, 0.38) 100%),
-          linear-gradient(180deg, rgba(7, 17, 31, 0.35) 0%, rgba(7, 17, 31, 0.2) 48%, var(--bg) 100%);
+          linear-gradient(90deg, rgba(7, 17, 31, 0.98) 0%, rgba(7, 17, 31, 0.88) 48%, rgba(7, 17, 31, 0.38) 100%),
+          linear-gradient(180deg, rgba(7, 17, 31, 0.28) 0%, rgba(7, 17, 31, 0.16) 45%, var(--bg) 100%);
         content: "";
       }
 
-      .container {
-        width: min(1180px, calc(100% - 40px));
-        margin: 0 auto;
-      }
-
       .hero-content {
-        max-width: 760px;
+        max-width: 790px;
       }
 
-      h1,
-      h2,
-      h3,
-      p {
-        margin: 0;
+      .eyebrow {
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 760;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
       }
 
       h1 {
-        max-width: 720px;
-        font-size: clamp(46px, 7.6vw, 96px);
-        font-weight: 780;
-        line-height: 0.95;
-        letter-spacing: 0;
+        max-width: 760px;
+        margin-top: 15px;
+        font-size: clamp(48px, 7.2vw, 92px);
+        font-weight: 760;
+        line-height: 0.96;
+        letter-spacing: -0.055em;
       }
 
       .hero-copy {
-        max-width: 690px;
-        margin-top: 26px;
-        color: #c6d4e7;
-        font-size: clamp(18px, 2.1vw, 25px);
-        line-height: 1.42;
+        max-width: 700px;
+        margin-top: 24px;
+        color: #c4cfdd;
+        font-size: clamp(18px, 2vw, 23px);
+        line-height: 1.45;
       }
 
       .hero-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
-        margin-top: 34px;
+        margin-top: 32px;
+      }
+
+      .button {
+        display: inline-flex;
+        min-height: 48px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(243, 242, 238, 0.2);
+        border-radius: 8px;
+        padding: 0 18px;
+        background: rgba(243, 242, 238, 0.07);
+        font-size: 14px;
+        font-weight: 720;
+      }
+
+      .button:hover {
+        border-color: rgba(243, 242, 238, 0.4);
+        background: rgba(243, 242, 238, 0.11);
       }
 
       .button.primary {
-        min-height: 48px;
-        padding: 0 18px;
-        background: var(--cyan);
-        color: #03101c;
-        box-shadow: 0 18px 46px rgba(56, 199, 244, 0.32);
+        border-color: var(--accent);
+        background: var(--accent);
+        color: var(--accent-ink);
       }
 
-      .button.secondary {
-        min-height: 48px;
-        border-color: rgba(238, 246, 255, 0.2);
-        background: rgba(238, 246, 255, 0.08);
+      .button.primary:hover {
+        background: #71d8f7;
       }
 
       .hero-meta {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 1px;
-        width: min(760px, 100%);
-        margin-top: 42px;
-        overflow: hidden;
-        border: 1px solid var(--line-soft);
-        border-radius: 8px;
-        background: var(--line-soft);
+        width: min(790px, 100%);
+        margin-top: 40px;
+        border-block: 1px solid var(--line);
       }
 
       .hero-meta div {
         min-width: 0;
-        padding: 18px;
-        background: rgba(13, 27, 46, 0.78);
+        padding: 18px 20px 18px 0;
+      }
+
+      .hero-meta div + div {
+        border-left: 1px solid var(--line);
+        padding-left: 20px;
+      }
+
+      .hero-meta strong,
+      .hero-meta span {
+        display: block;
       }
 
       .hero-meta strong {
-        display: block;
-        color: var(--text);
         font-size: 13px;
-        letter-spacing: 0;
       }
 
       .hero-meta span {
-        display: block;
         margin-top: 4px;
         color: var(--muted);
-        font-size: 14px;
+        font-size: 13px;
       }
 
       main {
         background:
-          radial-gradient(circle at 16% 10%, rgba(56, 199, 244, 0.1), transparent 28rem),
-          linear-gradient(180deg, var(--bg) 0%, #081522 48%, #06101b 100%);
+          radial-gradient(circle at 14% 8%, rgba(56, 199, 244, 0.08), transparent 30rem),
+          linear-gradient(180deg, var(--bg), var(--bg-deep));
       }
 
       section {
-        padding: 92px 0;
+        scroll-margin-top: 32px;
+        padding: 96px 0;
       }
 
-      .section-head {
-        display: grid;
-        grid-template-columns: minmax(0, 0.8fr) minmax(280px, 0.55fr);
-        gap: 48px;
-        align-items: end;
-        margin-bottom: 34px;
+      .section-intro {
+        max-width: 760px;
+        margin-bottom: 40px;
       }
 
       h2 {
-        max-width: 780px;
-        font-size: clamp(31px, 4vw, 56px);
-        font-weight: 760;
-        line-height: 1;
-        letter-spacing: 0;
+        margin-top: 13px;
+        font-size: clamp(34px, 4.4vw, 58px);
+        font-weight: 730;
+        line-height: 1.03;
+        letter-spacing: -0.045em;
       }
 
       .section-copy {
+        max-width: 690px;
+        margin-top: 18px;
         color: var(--muted);
         font-size: 17px;
       }
 
-      .capability-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 14px;
-      }
-
-      .capability {
-        min-height: 178px;
-        border: 1px solid var(--line-soft);
-        border-radius: 8px;
-        background: rgba(17, 34, 54, 0.66);
-        padding: 24px;
-      }
-
-      .capability svg {
-        width: 30px;
-        height: 30px;
-        color: var(--cyan);
-      }
-
-      .capability h3 {
-        margin-top: 22px;
-        color: var(--text);
-        font-size: 19px;
-        line-height: 1.25;
-      }
-
-      .capability p {
-        margin-top: 10px;
-        color: var(--muted);
-        font-size: 15px;
-      }
-
       .showcase {
-        border: 1px solid var(--line-soft);
-        border-radius: 8px;
-        background: linear-gradient(180deg, rgba(17, 34, 54, 0.92), rgba(11, 25, 42, 0.94));
-        box-shadow: var(--shadow);
         overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: var(--shadow);
       }
 
       .showcase img {
@@ -346,36 +383,98 @@
         height: auto;
       }
 
+      .showcase figcaption {
+        border-top: 1px solid var(--line);
+        padding: 16px 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .pillars {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        border-block: 1px solid var(--line);
+      }
+
+      .pillar {
+        padding: 30px 28px 32px 0;
+      }
+
+      .pillar + .pillar {
+        border-left: 1px solid var(--line);
+        padding-left: 28px;
+      }
+
+      .pillar-label {
+        color: var(--accent);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+      }
+
+      .pillar h3 {
+        margin-top: 14px;
+        font-size: 24px;
+        line-height: 1.15;
+        letter-spacing: -0.025em;
+      }
+
+      .pillar p {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .pillar ul {
+        margin: 24px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .pillar li {
+        position: relative;
+        padding: 10px 0 10px 18px;
+        border-top: 1px solid rgba(151, 181, 218, 0.13);
+        color: #d4dce7;
+        font-size: 14px;
+      }
+
+      .pillar li::before {
+        position: absolute;
+        top: 18px;
+        left: 0;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--accent);
+        content: "";
+      }
+
       .operations-layout {
         display: grid;
-        grid-template-columns: minmax(0, 0.92fr) minmax(300px, 0.55fr);
-        gap: 32px;
+        grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.72fr);
+        gap: 42px;
         align-items: start;
       }
 
       .ops-list {
         display: grid;
-        gap: 12px;
+        margin-top: 28px;
+        border-top: 1px solid var(--line);
       }
 
       .ops-item {
         display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 14px;
-        align-items: start;
-        border: 1px solid var(--line-soft);
-        border-radius: 8px;
-        background: rgba(17, 34, 54, 0.6);
-        padding: 18px;
+        grid-template-columns: 28px 1fr;
+        gap: 12px;
+        padding: 18px 0;
+        border-bottom: 1px solid var(--line);
       }
 
-      .status-dot {
-        width: 12px;
-        height: 12px;
-        margin-top: 7px;
-        border-radius: 999px;
-        background: var(--green);
-        box-shadow: 0 0 18px rgba(55, 214, 122, 0.55);
+      .ops-index {
+        color: var(--accent);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        padding-top: 4px;
       }
 
       .ops-item h3 {
@@ -383,73 +482,86 @@
       }
 
       .ops-item p {
-        margin-top: 4px;
+        margin-top: 5px;
         color: var(--muted);
-        font-size: 15px;
+        font-size: 14px;
       }
 
-      .stack-band {
-        border-block: 1px solid var(--line-soft);
+      .foundation {
+        border-block: 1px solid var(--line);
         background: rgba(4, 12, 22, 0.38);
       }
 
-      .stack-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 30px;
-      }
-
-      .stack-list span {
-        display: inline-flex;
-        align-items: center;
-        min-height: 40px;
-        border: 1px solid var(--line-soft);
-        border-radius: 8px;
-        background: rgba(17, 34, 54, 0.68);
-        padding: 0 14px;
-        color: #dce9f8;
-        font-size: 14px;
-        font-weight: 680;
-      }
-
-      .docs-grid {
+      .foundation-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 14px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 28px;
+      }
+
+      .foundation-group h3 {
+        font-size: 15px;
+      }
+
+      .foundation-group p {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .docs-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        border-top: 1px solid var(--line);
       }
 
       .doc-link {
-        min-height: 142px;
-        border: 1px solid var(--line-soft);
-        border-radius: 8px;
-        background: rgba(17, 34, 54, 0.62);
-        padding: 20px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 18px;
+        min-height: 126px;
+        align-items: start;
+        padding: 22px 24px 22px 0;
+        border-bottom: 1px solid var(--line);
       }
 
-      .doc-link:hover {
-        border-color: rgba(56, 199, 244, 0.62);
-        background: rgba(18, 43, 70, 0.72);
+      .doc-link:nth-child(even) {
+        border-left: 1px solid var(--line);
+        padding-right: 0;
+        padding-left: 24px;
+      }
+
+      .doc-link:hover strong,
+      .doc-link:hover .arrow {
+        color: var(--accent);
+      }
+
+      .doc-link strong,
+      .doc-link span {
+        display: block;
       }
 
       .doc-link strong {
-        display: block;
         font-size: 17px;
       }
 
       .doc-link span {
-        display: block;
-        margin-top: 8px;
+        margin-top: 7px;
         color: var(--muted);
         font-size: 14px;
       }
 
-      .site-footer {
-        border-top: 1px solid var(--line-soft);
-        padding: 36px 0;
-        background: #050d17;
+      .arrow {
         color: var(--subtle);
-        font-size: 14px;
+        font-size: 18px;
+      }
+
+      .site-footer {
+        border-top: 1px solid var(--line);
+        padding: 38px 0;
+        background: #040b13;
+        color: var(--subtle);
+        font-size: 13px;
       }
 
       .footer-inner {
@@ -457,78 +569,101 @@
         flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
-        gap: 18px;
+        gap: 20px;
+      }
+
+      .footer-credit strong {
+        color: var(--text);
+        font-weight: 650;
       }
 
       .footer-links {
         display: flex;
         flex-wrap: wrap;
-        gap: 16px;
+        gap: 18px;
       }
 
       .footer-links a:hover {
         color: var(--text);
       }
 
-      @media (max-width: 880px) {
-        .site-header {
-          width: min(100% - 28px, 1180px);
-          padding: 18px 0;
+      @media (max-width: 900px) {
+        .header-inner {
+          display: grid;
+          gap: 4px;
+          padding: 13px 0 10px;
         }
 
-        .nav a:not(.button) {
+        .nav {
+          width: 100%;
+          overflow-x: auto;
+          padding-bottom: 3px;
+          scrollbar-width: none;
+        }
+
+        .nav::-webkit-scrollbar {
           display: none;
         }
 
+        .nav a:first-child {
+          padding-left: 0;
+        }
+
+        .nav .repository-link {
+          margin-left: 0;
+        }
+
         .hero {
-          min-height: 88svh;
-          padding: 112px 0 58px;
+          padding-top: 155px;
         }
 
         .hero::before {
-          background-position: 58% top;
+          background-position: 62% top;
         }
 
         .hero::after {
           background:
-            linear-gradient(90deg, rgba(7, 17, 31, 0.97) 0%, rgba(7, 17, 31, 0.82) 62%, rgba(7, 17, 31, 0.5) 100%),
-            linear-gradient(180deg, rgba(7, 17, 31, 0.42) 0%, rgba(7, 17, 31, 0.25) 48%, var(--bg) 100%);
+            linear-gradient(90deg, rgba(7, 17, 31, 0.98), rgba(7, 17, 31, 0.83) 66%, rgba(7, 17, 31, 0.52)),
+            linear-gradient(180deg, rgba(7, 17, 31, 0.35), rgba(7, 17, 31, 0.18) 42%, var(--bg));
         }
 
-        .container {
-          width: min(100% - 28px, 1180px);
-        }
-
-        .hero-meta,
-        .capability-grid,
+        .pillars,
         .operations-layout,
-        .docs-grid,
-        .section-head {
+        .foundation-grid {
           grid-template-columns: 1fr;
         }
 
-        .section-head {
-          gap: 18px;
-          margin-bottom: 28px;
+        .pillar {
+          padding: 28px 0;
         }
 
-        section {
-          padding: 68px 0;
+        .pillar + .pillar {
+          border-top: 1px solid var(--line);
+          border-left: 0;
+          padding-left: 0;
+        }
+
+        .operations-layout {
+          gap: 34px;
         }
       }
 
-      @media (max-width: 560px) {
-        .brand span {
-          max-width: 160px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+      @media (max-width: 620px) {
+        .container {
+          width: min(var(--max-width), calc(100% - 28px));
         }
 
-        .button {
-          min-height: 38px;
-          padding: 0 12px;
-          font-size: 13px;
+        .brand {
+          font-size: 14px;
+        }
+
+        .hero {
+          min-height: 92svh;
+          padding-bottom: 52px;
+        }
+
+        h1 {
+          font-size: clamp(45px, 15vw, 64px);
         }
 
         .hero-copy {
@@ -537,167 +672,213 @@
 
         .hero-actions {
           display: grid;
+        }
+
+        .hero-meta {
           grid-template-columns: 1fr;
         }
 
-        .hero-actions .button {
-          width: 100%;
+        .hero-meta div {
+          padding: 14px 0;
         }
 
-        .capability,
-        .doc-link {
+        .hero-meta div + div {
+          border-top: 1px solid var(--line);
+          border-left: 0;
+          padding-left: 0;
+        }
+
+        section {
+          padding: 72px 0;
+        }
+
+        .docs-list {
+          grid-template-columns: 1fr;
+        }
+
+        .doc-link,
+        .doc-link:nth-child(even) {
           min-height: auto;
+          border-left: 0;
+          padding: 20px 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
         }
       }
     </style>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
     <header class="site-header">
-      <a class="brand" href="#" aria-label="Kaiyn Trading Bot home">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 48 48" role="img">
-            <path d="M38.8 8.8 8.4 21.2c-1.9.8-1.8 3.6.2 4.1l11 2.7 2.8 10.9c.5 2 3.2 2.1 4.1.2L39.1 9.5c.2-.5.1-.8-.3-.7Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="3"/>
-            <path d="m20.1 27.8 9.2-9.1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="3"/>
-          </svg>
-        </span>
-        <span>Kaiyn Trading Bot</span>
-      </a>
-      <nav class="nav" aria-label="Primary navigation">
-        <a href="#capabilities">Capabilities</a>
-        <a href="#operations">Operations</a>
-        <a href="#docs">Docs</a>
-        <a class="button" href="https://github.com/kaiyn-capital/kaiyn-trading-bot">GitHub</a>
-      </nav>
+      <div class="container header-inner">
+        <a class="brand" href="#top" aria-label="Kaiyn Trading Bot home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 48 48">
+              <path d="M38.8 8.8 8.4 21.2c-1.9.8-1.8 3.6.2 4.1l11 2.7 2.8 10.9c.5 2 3.2 2.1 4.1.2L39.1 9.5c.2-.5.1-.8-.3-.7Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="3"/>
+              <path d="m20.1 27.8 9.2-9.1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="3"/>
+            </svg>
+          </span>
+          <span>Kaiyn Trading Bot</span>
+        </a>
+        <nav class="nav" aria-label="Project navigation">
+          <a href="#workflow">Workflow</a>
+          <a href="#engineering">Engineering</a>
+          <a href="#operations">Operations</a>
+          <a href="#documentation">Documentation</a>
+          <a class="repository-link" href="https://github.com/kaiyn-capital/kaiyn-trading-bot">GitHub</a>
+        </nav>
+      </div>
     </header>
 
-    <main>
-      <section class="hero" aria-label="Kaiyn Trading Bot overview">
+    <main id="main-content">
+      <section class="hero" id="top" aria-labelledby="project-title">
         <div class="container">
           <div class="hero-content">
-            <h1>Kaiyn Trading Bot</h1>
+            <p class="eyebrow">Kaiyn Capital · Execution Infrastructure</p>
+            <h1 id="project-title">Kaiyn Trading Bot</h1>
             <p class="hero-copy">
-              Telegram-based Bitget USDT-FUTURES signal execution with encrypted API credentials, fixed 1R sizing, order confirmation, audit records, backups, and Docker-first deployment.
+              A confirmation-first Telegram workflow for Bitget USDT-FUTURES, designed around explicit risk limits, deterministic order identity, and operations that can be reviewed.
             </p>
             <div class="hero-actions" aria-label="Project actions">
-              <a class="button primary" href="https://github.com/kaiyn-capital/kaiyn-trading-bot">View Repository</a>
-              <a class="button secondary" href="https://github.com/kaiyn-capital/kaiyn-trading-bot/blob/main/references/commands.md">Command Reference</a>
+              <a class="button primary" href="https://github.com/kaiyn-capital/kaiyn-trading-bot">View repository</a>
+              <a class="button" href="https://kylewu.me/projects/kaiyn-trading-bot">Read portfolio case study</a>
             </div>
-            <div class="hero-meta" aria-label="Project highlights">
+            <div class="hero-meta" aria-label="Engineering approach">
               <div>
-                <strong>Execution</strong>
-                <span>Market and GTC limit order confirmation</span>
+                <strong>Confirmation first</strong>
+                <span>Preview before execution</span>
               </div>
               <div>
-                <strong>Safety</strong>
-                <span>Contract-rule validation before submission</span>
+                <strong>Deterministic identity</strong>
+                <span>Traceable order lifecycle</span>
               </div>
               <div>
-                <strong>Operations</strong>
-                <span>Health checks, audit trail, retention, backups</span>
+                <strong>Auditable operations</strong>
+                <span>Health, alerts, and backups</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section id="capabilities">
+      <section id="workflow" aria-labelledby="workflow-title">
         <div class="container">
-          <div class="section-head">
-            <h2>Built for confirmed signal execution.</h2>
+          <div class="section-intro">
+            <p class="eyebrow">Execution workflow</p>
+            <h2 id="workflow-title">A signal becomes an order only after explicit confirmation.</h2>
             <p class="section-copy">
-              The bot keeps trading flow state in PostgreSQL, validates Bitget contract rules before execution, and records operational events for admins.
-            </p>
-          </div>
-          <div class="capability-grid">
-            <article class="capability">
-              <svg viewBox="0 0 32 32" aria-hidden="true">
-                <path d="M5 16h12M17 16l-4-4M17 16l-4 4M20 7h4a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/>
-              </svg>
-              <h3>Telegram signal intake</h3>
-              <p>Admins publish tradeable signals and forward them to managed channels, groups, and forum topics.</p>
-            </article>
-            <article class="capability">
-              <svg viewBox="0 0 32 32" aria-hidden="true">
-                <path d="M7 17.5 13 23 25 9M5 6h22v20H5z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/>
-              </svg>
-              <h3>Pending order confirmation</h3>
-              <p>Users confirm market or GTC limit orders before execution, with row locking to guard duplicate clicks.</p>
-            </article>
-            <article class="capability">
-              <svg viewBox="0 0 32 32" aria-hidden="true">
-                <path d="M16 4 6 8v7c0 6 4.3 10.8 10 13 5.7-2.2 10-7 10-13V8L16 4Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="2.2"/>
-                <path d="M12 16.5 15 19l5-6" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/>
-              </svg>
-              <h3>Encrypted credentials</h3>
-              <p>Bitget API key, secret key, and passphrase are stored with Fernet encryption.</p>
-            </article>
-            <article class="capability">
-              <svg viewBox="0 0 32 32" aria-hidden="true">
-                <path d="M6 24h20M8 20l5-7 5 4 6-9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/>
-                <path d="M6 6v20h20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2.2"/>
-              </svg>
-              <h3>Fixed 1R sizing</h3>
-              <p>Order previews calculate trade size from each user's configured fixed 1R risk amount.</p>
-            </article>
-            <article class="capability">
-              <svg viewBox="0 0 32 32" aria-hidden="true">
-                <path d="M9 8h14M9 14h14M9 20h8M6 4h20v24H6z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/>
-              </svg>
-              <h3>Audit and alerts</h3>
-              <p>Admin commands expose system health, recent audit events, backup state, and error summaries.</p>
-            </article>
-            <article class="capability">
-              <svg viewBox="0 0 32 32" aria-hidden="true">
-                <path d="M6 10h20M9 10V7h14v3M8 10v15h16V10M12 15h8M12 20h8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/>
-              </svg>
-              <h3>Docker-first runtime</h3>
-              <p>PostgreSQL, bot, maintenance, and backup services run through Docker Compose.</p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section aria-label="Trading flow screenshot">
-        <div class="container">
-          <div class="section-head">
-            <h2>Market and limit execution flow.</h2>
-            <p class="section-copy">
-              Signals become Telegram actions, actions become pending orders, and confirmed orders are validated again before submission to Bitget.
+              Telegram actions create persistent pending orders. The system calculates size, validates exchange constraints, then validates again before sending a confirmed order to Bitget.
             </p>
           </div>
           <figure class="showcase">
-            <img src="assets/screenshots/trading-flow-showcase.png" alt="Trading signal execution flow from signal to market order and GTC limit order confirmation">
+            <img
+              src="assets/screenshots/trading-flow-showcase.png"
+              width="1800"
+              height="900"
+              alt="Telegram trading signal workflow showing market and GTC limit order confirmation"
+              decoding="async"
+            >
+            <figcaption>Signal intake, confirmation preview, exchange-rule validation, and execution summary.</figcaption>
           </figure>
         </div>
       </section>
 
-      <section id="operations">
+      <section id="engineering" aria-labelledby="engineering-title">
+        <div class="container">
+          <div class="section-intro">
+            <p class="eyebrow">Engineering pillars</p>
+            <h2 id="engineering-title">Execution integrity, risk controls, and operational readiness.</h2>
+            <p class="section-copy">
+              The design treats safe state transitions and recoverable operations as part of the product, not as infrastructure added after launch.
+            </p>
+          </div>
+          <div class="pillars">
+            <article class="pillar">
+              <span class="pillar-label">01 / Execution</span>
+              <h3>Execution integrity</h3>
+              <p>Persistent state and exchange reconciliation are used to reduce ambiguous or duplicated submissions.</p>
+              <ul>
+                <li>Confirmation previews</li>
+                <li>Market and GTC limit flows</li>
+                <li>Deterministic client order IDs</li>
+                <li>Row locking and reconciliation</li>
+              </ul>
+            </article>
+            <article class="pillar">
+              <span class="pillar-label">02 / Risk</span>
+              <h3>Risk controls</h3>
+              <p>Order sizing and exchange constraints are checked before a request reaches the submission boundary.</p>
+              <ul>
+                <li>Fixed 1R sizing</li>
+                <li>Position and daily trade caps</li>
+                <li>Decimal financial calculations</li>
+                <li>Encrypted API credentials</li>
+              </ul>
+            </article>
+            <article class="pillar">
+              <span class="pillar-label">03 / Operations</span>
+              <h3>Operational readiness</h3>
+              <p>Health checks, audits, retention, and restore procedures keep operating state visible and recoverable.</p>
+              <ul>
+                <li>Admin health and error alerts</li>
+                <li>Structured audit events</li>
+                <li>Retention and local backups</li>
+                <li>Encrypted R2 offsite backup</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="operations" aria-labelledby="operations-title">
         <div class="container operations-layout">
           <figure class="showcase">
-            <img src="assets/screenshots/operations-showcase.png" alt="Operational readiness screenshots showing health check, audit trail, and Docker Compose CI">
+            <img
+              src="assets/screenshots/operations-showcase.png"
+              width="1800"
+              height="1640"
+              alt="Operational screenshots showing health checks, audit records, and Docker Compose CI"
+              loading="lazy"
+              decoding="async"
+            >
+            <figcaption>Admin health output, audit visibility, and Docker-first verification.</figcaption>
           </figure>
           <div>
-            <h2>Operational readiness is part of the product surface.</h2>
-            <div class="ops-list" aria-label="Operational capabilities">
+            <p class="eyebrow">Operational evidence</p>
+            <h2 id="operations-title">Operations are part of the product surface.</h2>
+            <p class="section-copy">The same Telegram interface used for execution also exposes concise operational context to administrators.</p>
+            <div class="ops-list">
               <article class="ops-item">
-                <span class="status-dot" aria-hidden="true"></span>
+                <span class="ops-index">01</span>
                 <div>
-                  <h3>Health checks</h3>
-                  <p>Admins can inspect bot, DB, backup, cleanup, and Bitget API status from Telegram.</p>
+                  <h3>Health visibility</h3>
+                  <p>Inspect database, backup, cleanup, and Bitget API status from Telegram.</p>
                 </div>
               </article>
               <article class="ops-item">
-                <span class="status-dot" aria-hidden="true"></span>
+                <span class="ops-index">02</span>
                 <div>
-                  <h3>Structured audit trail</h3>
-                  <p>Order, channel, admin, and system actions are recorded for review.</p>
+                  <h3>Reviewable events</h3>
+                  <p>Order, channel, admin, and system actions are recorded for later review.</p>
                 </div>
               </article>
               <article class="ops-item">
-                <span class="status-dot" aria-hidden="true"></span>
+                <span class="ops-index">03</span>
                 <div>
-                  <h3>Retention and backup</h3>
-                  <p>Maintenance cleanup and daily PostgreSQL backup are included in the Compose runtime.</p>
+                  <h3>Recovery path</h3>
+                  <p>Retention, local dumps, encrypted offsite backup, and restore runbooks are included.</p>
                 </div>
               </article>
             </div>
@@ -705,55 +886,52 @@
         </div>
       </section>
 
-      <section class="stack-band" aria-label="Technology stack">
+      <section class="foundation" aria-labelledby="foundation-title">
         <div class="container">
-          <div class="section-head">
-            <h2>Python, PostgreSQL, Docker Compose.</h2>
-            <p class="section-copy">
-              The project is built around a Python 3.11 runtime, async SQLAlchemy, Alembic migrations, and CI checks that mirror the deployment path.
-            </p>
+          <div class="section-intro">
+            <p class="eyebrow">Technical foundation</p>
+            <h2 id="foundation-title">A deployment path that mirrors verification.</h2>
           </div>
-          <div class="stack-list">
-            <span>Python 3.11</span>
-            <span>python-telegram-bot</span>
-            <span>Bitget REST API</span>
-            <span>PostgreSQL 16</span>
-            <span>SQLAlchemy asyncio</span>
-            <span>Alembic</span>
-            <span>Fernet encryption</span>
-            <span>Docker Compose</span>
-            <span>Ruff</span>
-            <span>pytest</span>
-            <span>GitHub Actions</span>
-            <span>GHCR</span>
+          <div class="foundation-grid">
+            <article class="foundation-group">
+              <h3>Application</h3>
+              <p>Python 3.11 · python-telegram-bot · Bitget REST API · Fernet encryption</p>
+            </article>
+            <article class="foundation-group">
+              <h3>State and runtime</h3>
+              <p>PostgreSQL 16 · SQLAlchemy asyncio · Alembic · Docker Compose</p>
+            </article>
+            <article class="foundation-group">
+              <h3>Verification and delivery</h3>
+              <p>Ruff · mypy · pytest · GitHub Actions · GHCR · VPS deployment</p>
+            </article>
           </div>
         </div>
       </section>
 
-      <section id="docs">
+      <section id="documentation" aria-labelledby="documentation-title">
         <div class="container">
-          <div class="section-head">
-            <h2>Read the runbooks and command references.</h2>
-            <p class="section-copy">
-              Project documentation covers command usage, trading flow behavior, deployment, backup restore checks, and production readiness.
-            </p>
+          <div class="section-intro">
+            <p class="eyebrow">Documentation</p>
+            <h2 id="documentation-title">Inspect the workflow and operating assumptions.</h2>
+            <p class="section-copy">The repository documents command usage, execution state, deployment, and recovery procedures.</p>
           </div>
-          <div class="docs-grid">
+          <div class="docs-list">
             <a class="doc-link" href="https://github.com/kaiyn-capital/kaiyn-trading-bot/blob/main/references/commands.md">
-              <strong>Commands</strong>
-              <span>Telegram command reference and signal syntax.</span>
+              <span><strong>Command reference</strong><span>Telegram commands, signal syntax, and smoke tests.</span></span>
+              <span class="arrow" aria-hidden="true">↗</span>
             </a>
             <a class="doc-link" href="https://github.com/kaiyn-capital/kaiyn-trading-bot/blob/main/references/trading_flow.md">
-              <strong>Trading Flow</strong>
-              <span>Order flow, pending orders, validation, and schema summary.</span>
+              <span><strong>Trading flow</strong><span>Pending orders, validation, reconciliation, and schema.</span></span>
+              <span class="arrow" aria-hidden="true">↗</span>
             </a>
             <a class="doc-link" href="https://github.com/kaiyn-capital/kaiyn-trading-bot/blob/main/references/deployment_runbook.md">
-              <strong>Deployment</strong>
-              <span>DigitalOcean VPS deployment runbook.</span>
+              <span><strong>Deployment runbook</strong><span>DigitalOcean VPS deployment, rollback, and troubleshooting.</span></span>
+              <span class="arrow" aria-hidden="true">↗</span>
             </a>
             <a class="doc-link" href="https://github.com/kaiyn-capital/kaiyn-trading-bot/blob/main/references/backup_restore_runbook.md">
-              <strong>Backup Restore</strong>
-              <span>PostgreSQL backup restore verification.</span>
+              <span><strong>Backup and restore</strong><span>PostgreSQL restore verification and recovery procedures.</span></span>
+              <span class="arrow" aria-hidden="true">↗</span>
             </a>
           </div>
         </div>
@@ -762,12 +940,13 @@
 
     <footer class="site-footer">
       <div class="container footer-inner">
-        <span>Kaiyn Trading Bot is released under the MIT License.</span>
-        <div class="footer-links">
+        <p class="footer-credit"><strong>A Kaiyn Capital project built by Kyle Wu.</strong><br>Kaiyn Trading Bot is released under the MIT License.</p>
+        <nav class="footer-links" aria-label="Project links">
+          <a href="https://kylewu.me/projects/kaiyn-trading-bot">Portfolio case study</a>
           <a href="https://github.com/kaiyn-capital/kaiyn-trading-bot">GitHub</a>
-          <a href="https://github.com/kaiyn-capital/kaiyn-trading-bot/blob/main/LICENSE">License</a>
           <a href="https://github.com/kaiyn-capital/kaiyn-trading-bot/blob/main/README.md">README</a>
-        </div>
+          <a href="https://github.com/kaiyn-capital/kaiyn-trading-bot/blob/main/LICENSE">License</a>
+        </nav>
       </div>
     </footer>
   </body>

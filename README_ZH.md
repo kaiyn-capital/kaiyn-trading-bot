@@ -1,5 +1,7 @@
 # Kaiyn Trading Bot
 
+[專案網站](https://kaiyn.kylewu.me/) · [作品集專案介紹](https://kylewu.me/zh-TW/projects/kaiyn-trading-bot)
+
 [![CI](https://github.com/kaiyn-capital/kaiyn-trading-bot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kaiyn-capital/kaiyn-trading-bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![uv](https://img.shields.io/badge/dependencies-uv-261230?logo=astral&logoColor=white)](https://docs.astral.sh/uv/)
