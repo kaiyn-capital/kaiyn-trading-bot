@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import func, or_, select
 
@@ -14,7 +15,7 @@ RISK_LIMIT_ADVISORY_LOCK_NAMESPACE = 724019
 class TradeRepository:
     """交易數據操作"""
 
-    def __init__(self, db_manager):
+    def __init__(self, db_manager: Any) -> None:
         self.db = db_manager
 
     async def create_trade(

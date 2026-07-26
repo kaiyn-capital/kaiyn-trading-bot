@@ -62,7 +62,7 @@ class ConfirmedOrderRequest:
     limit_price: Decimal | None = None
     pending_order_token: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         object.__setattr__(self, "quantity", to_decimal(self.quantity))
         object.__setattr__(self, "stop_loss", to_decimal(self.stop_loss))
         object.__setattr__(self, "position_value", to_decimal(self.position_value))
@@ -77,17 +77,17 @@ class TelegramOrderFlowService:
     def __init__(
         self,
         *,
-        bot,
-        user_repo,
-        pending_order_repo,
-        trade_repo,
-        trade_manager,
-        system_log_repo,
-        audit_owner,
-        failure_alert_handler=None,
-        signal_record_repo=None,
+        bot: Any,
+        user_repo: Any,
+        pending_order_repo: Any,
+        trade_repo: Any,
+        trade_manager: Any,
+        system_log_repo: Any,
+        audit_owner: Any,
+        failure_alert_handler: Any | None = None,
+        signal_record_repo: Any | None = None,
         settings: Settings | None = None,
-    ):
+    ) -> None:
         self.bot = bot
         self.user_repo = user_repo
         self.pending_order_repo = pending_order_repo
@@ -99,14 +99,19 @@ class TelegramOrderFlowService:
         self.signal_record_repo = signal_record_repo
         self.settings = settings or Settings.from_env()
 
-    async def _record_bitget_failure_alert(self, classified_error, source: str, details: dict | None = None):
+    async def _record_bitget_failure_alert(
+        self,
+        classified_error: Any,
+        source: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
         if self.failure_alert_handler:
             await self.failure_alert_handler(classified_error, source, details)
 
-    async def _get_daily_trade_count(self, user_data, day_start_utc: datetime) -> int:
+    async def _get_daily_trade_count(self, user_data: Any, day_start_utc: datetime) -> int:
         return await self.trade_repo.count_daily_non_failed_trades(user_data.id, day_start_utc)
 
-    async def _ensure_daily_trade_limit_available(self, user_data, day_start_utc: datetime) -> int:
+    async def _ensure_daily_trade_limit_available(self, user_data: Any, day_start_utc: datetime) -> int:
         daily_trade_limit = get_effective_daily_trade_limit(user_data, self.settings.max_daily_trades)
         current_count = await self._get_daily_trade_count(user_data, day_start_utc)
         ensure_daily_trade_limit_not_reached(
@@ -116,7 +121,14 @@ class TelegramOrderFlowService:
         )
         return daily_trade_limit
 
-    async def _log_risk_limit_block(self, user, user_data, risk_error: RiskLimitExceeded, symbol: str, details: dict):
+    async def _log_risk_limit_block(
+        self,
+        user: Any,
+        user_data: Any,
+        risk_error: RiskLimitExceeded,
+        symbol: str,
+        details: dict[str, Any],
+    ) -> None:
         try:
             await self.system_log_repo.log(
                 level="WARNING",
@@ -138,18 +150,18 @@ class TelegramOrderFlowService:
     async def _send_risk_limit_block_message(
         self,
         *,
-        query,
-        user,
-        user_data,
+        query: Any,
+        user: Any,
+        user_data: Any,
         risk_error: RiskLimitExceeded,
         symbol: str,
         direction: str,
         order_mode: str,
         action: str,
         pending_order_token: str | None = None,
-        position_value=None,
+        position_value: Any = None,
         mark_pending_failed: bool = False,
-    ):
+    ) -> None:
         if mark_pending_failed and pending_order_token:
             await self.pending_order_repo.mark_failed(pending_order_token, risk_error.user_message)
 
@@ -180,7 +192,13 @@ class TelegramOrderFlowService:
         )
         await self.send_private_message(query, user, risk_error.user_message)
 
-    async def send_private_message(self, query, user, text, reply_markup=None):
+    async def send_private_message(
+        self,
+        query: Any,
+        user: Any,
+        text: str,
+        reply_markup: Any = None,
+    ) -> None:
         """Send a private Telegram message to the user."""
         try:
             await self.bot.send_message(
@@ -194,7 +212,7 @@ class TelegramOrderFlowService:
             with contextlib.suppress(TelegramError):
                 await query.answer(f"请查看私人聊天: {text[:50]}...")
 
-    async def handle_place_order_callback(self, query, user, data):
+    async def handle_place_order_callback(self, query: Any, user: Any, data: str) -> None:
         """Handle market or limit order button."""
         await query.answer("正在处理下单请求...")
 
@@ -473,7 +491,7 @@ class TelegramOrderFlowService:
                 f"❌ 无法处理下单请求。\n\n{html_escape(UNKNOWN_MESSAGE)}",
             )
 
-    async def handle_confirm_pending_order_callback(self, query, user, data):
+    async def handle_confirm_pending_order_callback(self, query: Any, user: Any, data: str) -> None:
         """Handle pending order confirmation."""
         try:
             token = data.removeprefix("confirm_order_")
@@ -572,7 +590,7 @@ class TelegramOrderFlowService:
             )
             await self.send_private_message(query, user, "❌ 确认下单时发生错误")
 
-    async def handle_cancel_pending_order_callback(self, query, user, data):
+    async def handle_cancel_pending_order_callback(self, query: Any, user: Any, data: str) -> None:
         """Handle pending order cancellation."""
         token = data.removeprefix("cancel_order_")
         status = await self.pending_order_repo.cancel_pending_order(token, user.telegram_id)
@@ -599,7 +617,7 @@ class TelegramOrderFlowService:
                 f"⚠️ 这笔待确认订单目前状态为 {html_escape(status)}，无法取消。",
             )
 
-    async def execute_order(self, request: ConfirmedOrderRequest):
+    async def execute_order(self, request: ConfirmedOrderRequest) -> bool:
         """Execute a confirmed order."""
         query = request.query
         user = request.user

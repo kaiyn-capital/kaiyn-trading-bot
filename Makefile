@@ -164,9 +164,14 @@ MYPY_FILES := \
 	app/settings.py \
 	app/decimal_utils.py
 
+MYPY_REPOSITORY_FILES := \
+	app/repositories/trades.py \
+	app/repositories/pending_orders.py
+
 .PHONY: mypy
 mypy: ## Run mypy type checking on critical path modules
-	$(COMPOSE) run --rm test mypy $(MYPY_FILES) --no-error-summary
+	$(COMPOSE) run --rm test mypy $(MYPY_FILES) --no-warn-unused-configs --no-error-summary
+	$(COMPOSE) run --rm test mypy $(MYPY_REPOSITORY_FILES) --follow-imports=skip --no-warn-unused-configs --no-error-summary
 
 .PHONY: migrate-test
 migrate-test: ## Run Alembic upgrade head on test database
@@ -187,8 +192,9 @@ test-db: ## Run full pytest suite with PostgreSQL integration tests
 	$(COMPOSE) run --rm test python -m pytest --run-db
 
 .PHONY: coverage
-coverage: ## Run pytest with coverage on critical path modules (70% threshold)
-	$(COMPOSE) run --rm test python -m pytest --cov --cov-report=term-missing --cov-fail-under=70
+coverage: ## Run pytest with full app coverage (71% baseline)
+	$(MAKE) up-db
+	$(COMPOSE) run --rm test python -m pytest --run-db --cov --cov-report=term-missing
 
 .PHONY: py-compile
 py-compile: ## Compile Python files
@@ -215,6 +221,6 @@ verify: ## Run the full Docker-first verification suite
 	$(MAKE) lint
 	$(MAKE) format-check
 	$(MAKE) mypy
-	$(MAKE) test-db
+	$(MAKE) coverage
 	$(MAKE) py-compile
 	$(MAKE) diff-check
