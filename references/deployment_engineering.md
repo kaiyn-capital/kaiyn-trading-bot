@@ -14,7 +14,7 @@
 - PostgreSQL、Alembic migration、async SQLAlchemy。
 - `pyproject.toml` 作為 Python 依賴宣告來源，`uv.lock` 作為鎖定檔。
 - Ruff 作為 Python lint 與 format 工具。
-- mypy 作為交易執行 critical path 的靜態型別檢查工具。
+- mypy 對交易執行 critical path 執行靜態型別檢查，並禁止高風險 order、Bitget client 與交易 repository 模組保留未標註函式。
 - pytest 作為測試框架，包含純邏輯、handler 與 PostgreSQL integration tests。
 - GitHub Actions CI，以 Docker Compose 執行 lockfile、Alembic migration/model、Ruff、mypy、DB integration、coverage output、py_compile 與 whitespace 檢查。
 - GitHub Actions CD，在 CI 通過後發布 GHCR multi-arch image，並透過 SSH 以 image digest 部署到 DigitalOcean VPS。

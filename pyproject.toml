@@ -40,17 +40,10 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = [
-    "app.order_flow",
-    "app.order_validation",
-    "app.risk_limits",
-    "app.bitget_errors",
-    "app.config",
-    "app.signal_delivery_service",
-]
+source = ["app"]
 
 [tool.coverage.report]
-fail_under = 70
+fail_under = 71
 show_missing = true
 skip_empty = true
 
@@ -115,6 +108,17 @@ module = [
 disallow_untyped_defs = true
 check_untyped_defs = true
 warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = [
+    "app.order_interaction_service",
+    "app.order_reconciliation",
+    "app.bitget_client",
+    "app.repositories.trades",
+    "app.repositories.pending_orders",
+]
+disallow_untyped_defs = true
+check_untyped_defs = true
 
 [[tool.mypy.overrides]]
 module = [

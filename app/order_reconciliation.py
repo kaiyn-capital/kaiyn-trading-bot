@@ -48,14 +48,14 @@ class PendingOrderReconciliationService:
     def __init__(
         self,
         *,
-        bot,
-        user_repo,
-        pending_order_repo,
-        trade_repo,
-        trade_manager,
-        system_log_repo,
-        alert_manager,
-    ):
+        bot: Any,
+        user_repo: Any,
+        pending_order_repo: Any,
+        trade_repo: Any,
+        trade_manager: Any,
+        system_log_repo: Any,
+        alert_manager: Any,
+    ) -> None:
         self.bot = bot
         self.user_repo = user_repo
         self.pending_order_repo = pending_order_repo
@@ -87,7 +87,7 @@ class PendingOrderReconciliationService:
 
         return summary
 
-    async def _reconcile_one(self, pending_order) -> str:
+    async def _reconcile_one(self, pending_order: Any) -> str:
         client_order_id = build_client_order_id(pending_order.token)
         user = await self.user_repo.get_user_by_telegram_id(pending_order.telegram_id)
 
@@ -190,7 +190,13 @@ class PendingOrderReconciliationService:
         )
         return "recovered"
 
-    async def _find_bitget_order(self, user, credentials, pending_order, client_order_id: str) -> dict | None:
+    async def _find_bitget_order(
+        self,
+        user: Any,
+        credentials: tuple[str, str, str],
+        pending_order: Any,
+        client_order_id: str,
+    ) -> dict[str, Any] | None:
         try:
             detail = await self.trade_manager.get_order_status(
                 user.id,
@@ -256,7 +262,13 @@ class PendingOrderReconciliationService:
                 return order
         return None
 
-    async def _create_recovered_trade(self, pending_order, user, client_order_id: str, order_data: dict):
+    async def _create_recovered_trade(
+        self,
+        pending_order: Any,
+        user: Any,
+        client_order_id: str,
+        order_data: dict[str, Any],
+    ) -> Any:
         order_type = str(order_data.get("orderType") or pending_order.order_mode or "market").strip().lower()
         if order_type not in {"market", "limit"}:
             order_type = pending_order.order_mode if pending_order.order_mode in {"market", "limit"} else "market"
@@ -276,7 +288,12 @@ class PendingOrderReconciliationService:
             client_order_id=client_order_id,
         )
 
-    async def _update_trade_from_order(self, trade_id: int, order_data: dict, local_status: str):
+    async def _update_trade_from_order(
+        self,
+        trade_id: int,
+        order_data: dict[str, Any],
+        local_status: str,
+    ) -> None:
         await self.trade_repo.update_trade_result(
             trade_id,
             bitget_order_id=order_data.get("orderId") or None,
@@ -291,7 +308,7 @@ class PendingOrderReconciliationService:
             fee=_parse_decimal(order_data.get("fee"), default=Decimal("0"), field_name="fee"),
         )
 
-    async def _mark_failed_not_found(self, pending_order, trade, client_order_id: str):
+    async def _mark_failed_not_found(self, pending_order: Any, trade: Any, client_order_id: str) -> None:
         if trade:
             await self.trade_repo.update_trade_result(
                 trade.id,
@@ -311,10 +328,10 @@ class PendingOrderReconciliationService:
 
     async def _record_query_failure(
         self,
-        pending_order,
+        pending_order: Any,
         client_order_id: str,
         classified: ClassifiedBitgetError,
-    ):
+    ) -> None:
         await self._mark_manual_review_with_admin_alert(
             pending_order,
             client_order_id,
@@ -324,11 +341,11 @@ class PendingOrderReconciliationService:
 
     async def _record_unexpected_failure(
         self,
-        pending_order,
+        pending_order: Any,
         client_order_id: str,
         classified: ClassifiedBitgetError,
         exc: Exception,
-    ):
+    ) -> None:
         await self._mark_manual_review_with_admin_alert(
             pending_order,
             client_order_id,
@@ -341,11 +358,11 @@ class PendingOrderReconciliationService:
 
     async def _mark_manual_review_with_admin_alert(
         self,
-        pending_order,
+        pending_order: Any,
         client_order_id: str,
         message: str,
-        extra_data: dict,
-    ):
+        extra_data: dict[str, Any],
+    ) -> None:
         await self._log_reconciliation_event("WARNING", message, pending_order, client_order_id, extra_data)
         alert_detail_lines = []
         if "exchange_status" in extra_data:
@@ -364,7 +381,7 @@ class PendingOrderReconciliationService:
         )
         await self.pending_order_repo.mark_manual_review(pending_order.token, message)
 
-    async def _notify_user_to_retry(self, telegram_id: int):
+    async def _notify_user_to_retry(self, telegram_id: int) -> None:
         try:
             await self.bot.send_message(chat_id=telegram_id, text=RETRY_ORDER_MESSAGE, parse_mode=HTML_PARSE_MODE)
         except TelegramError as exc:
@@ -374,10 +391,10 @@ class PendingOrderReconciliationService:
         self,
         level: str,
         message: str,
-        pending_order,
+        pending_order: Any,
         client_order_id: str,
-        extra_data: dict,
-    ):
+        extra_data: dict[str, Any],
+    ) -> None:
         try:
             await self.system_log_repo.log(
                 level=level,
@@ -397,7 +414,7 @@ class PendingOrderReconciliationService:
             logger.exception("Failed to persist order reconciliation log: %s", exc)
 
 
-def _has_api_credentials(user) -> bool:
+def _has_api_credentials(user: Any) -> bool:
     return bool(
         user
         and getattr(user, "is_api_connected", False)
@@ -416,7 +433,7 @@ def _is_order_not_found_error(exc: Exception) -> bool:
     return ("order" in raw_message and "not exist" in raw_message) or "订单不存在" in raw_message
 
 
-def _extract_exchange_status(order_data: dict) -> str | None:
+def _extract_exchange_status(order_data: dict[str, Any]) -> str | None:
     value = order_data.get("state") or order_data.get("status")
     return str(value).strip().lower() if value else None
 
@@ -433,7 +450,7 @@ def _map_exchange_status(exchange_status: str | None) -> str | None:
     return None
 
 
-def _side_from_pending_order(pending_order) -> str:
+def _side_from_pending_order(pending_order: Any) -> str:
     return "buy" if pending_order.direction == "long" else "sell"
 
 
@@ -470,7 +487,7 @@ def _coerce_decimal_value(value: Any, *, field_name: str) -> Decimal:
     return decimal_value
 
 
-def _summarize_order_data(order_data: dict) -> dict:
+def _summarize_order_data(order_data: dict[str, Any]) -> dict[str, Any]:
     return {
         "orderId": summarize_identifier(order_data.get("orderId")),
         "clientOid": summarize_identifier(order_data.get("clientOid")),

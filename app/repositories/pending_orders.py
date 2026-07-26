@@ -1,6 +1,7 @@
 import secrets
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -22,7 +23,7 @@ def _is_pending_order_token_unique_violation(error: IntegrityError) -> bool:
 class PendingOrderRepository:
     """Pending order persistence for restart-safe confirmations."""
 
-    def __init__(self, db_manager):
+    def __init__(self, db_manager: Any) -> None:
         self.db = db_manager
 
     async def create_pending_order(

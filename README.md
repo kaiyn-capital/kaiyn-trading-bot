@@ -124,9 +124,9 @@ sequenceDiagram
 | Deployment | Docker Compose services: `postgres`, `bot`, `maintenance`, `db-backup` |
 | Dependency lock | uv lockfile + `uv sync --locked` |
 | Long-term operations | Docker/file log rotation, DB retention, local SQL backup, encrypted R2 offsite backup |
-| Testing | pytest 9.0.3 + pytest-asyncio 1.4.0 + PostgreSQL integration tests + 70% critical-path coverage threshold |
+| Testing | pytest 9.0.3 + pytest-asyncio 1.4.0 + PostgreSQL integration tests + 71% full-`app` coverage baseline |
 | Lint / format | Ruff 0.15.15 |
-| Type checking | mypy 2.1.0 on expanded critical path modules |
+| Type checking | mypy 2.1.0 with strict definitions on high-risk order and exchange modules |
 | CI | GitHub Actions with Docker Compose-first checks |
 | CD | GHCR multi-arch image + VPS SSH deployment by digest |
 | Dependency automation | Dependabot weekly updates; GitHub Actions patch/minor auto-merge |
