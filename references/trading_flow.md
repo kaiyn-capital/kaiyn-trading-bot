@@ -17,8 +17,8 @@
 10. 驗證通過後，Bot 將待確認訂單寫入 `pending_orders`，並發送確認/取消按鈕。
 11. 使用者確認後，Bot 使用 row lock 將 pending order 標為 `processing`，避免重複下單。
 12. 送單前 Bot 重新取得市價與合約規則，並再次檢查本地 hard risk caps。
-13. Bitget 下單完成後，Bot 更新 `trades` 與 `pending_orders` 狀態。
-14. 若 pending order 長時間停在 `processing`，health monitor 只用 `client_order_id` 查 Bitget 補本地狀態；系統不自動重送。
+13. Bitget 下單完成後，Bot 更新 `trades` 與 `pending_orders` 狀態；若送單結果不明，pending order 轉為 `manual_review` 並通知管理員人工核對。
+14. 若舊版本或程序中斷使 pending order 長時間停在 `processing`，health monitor 只用 `client_order_id` 查 Bitget 補本地狀態；系統不自動重送。
 
 ## Chart Update Flow
 
@@ -98,6 +98,7 @@ GTC 限價掛單：
 | ------ | ------- |
 | `pending` | 使用者已建立待確認訂單 |
 | `processing` | 使用者已確認，Bot 已取得 row lock 並正在送單 |
+| `manual_review` | 送單或查單結果不明，已通知管理員人工核對；不得自動重送 |
 | `executed` | Bitget 已接收訂單 |
 | `failed` | 驗證或送單失敗 |
 | `cancelled` | 使用者取消 |
@@ -122,7 +123,7 @@ GTC 限價掛單：
 - 查到 `live` 或 `partially_filled` 時，`trades.status` 維持 `pending`，`pending_orders.status` 標為 `executed`。
 - 查到 `filled` 時，`trades.status` 標為 `filled`，`pending_orders.status` 標為 `executed`。
 - 查到 `canceled/cancelled`，或 detail/history 都查不到訂單時，`pending_orders.status` 標為 `failed`，並私訊使用者回到原交易信號重新按一次下單。
-- Timeout、network error、API 權限錯誤或未知 Bitget status 不會自動標 failed；系統保留 `processing`、寫入 log 並通知管理員。
+- Timeout、network error、API 權限錯誤、未知 Bitget status 或無效查單資料不會自動標 failed；系統改標 `manual_review`、寫入 log 並通知管理員人工核對。
 
 ## Schema Summary
 

@@ -83,6 +83,7 @@ class FakePendingOrderRepo:
         self.pending_orders = pending_orders or []
         self.executed = []
         self.failed = []
+        self.manual_reviews = []
         self.cutoffs = []
 
     async def get_stale_processing_orders(self, cutoff, limit):
@@ -95,6 +96,10 @@ class FakePendingOrderRepo:
 
     async def mark_failed(self, token, error_message):
         self.failed.append({"token": token, "error_message": error_message})
+        return True
+
+    async def mark_manual_review(self, token, error_message):
+        self.manual_reviews.append({"token": token, "error_message": error_message})
         return True
 
 
@@ -461,7 +466,7 @@ async def test_reconcile_filled_order_none_values_keep_defaults_and_optional_non
         ("fee", []),
     ],
 )
-async def test_reconcile_invalid_numeric_trade_data_defers_and_alerts_admin(field_name, field_value):
+async def test_reconcile_invalid_numeric_trade_data_requires_manual_review(field_name, field_value):
     pending = make_pending()
     order = make_order(state="filled")
     order[field_name] = field_value
@@ -473,7 +478,8 @@ async def test_reconcile_invalid_numeric_trade_data_defers_and_alerts_admin(fiel
 
     summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
-    assert summary.deferred == 1
+    assert summary.manual_review == 1
+    assert pending_repo.manual_reviews[-1]["token"] == pending.token
     assert pending_repo.failed == []
     assert pending_repo.executed == []
     assert trade_repo.updated == []
@@ -547,7 +553,7 @@ async def test_reconcile_detail_and_history_not_found_marks_failed_without_new_t
 
 
 @pytest.mark.asyncio
-async def test_reconcile_unknown_exchange_status_defers_with_diagnostic_context():
+async def test_reconcile_unknown_exchange_status_requires_manual_review_with_diagnostic_context():
     pending = make_pending()
     existing_trade = SimpleNamespace(id=42, client_order_id=build_client_order_id(pending.token), bitget_order_id=None)
     trade_manager = FakeTradeManager(detail={"code": "00000", "data": make_order(state="mystery_status")})
@@ -559,11 +565,12 @@ async def test_reconcile_unknown_exchange_status_defers_with_diagnostic_context(
 
     summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
-    assert summary.deferred == 1
+    assert summary.manual_review == 1
     assert summary.recovered == 0
     assert summary.failed == 0
     assert pending_repo.executed == []
     assert pending_repo.failed == []
+    assert pending_repo.manual_reviews[-1]["token"] == pending.token
     assert trade_repo.updated == []
     assert trade_repo.created == []
     assert bot.messages == []
@@ -607,7 +614,7 @@ async def test_reconcile_unknown_exchange_status_defers_with_diagnostic_context(
         ),
     ],
 )
-async def test_reconcile_invalid_history_payload_defers_and_alerts_admin(history_payload, expected_types):
+async def test_reconcile_invalid_history_payload_requires_manual_review(history_payload, expected_types):
     pending = make_pending()
     not_found = BitgetAPIError(code="25204", message="Order does not exist")
     trade_manager = FakeTradeManager(detail_exc=not_found, history=history_payload)
@@ -618,7 +625,8 @@ async def test_reconcile_invalid_history_payload_defers_and_alerts_admin(history
 
     summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
-    assert summary.deferred == 1
+    assert summary.manual_review == 1
+    assert pending_repo.manual_reviews[-1]["token"] == pending.token
     assert pending_repo.failed == []
     assert pending_repo.executed == []
     assert trade_repo.created == []
@@ -655,7 +663,7 @@ async def test_reconcile_market_order_ignores_invalid_price_field_when_price_is_
 
 
 @pytest.mark.asyncio
-async def test_reconcile_network_error_keeps_processing_and_alerts_admin():
+async def test_reconcile_network_error_requires_manual_review_and_alerts_admin():
     pending = make_pending()
     network_error = BitgetAPIError(code="network_error", message="Bitget network request error")
     trade_manager = FakeTradeManager(detail_exc=network_error)
@@ -666,7 +674,8 @@ async def test_reconcile_network_error_keeps_processing_and_alerts_admin():
 
     summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
-    assert summary.deferred == 1
+    assert summary.manual_review == 1
+    assert pending_repo.manual_reviews[-1]["token"] == pending.token
     assert pending_repo.failed == []
     assert pending_repo.executed == []
     assert trade_repo.updated == []
@@ -675,7 +684,7 @@ async def test_reconcile_network_error_keeps_processing_and_alerts_admin():
 
 
 @pytest.mark.asyncio
-async def test_reconcile_unexpected_query_error_keeps_processing_and_alerts_admin():
+async def test_reconcile_unexpected_query_error_requires_manual_review_and_alerts_admin():
     pending = make_pending()
     trade_manager = FakeTradeManager(detail_exc=RuntimeError("local parser broke"))
     service, pending_repo, trade_repo, _manager, bot, logs, alerts = make_service(
@@ -685,7 +694,8 @@ async def test_reconcile_unexpected_query_error_keeps_processing_and_alerts_admi
 
     summary = await service.reconcile_stale_processing_orders(stale_after_seconds=900, limit=10)
 
-    assert summary.deferred == 1
+    assert summary.manual_review == 1
+    assert pending_repo.manual_reviews[-1]["token"] == pending.token
     assert pending_repo.failed == []
     assert pending_repo.executed == []
     assert trade_repo.updated == []

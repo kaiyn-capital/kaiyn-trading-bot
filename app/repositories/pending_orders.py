@@ -109,6 +109,10 @@ class PendingOrderRepository:
         """Mark a pending order as failed."""
         return await self._update_status(token, "failed", error_message=error_message)
 
+    async def mark_manual_review(self, token: str, error_message: str) -> bool:
+        """Mark an ambiguous pending order for manual review."""
+        return await self._update_status(token, "manual_review", error_message=error_message)
+
     async def get_stale_processing_orders(self, cutoff: datetime, limit: int) -> list[PendingOrderRecord]:
         """Return processing orders that have not changed since cutoff."""
         async with self.db.get_session() as session:

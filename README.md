@@ -30,7 +30,7 @@ Users can configure encrypted API credentials via Telegram, set a fixed 1R risk 
 ## Highlights
 
 - PostgreSQL-backed pending orders with row locking to prevent duplicate submissions from repeated clicks.
-- Deterministic Bitget `clientOid` generation and stale `processing` reconciliation via official Bitget order lookup, without automatic resubmission.
+- Deterministic Bitget `clientOid` generation, explicit `manual_review` handling for ambiguous results, and stale `processing` reconciliation without automatic resubmission.
 - Decimal-based order sizing on the critical path, persisted with PostgreSQL `Numeric(38, 18)` fields for prices, quantities, notional value, risk, and fees.
 - Hard local risk caps for maximum position value and per-user daily trade count, with global defaults and optional user-level stricter overrides.
 - Bitget contract-rule validation before execution — checks symbol status, minimum order size, notional value, precision, and per-order limits before submitting.
@@ -137,7 +137,7 @@ sequenceDiagram
 - Encrypted user API credential storage and API connectivity checks.
 - Fixed 1R risk sizing with market and GTC limit order modes, hard position caps, and daily trade limits.
 - Persistent pending order, signal, and Telegram preview/session flows backed by PostgreSQL.
-- Deterministic `clientOid` generation and stale `processing` reconciliation against Bitget order detail/history.
+- Deterministic `clientOid` generation, ambiguous-order `manual_review`, and stale `processing` reconciliation against Bitget order detail/history.
 - Managed channel/group forwarding with Telegram forum topic support.
 - Admin health checks, alerts, audit events, retention cleanup, local backups, and encrypted R2 offsite backup/restore.
 - Docker Compose local/deployment parity with CI-backed verification.

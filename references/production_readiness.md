@@ -31,7 +31,7 @@
 - DB retention 與每日 PostgreSQL 備份。
 - Cloudflare R2 加密異地備份與最新備份災難還原流程。
 - Pending order 寫入 DB，並使用 row lock 避免重複確認下單。
-- Pending order 使用 deterministic `clientOid`，卡住 `processing` 時由 health monitor 透過 Bitget detail/history 查單補本地狀態，不自動重送。
+- Pending order 使用 deterministic `clientOid`；送單或查單結果不明時改標 `manual_review` 並通知管理員，舊的 stale `processing` 由 health monitor 透過 Bitget detail/history 查單，不自動重送。
 - 市價下單與 GTC 限價掛單。
 - `/send_signal` 支援備註與 UTC+8 時間戳。
 - `/send_signal` 與 `/update_chart` 預覽 session 加密保存於 PostgreSQL，Bot 重啟後仍可在 TTL 內確認。
