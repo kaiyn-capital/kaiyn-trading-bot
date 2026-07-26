@@ -29,6 +29,10 @@ build-test: ## Build the Docker test image
 up-db: ## Start PostgreSQL
 	$(COMPOSE) up -d postgres
 
+.PHONY: up-db-image
+up-db-image: require-bot-image ## Start PostgreSQL with production configuration
+	BOT_IMAGE="$(BOT_IMAGE)" $(COMPOSE_PROD) up -d postgres
+
 .PHONY: migrate
 migrate: ## Apply Alembic migrations
 	$(COMPOSE) run --rm bot alembic upgrade head
@@ -75,7 +79,7 @@ up-image: require-bot-image ## Start long-running services using BOT_IMAGE
 
 .PHONY: deploy-image
 deploy-image: require-bot-image ## Pull BOT_IMAGE, migrate, check DB, and start services
-	$(MAKE) up-db
+	$(MAKE) up-db-image BOT_IMAGE="$(BOT_IMAGE)"
 	$(MAKE) pull-image BOT_IMAGE="$(BOT_IMAGE)"
 	$(MAKE) migrate-image BOT_IMAGE="$(BOT_IMAGE)"
 	$(MAKE) check-db-image BOT_IMAGE="$(BOT_IMAGE)"
@@ -194,9 +198,17 @@ py-compile: ## Compile Python files
 diff-check: ## Check git whitespace errors
 	git diff --check
 
+.PHONY: compose-prod-check
+compose-prod-check: ## Validate production Compose configuration
+	BOT_IMAGE=ghcr.io/example/kaiyn-trading-bot:test \
+	POSTGRES_PASSWORD=compose-check-password \
+	DATABASE_URL=postgresql+asyncpg://kaiyn:compose-check-password@postgres:5432/kaiyn_trading_bot \
+	$(COMPOSE_PROD) config --quiet
+
 .PHONY: verify
 verify: ## Run the full Docker-first verification suite
 	$(MAKE) build-test
+	$(MAKE) compose-prod-check
 	$(MAKE) lock-check
 	$(MAKE) migrate-test
 	$(MAKE) alembic-check

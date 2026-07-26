@@ -240,7 +240,8 @@ make generate-backup-key
 注意：
 
 - `POSTGRES_PASSWORD` 必須同步出現在 `DATABASE_URL`。
-- `POSTGRES_PORT=127.0.0.1:5432` 只讓 host 本機連到 PostgreSQL，不對公網介面監聽。
+- Production Compose 固定把 PostgreSQL 綁在 host 的 `127.0.0.1:5432`，不對公網介面監聽；`POSTGRES_PORT` 只供基礎 Compose 的本機開發設定使用。
+- Production Compose 會要求明確設定 `POSTGRES_PASSWORD` 與 `DATABASE_URL`；修改環境變數不會自動旋轉既有 PostgreSQL role 密碼。
 - R2 token 建議使用 Object Read & Write，並限制到備份 bucket。
 - Telegram token、admin IDs、DB password、R2 secret、encryption key 都不要提交到 git。
 
@@ -461,7 +462,8 @@ docker compose logs --tail 80 bot
 `make deploy-image` 使用 `compose.yml` 與 `compose.prod.yml`，部署順序為：
 
 ```text
-pull GHCR image by digest
+start PostgreSQL with production configuration
+-> pull GHCR image by digest
 -> run alembic upgrade head with the deployment image
 -> run DB health check with the deployment image
 -> start bot, maintenance, db-backup
@@ -523,6 +525,8 @@ docker compose logs --tail 80 db-backup
 ```bash
 make backup-now
 ```
+
+新產生的本機備份、checksum 與狀態檔使用 owner-only permissions；既有備份不會由部署流程自動改權限或刪除。
 
 若 R2 已啟用，確認遠端上傳狀態：
 

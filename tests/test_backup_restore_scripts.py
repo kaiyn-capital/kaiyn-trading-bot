@@ -33,9 +33,27 @@ def test_db_backup_service_uses_shared_backup_script():
     assert "/app/scripts/backup_loop.sh" in coolify_compose
 
 
+def test_production_compose_requires_database_credentials_and_binds_postgres_to_loopback():
+    compose = read_repo_file("compose.yml")
+    production_compose = read_repo_file("compose.prod.yml")
+    makefile = read_repo_file("Makefile")
+    ci = read_repo_file(".github/workflows/ci.yml")
+
+    assert '"${POSTGRES_PORT:-127.0.0.1:5432}:5432"' in compose
+    assert "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD for production}" in production_compose
+    assert 'ports: !override\n      - "127.0.0.1:5432:5432"' in production_compose
+    assert production_compose.count("DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL for production}") == 2
+    assert "up-db-image:" in makefile
+    assert '$(MAKE) up-db-image BOT_IMAGE="$(BOT_IMAGE)"' in makefile
+    assert "compose-prod-check:" in makefile
+    assert "run: make compose-prod-check" in ci
+
+
 def test_backup_script_writes_manifest_and_ownerless_dump():
     script = read_repo_file("scripts/backup_database.sh")
 
+    assert "umask 077" in script
+    assert 'POSTGRES_PASSWORD="${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}"' in script
     assert "--no-owner" in script
     assert "--no-privileges" in script
     assert "backup_manifest.json" in script
