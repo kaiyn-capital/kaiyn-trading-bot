@@ -37,7 +37,7 @@
 
 - 使用當前市價計算 1R。
 - 送出 market order。
-- 成功後 `trades.status` 記為 `filled`。
+- Bitget 接受送單後 `trades.status` 記為 `submitted`；此狀態不宣稱訂單已成交。
 
 GTC 限價掛單：
 

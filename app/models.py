@@ -102,7 +102,7 @@ class Trade(Base):
     client_order_id = Column(String, unique=True)
 
     # 執行結果
-    status = Column(String, default="pending")  # pending/filled/cancelled/failed
+    status = Column(String, default="pending")  # pending/submitted/filled/cancelled/failed
     filled_quantity = Column(Numeric(38, 18, asdecimal=True), default=Decimal("0.0"))
     avg_price = Column(Numeric(38, 18, asdecimal=True), nullable=True)
     total_amount = Column(Numeric(38, 18, asdecimal=True), nullable=True)

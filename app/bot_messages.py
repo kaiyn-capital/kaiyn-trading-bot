@@ -174,7 +174,7 @@ def order_success_message(
     risk_amount,
 ) -> str:
     is_limit_order = result.order_type == "limit"
-    text = "✅ <b>挂单已送出</b>\n\n" if is_limit_order else "✅ <b>下单成功</b>\n\n"
+    text = "✅ <b>挂单已送出</b>\n\n" if is_limit_order else "✅ <b>市价单已送出</b>\n\n"
     text += f"<b>币种：</b> {html_escape(result.symbol)}\n"
     text += f"<b>方向：</b> {html_escape('做多' if direction == 'long' else '做空')}\n"
     text += f"<b>下单方式：</b> {html_escape('挂单' if is_limit_order else '市价')}\n"
@@ -184,10 +184,12 @@ def order_success_message(
         text += f"<b>挂单价格：</b> ${html_escape(_format_price(result.limit_price))}\n"
         text += f"<b>当前价格：</b> ${html_escape(_format_price(current_price))}\n"
     else:
-        text += f"<b>进场价格：</b> ${html_escape(_format_price(current_price))}\n"
+        text += f"<b>参考价格：</b> ${html_escape(_format_price(current_price))}\n"
     text += f"<b>当前 1R 设置：</b> ${html_escape(_format_usdt(risk_amount))}\n"
     text += f"<b>订单 ID：</b> {html_escape(result.bitget_order_id[:16])}...\n\n"
     text += "✅ 止损已同时设置"
     if is_limit_order:
         text += "\n⚠️ 挂单成功代表订单已送出，不代表已成交"
+    else:
+        text += "\n⚠️ 市价单已被 Bitget 接收，不代表已成交"
     return text
