@@ -39,7 +39,7 @@ class PendingOrderReconciliationSummary:
     scanned: int = 0
     recovered: int = 0
     failed: int = 0
-    deferred: int = 0
+    manual_review: int = 0
 
 
 class PendingOrderReconciliationService:
@@ -83,7 +83,7 @@ class PendingOrderReconciliationService:
             elif outcome == "failed":
                 summary.failed += 1
             else:
-                summary.deferred += 1
+                summary.manual_review += 1
 
         return summary
 
@@ -92,13 +92,13 @@ class PendingOrderReconciliationService:
         user = await self.user_repo.get_user_by_telegram_id(pending_order.telegram_id)
 
         if not _has_api_credentials(user):
-            await self._defer_with_admin_alert(
+            await self._mark_manual_review_with_admin_alert(
                 pending_order,
                 client_order_id,
                 "Cannot reconcile processing order because user API credentials are missing",
                 {"reason": "missing_user_or_api_credentials"},
             )
-            return "deferred"
+            return "manual_review"
 
         credentials = (
             user.encrypted_api_key,
@@ -112,20 +112,20 @@ class PendingOrderReconciliationService:
         except BitgetAPIError as exc:
             classified = classify_bitget_exception(exc)
             await self._record_query_failure(pending_order, client_order_id, classified)
-            return "deferred"
+            return "manual_review"
         except InvalidHistoryPayloadError as exc:
-            await self._defer_with_admin_alert(
+            await self._mark_manual_review_with_admin_alert(
                 pending_order,
                 client_order_id,
                 "Cannot reconcile processing order because Bitget history payload is invalid",
                 {"reason": "invalid_history_payload", **exc.details},
             )
-            return "deferred"
+            return "manual_review"
         except (RuntimeError, TypeError, ValueError) as exc:
             logger.exception("Unexpected error while reconciling processing order")
             classified = classify_bitget_exception(exc)
             await self._record_unexpected_failure(pending_order, client_order_id, classified, exc)
-            return "deferred"
+            return "manual_review"
 
         if order_data is None:
             await self._mark_failed_not_found(pending_order, trade, client_order_id)
@@ -134,7 +134,7 @@ class PendingOrderReconciliationService:
         exchange_status = _extract_exchange_status(order_data)
         local_status = _map_exchange_status(exchange_status)
         if local_status is None:
-            await self._defer_with_admin_alert(
+            await self._mark_manual_review_with_admin_alert(
                 pending_order,
                 client_order_id,
                 "Cannot reconcile processing order because Bitget returned an unknown order status",
@@ -144,7 +144,7 @@ class PendingOrderReconciliationService:
                     "order": _summarize_order_data(order_data),
                 },
             )
-            return "deferred"
+            return "manual_review"
 
         try:
             trade = trade or await self._create_recovered_trade(
@@ -155,7 +155,7 @@ class PendingOrderReconciliationService:
             )
             await self._update_trade_from_order(trade.id, order_data, local_status)
         except (TypeError, ValueError) as exc:
-            await self._defer_with_admin_alert(
+            await self._mark_manual_review_with_admin_alert(
                 pending_order,
                 client_order_id,
                 "Cannot reconcile processing order because Bitget returned invalid numeric trade data",
@@ -166,7 +166,7 @@ class PendingOrderReconciliationService:
                     "order": _summarize_order_data(order_data),
                 },
             )
-            return "deferred"
+            return "manual_review"
 
         if local_status in {"cancelled", "failed"}:
             await self.pending_order_repo.mark_failed(pending_order.token, RETRY_ORDER_MESSAGE)
@@ -315,7 +315,7 @@ class PendingOrderReconciliationService:
         client_order_id: str,
         classified: ClassifiedBitgetError,
     ):
-        await self._defer_with_admin_alert(
+        await self._mark_manual_review_with_admin_alert(
             pending_order,
             client_order_id,
             "Cannot reconcile processing order because Bitget lookup failed",
@@ -329,7 +329,7 @@ class PendingOrderReconciliationService:
         classified: ClassifiedBitgetError,
         exc: Exception,
     ):
-        await self._defer_with_admin_alert(
+        await self._mark_manual_review_with_admin_alert(
             pending_order,
             client_order_id,
             "Cannot reconcile processing order because an unexpected local error occurred",
@@ -339,7 +339,13 @@ class PendingOrderReconciliationService:
             },
         )
 
-    async def _defer_with_admin_alert(self, pending_order, client_order_id: str, message: str, extra_data: dict):
+    async def _mark_manual_review_with_admin_alert(
+        self,
+        pending_order,
+        client_order_id: str,
+        message: str,
+        extra_data: dict,
+    ):
         await self._log_reconciliation_event("WARNING", message, pending_order, client_order_id, extra_data)
         alert_detail_lines = []
         if "exchange_status" in extra_data:
@@ -348,14 +354,15 @@ class PendingOrderReconciliationService:
             alert_detail_lines.append(f"Order Summary：{html_escape(str(extra_data['order']))}")
         alert_details = "\n" + "\n".join(alert_detail_lines) if alert_detail_lines else ""
         await self.alert_manager.send_alert(
-            "⚠️ Kaiyn Trading Bot processing 订单查单无法完成。\n\n"
+            "⚠️ Kaiyn Trading Bot 订单需要人工核对。\n\n"
             f"Symbol：{html_escape(pending_order.symbol)}\n"
             f"Pending Token：{html_escape(summarize_identifier(pending_order.token))}\n"
             f"Client OID：{html_escape(summarize_identifier(client_order_id))}\n"
             f"原因：{html_escape(message)}"
             f"{alert_details}",
-            alert_key="pending_order_reconciliation_deferred",
+            alert_key="pending_order_manual_review",
         )
+        await self.pending_order_repo.mark_manual_review(pending_order.token, message)
 
     async def _notify_user_to_retry(self, telegram_id: int):
         try:

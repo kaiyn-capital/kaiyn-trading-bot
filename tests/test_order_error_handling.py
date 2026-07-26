@@ -129,6 +129,7 @@ class FakePendingOrderRepo:
     def __init__(self):
         self.failed = []
         self.executed = []
+        self.manual_reviews = []
 
     async def mark_failed(self, token, error_message):
         self.failed.append({"token": token, "error_message": error_message})
@@ -136,6 +137,10 @@ class FakePendingOrderRepo:
 
     async def mark_executed(self, token, trade_id):
         self.executed.append({"token": token, "trade_id": trade_id})
+        return True
+
+    async def mark_manual_review(self, token, error_message):
+        self.manual_reviews.append({"token": token, "error_message": error_message})
         return True
 
 
@@ -266,7 +271,7 @@ async def test_order_flow_service_marks_pending_failed_and_sends_user_message():
 
 
 @pytest.mark.asyncio
-async def test_order_flow_service_keeps_pending_processing_when_submission_result_unknown():
+async def test_order_flow_service_marks_pending_for_manual_review_when_submission_result_unknown():
     bot = FakeBot()
     pending_order_repo = FakePendingOrderRepo()
     system_log_repo = FakeSystemLogRepo()
@@ -305,6 +310,8 @@ async def test_order_flow_service_keeps_pending_processing_when_submission_resul
     assert result is False
     assert pending_order_repo.failed == []
     assert pending_order_repo.executed == []
+    assert pending_order_repo.manual_reviews[-1]["token"] == "tok_timeout"
+    assert "category=network" in pending_order_repo.manual_reviews[-1]["error_message"]
     assert trade_repo.created_trade["client_order_id"] == "KTB_tok_timeout"
     assert trade_repo.updated_results == []
     assert len(trade_manager.market_order_calls) == 1
@@ -317,7 +324,7 @@ async def test_order_flow_service_keeps_pending_processing_when_submission_resul
     assert system_log_repo.logs[-1]["extra_data"]["classified_error"]["is_retryable"] is True
     assert failure_alert.calls[-1]["source"] == "_execute_order_unknown_result"
     assert failure_alert.calls[-1]["details"]["client_order_id"] == expected_masked_client_order_id
-    assert audit_owner.audit_events[-1]["action"] == "order_execution_deferred"
-    assert audit_owner.audit_events[-1]["details"]["status"] == "processing"
+    assert audit_owner.audit_events[-1]["action"] == "order_execution_manual_review"
+    assert audit_owner.audit_events[-1]["details"]["status"] == "manual_review"
     assert audit_owner.audit_events[-1]["details"]["reason"] == "bitget_submission_result_unknown"
     assert audit_owner.audit_events[-1]["details"]["client_order_id"] == expected_masked_client_order_id

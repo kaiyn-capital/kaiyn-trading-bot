@@ -44,8 +44,7 @@ logger = logging.getLogger(__name__)
 UNKNOWN_ORDER_RESULT_MESSAGE = (
     "⚠️ <b>订单状态待确认</b>\n\n"
     "下单请求可能已送到 Bitget，但系统没有收到明确结果。\n\n"
-    "系统不会自动重送。将保留这笔确认单并稍后用 Bitget 订单查询补状态；"
-    "若确认失败，会再通知您回到原信号重新下单。"
+    "系统不会自动重送。这笔确认单已转交管理员人工核对，请勿再次下单。"
 )
 
 
@@ -795,13 +794,18 @@ class TelegramOrderFlowService:
                     "pending_order_token": summarize_identifier(pending_order_token),
                 },
             )
+            if pending_order_token:
+                await self.pending_order_repo.mark_manual_review(
+                    pending_order_token,
+                    classified.storage_message(),
+                )
 
             await emit_audit_event(
                 self.audit_owner,
                 user,
-                "order_execution_deferred",
+                "order_execution_manual_review",
                 {
-                    "status": "processing",
+                    "status": "manual_review",
                     "reason": "bitget_submission_result_unknown",
                     "symbol": symbol,
                     "direction": direction,

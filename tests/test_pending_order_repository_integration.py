@@ -279,7 +279,7 @@ async def test_cancel_pending_order_lifecycle():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_mark_executed_and_failed_pending_order():
+async def test_mark_executed_failed_and_manual_review_pending_order():
     async with integration_database() as db:
         repo = PendingOrderRepository(db)
         user_id = await seed_user(db)
@@ -297,7 +297,14 @@ async def test_mark_executed_and_failed_pending_order():
         assert saved_failed.status == "failed"
         assert saved_failed.error_message == "validation failed"
 
+        manual_review = await create_pending(repo, user_id)
+        assert await repo.mark_manual_review(manual_review.token, "submission result unknown") is True
+        saved_manual_review = await load_pending(db, manual_review.token)
+        assert saved_manual_review.status == "manual_review"
+        assert saved_manual_review.error_message == "submission result unknown"
+
         assert await repo.mark_failed("missing", "no row") is False
+        assert await repo.mark_manual_review("missing", "no row") is False
         assert await repo.mark_executed("missing", trade_id) is False
 
 
